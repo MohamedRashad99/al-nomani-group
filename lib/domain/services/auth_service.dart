@@ -125,7 +125,18 @@ class AuthService {
       _db.users,
     )..where((t) => t.id.equals(session.userId))).getSingleOrNull();
     if (user == null || !user.isActive || user.isDeleted) return null;
-    return session;
+    final permissions = await _permissionsFor(user.roleId);
+    final refreshed = AppSession(
+      userId: session.userId,
+      username: session.username,
+      displayName: session.displayName,
+      roleName: session.roleName,
+      permissions: permissions,
+      expiresAt: session.expiresAt,
+      isOfflineVerified: session.isOfflineVerified,
+    );
+    await _persistSession(refreshed);
+    return refreshed;
   }
 
   Future<void> logout() async {

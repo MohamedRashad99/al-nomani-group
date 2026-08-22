@@ -25,6 +25,14 @@ class CatalogService {
   final AuditService _audit;
 
   Future<List<Product>> searchProducts(String query) {
+    return _productsQuery(query).get();
+  }
+
+  Stream<List<Product>> watchProducts(String query) {
+    return _productsQuery(query).watch();
+  }
+
+  SimpleSelectStatement<$ProductsTable, Product> _productsQuery(String query) {
     final q = query.trim();
     final select = _db.select(_db.products)
       ..where((t) => t.isDeleted.equals(false));
@@ -34,10 +42,20 @@ class CatalogService {
       );
     }
     select.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return select.get();
+    return select;
   }
 
   Future<List<Customer>> searchCustomers(String query) {
+    return _customersQuery(query).get();
+  }
+
+  Stream<List<Customer>> watchCustomers(String query) {
+    return _customersQuery(query).watch();
+  }
+
+  SimpleSelectStatement<$CustomersTable, Customer> _customersQuery(
+    String query,
+  ) {
     final q = query.trim();
     final select = _db.select(_db.customers)
       ..where((t) => t.isDeleted.equals(false));
@@ -47,7 +65,23 @@ class CatalogService {
       );
     }
     select.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return select.get();
+    return select;
+  }
+
+  Future<List<ProductCategory>> listCategories() {
+    return _categoriesQuery().get();
+  }
+
+  Stream<List<ProductCategory>> watchCategories() {
+    return _categoriesQuery().watch();
+  }
+
+  SimpleSelectStatement<$ProductCategoriesTable, ProductCategory>
+  _categoriesQuery() {
+    final select = _db.select(_db.productCategories)
+      ..where((t) => t.isDeleted.equals(false));
+    select.orderBy([(t) => OrderingTerm.asc(t.name)]);
+    return select;
   }
 
   Future<String> upsertProduct({
@@ -154,6 +188,34 @@ class CatalogService {
       );
       return productId;
     });
+  }
+
+  Future<String> findOrCreateCustomer({
+    required AppSession session,
+    String? id,
+    String? name,
+  }) async {
+    if (id != null && id.isNotEmpty) return id;
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      throw const ValidationException('اسم العميل مطلوب.');
+    }
+    final existing = await _customersQuery(trimmed).get();
+    for (final customer in existing) {
+      if (customer.name == trimmed) return customer.id;
+    }
+    if (!session.can(AppPermission.customersCreate) &&
+        !session.can(AppPermission.outstandingCreate) &&
+        !session.can(AppPermission.salesCreate) &&
+        !session.can(AppPermission.collectionsCreate)) {
+      throw const PermissionException();
+    }
+    return upsertCustomer(
+      session: session.copyWith(
+        permissions: {...session.permissions, AppPermission.customersCreate},
+      ),
+      name: trimmed,
+    );
   }
 
   Future<String> upsertCustomer({

@@ -293,6 +293,7 @@ void main() {
       )).first[0];
 
       expect(live.configured, isFalse);
+      expect(live.errorCode, 'credentials_missing');
       expect(full.configured, isFalse);
       expect(after, before);
     },

@@ -35,6 +35,9 @@ abstract final class AppPermission {
   static const settingsView = 'settings.view';
   static const settingsUpdate = 'settings.update';
 
+  static const outstandingView = 'outstanding.view';
+  static const outstandingCreate = 'outstanding.create';
+
   static const all = <String>[
     productsView,
     productsCreate,
@@ -63,6 +66,8 @@ abstract final class AppPermission {
     backupFullSync,
     settingsView,
     settingsUpdate,
+    outstandingView,
+    outstandingCreate,
   ];
 }
 
@@ -95,6 +100,8 @@ abstract final class RolePermissions {
       AppPermission.reportsExport,
       AppPermission.backupView,
       AppPermission.settingsView,
+      AppPermission.outstandingView,
+      AppPermission.outstandingCreate,
     ],
     AppRole.cashier: [
       AppPermission.productsView,
@@ -113,6 +120,7 @@ abstract final class RolePermissions {
       AppPermission.salesView,
       AppPermission.collectionsView,
       AppPermission.reportsView,
+      AppPermission.outstandingView,
     ],
   };
 }

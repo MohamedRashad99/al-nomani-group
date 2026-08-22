@@ -74,6 +74,25 @@ class DashboardService {
   DashboardService(this._db);
   final AppDatabase _db;
 
+  Stream<DashboardSnapshot> watch() {
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.sales,
+            _db.saleItems,
+            _db.collections,
+            _db.products,
+            _db.customers,
+            _db.customerAccounts,
+            _db.customerAccountTransactions,
+            _db.inventoryMovements,
+          },
+        )
+        .watch()
+        .asyncMap((_) => load());
+  }
+
   Future<DashboardSnapshot> load() async {
     final now = DateTime.now();
     final startToday = DateTime(now.year, now.month, now.day).toUtc();

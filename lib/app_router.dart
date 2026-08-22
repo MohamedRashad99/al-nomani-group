@@ -11,6 +11,7 @@ import 'features/dashboard/dashboard_page.dart';
 import 'features/inventory/inventory_page.dart';
 import 'features/import/import_page.dart';
 import 'features/more/more_page.dart';
+import 'features/outstanding/outstanding_page.dart';
 import 'features/products/products_page.dart';
 import 'features/reports/reports_page.dart';
 import 'features/sales/sales_page.dart';
@@ -74,6 +75,7 @@ GoRouter createRouter(AuthCubit auth) {
         ],
       ),
       GoRoute(path: '/collections', builder: (_, _) => const CollectionsPage()),
+      GoRoute(path: '/outstanding', builder: (_, _) => const OutstandingPage()),
       GoRoute(path: '/reports', builder: (_, _) => const ReportsPage()),
       GoRoute(path: '/users', builder: (_, _) => const UsersPage()),
       GoRoute(path: '/backup', builder: (_, _) => const BackupPage()),
@@ -91,6 +93,9 @@ String? _requiredPermission(String location) {
   if (location.startsWith('/customers')) return AppPermission.customersView;
   if (location.startsWith('/collections')) {
     return AppPermission.collectionsView;
+  }
+  if (location.startsWith('/outstanding')) {
+    return AppPermission.outstandingView;
   }
   if (location.startsWith('/reports')) return AppPermission.reportsView;
   if (location.startsWith('/users')) return AppPermission.usersView;

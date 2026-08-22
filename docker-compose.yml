@@ -23,6 +23,7 @@ services:
       GOOGLE_LIVE_SPREADSHEET_ID: 1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I
       GOOGLE_FULL_SPREADSHEET_ID: ${GOOGLE_FULL_SPREADSHEET_ID:-}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      GOOGLE_SERVICE_ACCOUNT_FILE: /run/secrets/google-service-account.json
       SYNC_INTERVAL_DAYS: 5
       ALLOW_SEED: "true"
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
@@ -30,6 +31,8 @@ services:
       DATABASE_SSL: "false"
     ports:
       - "8080:8080"
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       - postgres
 

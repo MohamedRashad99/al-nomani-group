@@ -13,12 +13,16 @@ class BackupProcessingResult {
     required this.processed,
     required this.failed,
     this.error,
+    this.errorCode,
+    this.diagnostic,
   });
 
   final bool configured;
   final int processed;
   final int failed;
   final String? error;
+  final String? errorCode;
+  final String? diagnostic;
 
   Map<String, dynamic> toJson() => {
     'configured': configured,
@@ -30,7 +34,16 @@ class BackupProcessingResult {
         ? 'failed'
         : 'healthy',
     if (error != null) 'error': error,
+    if (errorCode != null) 'error_code': errorCode,
+    if (diagnostic != null) 'diagnostic': diagnostic,
   };
+}
+
+class BackupFailureDiagnostic {
+  const BackupFailureDiagnostic(this.code, this.message);
+
+  final String code;
+  final String message;
 }
 
 /// Google Sheets is a backup layer only.
@@ -79,11 +92,19 @@ class GoogleSheetsBackup {
 
   Future<BackupProcessingResult> processPending({int limit = 100}) async {
     if (!isConfigured) {
-      return const BackupProcessingResult(
+      return BackupProcessingResult(
         configured: false,
         processed: 0,
         failed: 0,
-        error: 'بيانات اعتماد Google Sheets غير مهيأة على الخادم.',
+        error:
+            env.googleServiceAccountError ??
+            'بيانات اعتماد Google Sheets غير مهيأة على الخادم.',
+        errorCode: env.googleServiceAccountError == null
+            ? 'credentials_missing'
+            : 'credentials_invalid',
+        diagnostic: env.googleServiceAccountError == null
+            ? 'أضف ملف Service Account إلى الخادم ثم أعد المحاولة.'
+            : env.googleServiceAccountError,
       );
     }
 
@@ -108,6 +129,7 @@ class GoogleSheetsBackup {
     var processed = 0;
     var failed = 0;
     String? lastError;
+    BackupFailureDiagnostic? lastDiagnostic;
     try {
       final api = await _api();
       await _ensureTabs(api, env.googleLiveSpreadsheetId);
@@ -204,11 +226,13 @@ class GoogleSheetsBackup {
           );
           failed++;
           lastError = safeError;
+          lastDiagnostic = _diagnose(error);
         }
       }
     } catch (error) {
       failed = rows.length;
       lastError = _safeError(error);
+      lastDiagnostic = _diagnose(error);
       for (final row in rows) {
         await db.query(
           '''
@@ -227,17 +251,31 @@ class GoogleSheetsBackup {
       processed: processed,
       failed: failed,
       error: lastError,
+      errorCode: lastDiagnostic?.code,
+      diagnostic: lastDiagnostic?.message,
     );
   }
 
   Future<BackupProcessingResult> writeFullBackup() async {
     if (env.googleServiceAccountJson?.isNotEmpty != true ||
         env.googleFullSpreadsheetId.isEmpty) {
-      return const BackupProcessingResult(
+      return BackupProcessingResult(
         configured: false,
         processed: 0,
         failed: 0,
-        error: 'ملف النسخة الكاملة أو بيانات Google غير مهيأة.',
+        error:
+            env.googleServiceAccountError ??
+            'ملف النسخة الكاملة أو بيانات Google غير مهيأة.',
+        errorCode: env.googleServiceAccountError != null
+            ? 'credentials_invalid'
+            : env.googleFullSpreadsheetId.isEmpty
+            ? 'full_spreadsheet_missing'
+            : 'credentials_missing',
+        diagnostic:
+            env.googleServiceAccountError ??
+            (env.googleFullSpreadsheetId.isEmpty
+                ? 'اضبط GOOGLE_FULL_SPREADSHEET_ID لمعرّف ملف مستقل ثم أعد المحاولة.'
+                : 'أضف ملف Service Account إلى الخادم ثم أعد المحاولة.'),
       );
     }
 
@@ -284,6 +322,7 @@ class GoogleSheetsBackup {
       );
     } catch (error) {
       final safeError = _safeError(error);
+      final diagnostic = _diagnose(error);
       await db.query(
         '''
         UPDATE backup_runs SET
@@ -297,6 +336,8 @@ class GoogleSheetsBackup {
         processed: rowsWritten,
         failed: 1,
         error: safeError,
+        errorCode: diagnostic.code,
+        diagnostic: diagnostic.message,
       );
     }
   }
@@ -319,6 +360,22 @@ class GoogleSheetsBackup {
       ''');
     return {
       'configured': isConfigured,
+      'status': !isConfigured
+          ? 'not_configured'
+          : (pending.first[1] as num).toInt() > 0
+          ? 'failed'
+          : (pending.first[0] as num).toInt() > 0
+          ? 'pending'
+          : 'healthy',
+      'credential_source': env.googleServiceAccountFile == null
+          ? (env.googleServiceAccountJson == null ? 'none' : 'environment')
+          : 'file',
+      if (env.googleServiceAccountError != null)
+        'configuration_error': env.googleServiceAccountError,
+      if (!isConfigured)
+        'diagnostic':
+            env.googleServiceAccountError ??
+            'أضف بيانات اعتماد Service Account على الخادم وشارك ملف Google معه بصلاحية محرر.',
       'live_spreadsheet_configured': env.googleLiveSpreadsheetId.isNotEmpty,
       'full_spreadsheet_configured': env.googleFullSpreadsheetId.isNotEmpty,
       'pending': pending.first[0],
@@ -500,5 +557,47 @@ class GoogleSheetsBackup {
     stderr.writeln('Google Sheets backup failed: $error');
     final text = error.toString();
     return text.length > 500 ? text.substring(0, 500) : text;
+  }
+
+  BackupFailureDiagnostic _diagnose(Object error) {
+    final text = error.toString().toLowerCase();
+    if (text.contains('401') ||
+        text.contains('unauthorized') ||
+        text.contains('invalid_grant')) {
+      return const BackupFailureDiagnostic(
+        'credentials_rejected',
+        'رفضت Google بيانات الاعتماد. استبدل مفتاح Service Account وتحقق من تفعيل Sheets API.',
+      );
+    }
+    if (text.contains('403') || text.contains('permission')) {
+      return const BackupFailureDiagnostic(
+        'spreadsheet_permission_denied',
+        'لا يملك حساب الخدمة صلاحية الكتابة. شارك ملف Google مع بريده بصلاحية محرر.',
+      );
+    }
+    if (text.contains('404') || text.contains('not found')) {
+      return const BackupFailureDiagnostic(
+        'spreadsheet_not_found',
+        'تعذر العثور على ملف Google. تحقق من المعرّف ومن مشاركة الملف مع حساب الخدمة.',
+      );
+    }
+    if (text.contains('429') || text.contains('quota')) {
+      return const BackupFailureDiagnostic(
+        'google_quota_exceeded',
+        'تم تجاوز حصة Google مؤقتاً. انتظر قليلاً ثم أعد محاولة العمليات الفاشلة.',
+      );
+    }
+    if (text.contains('socket') ||
+        text.contains('timed out') ||
+        text.contains('connection')) {
+      return const BackupFailureDiagnostic(
+        'google_unreachable',
+        'تعذر الاتصال بخدمة Google. تحقق من اتصال الخادم بالإنترنت ثم أعد المحاولة.',
+      );
+    }
+    return const BackupFailureDiagnostic(
+      'google_write_failed',
+      'فشل النسخ إلى Google Sheets. راجع سجل الخادم ثم أعد محاولة العمليات الفاشلة.',
+    );
   }
 }

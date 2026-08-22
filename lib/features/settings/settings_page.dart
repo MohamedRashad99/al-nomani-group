@@ -11,6 +11,7 @@ import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/searchable_select.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -67,51 +68,44 @@ class _SettingsPageState extends State<SettingsPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 14),
-                      DropdownButtonFormField<SyncMode>(
-                        initialValue: settings.mode,
-                        decoration: const InputDecoration(
-                          labelText: 'وضع المزامنة',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
+                      SearchableSelectField<SyncMode>(
+                        label: 'وضع المزامنة',
+                        required: true,
+                        enabled: canUpdate,
+                        value: settings.mode,
+                        options: const [
+                          SearchableOption(
                             value: SyncMode.scheduled,
-                            child: Text('مجدولة'),
+                            label: 'مجدولة',
                           ),
-                          DropdownMenuItem(
+                          SearchableOption(
                             value: SyncMode.nearRealtime,
-                            child: Text('بعد كل عملية عند توفر الإنترنت'),
+                            label: 'بعد كل عملية عند توفر الإنترنت',
                           ),
                         ],
-                        onChanged: !canUpdate
-                            ? null
-                            : (value) {
-                                if (value != null) {
-                                  _save(
-                                    mode: value,
-                                    days: settings.intervalDays,
-                                  );
-                                }
-                              },
+                        onChanged: (value) {
+                          if (value != null) {
+                            _save(mode: value, days: settings.intervalDays);
+                          }
+                        },
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<int>(
-                        initialValue: settings.intervalDays,
-                        decoration: const InputDecoration(
-                          labelText: 'الفاصل بين المزامنات',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 1, child: Text('كل يوم')),
-                          DropdownMenuItem(value: 3, child: Text('كل ٣ أيام')),
-                          DropdownMenuItem(value: 5, child: Text('كل ٥ أيام')),
-                          DropdownMenuItem(value: 7, child: Text('كل ٧ أيام')),
+                      SearchableSelectField<int>(
+                        label: 'الفاصل بين المزامنات',
+                        required: true,
+                        enabled: canUpdate,
+                        value: settings.intervalDays,
+                        options: const [
+                          SearchableOption(value: 1, label: 'كل يوم'),
+                          SearchableOption(value: 3, label: 'كل ٣ أيام'),
+                          SearchableOption(value: 5, label: 'كل ٥ أيام'),
+                          SearchableOption(value: 7, label: 'كل ٧ أيام'),
                         ],
-                        onChanged: !canUpdate
-                            ? null
-                            : (value) {
-                                if (value != null) {
-                                  _save(mode: settings.mode, days: value);
-                                }
-                              },
+                        onChanged: (value) {
+                          if (value != null) {
+                            _save(mode: settings.mode, days: value);
+                          }
+                        },
                       ),
                       if (!canUpdate) ...[
                         const SizedBox(height: 10),

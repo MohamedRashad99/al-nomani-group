@@ -16,10 +16,17 @@ class ConflictResolutionService {
   final AuditService _audit;
 
   Future<List<Conflict>> openConflicts() {
+    return _openConflictsQuery().get();
+  }
+
+  Stream<List<Conflict>> watchOpenConflicts() {
+    return _openConflictsQuery().watch();
+  }
+
+  SimpleSelectStatement<$ConflictsTable, Conflict> _openConflictsQuery() {
     return (_db.select(_db.conflicts)
-          ..where((row) => row.status.equals('open'))
-          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
-        .get();
+      ..where((row) => row.status.equals('open'))
+      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]));
   }
 
   Future<void> acceptServer(AppSession session, String conflictId) async {

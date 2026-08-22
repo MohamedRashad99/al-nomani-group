@@ -36,6 +36,9 @@ class UserAdminService {
   Future<List<User>> list() =>
       (_db.select(_db.users)..where((t) => t.isDeleted.equals(false))).get();
 
+  Stream<List<User>> watch() =>
+      (_db.select(_db.users)..where((t) => t.isDeleted.equals(false))).watch();
+
   Future<String> upsert({
     required AppSession session,
     String? id,

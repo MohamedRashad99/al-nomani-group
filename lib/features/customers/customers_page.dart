@@ -1,5 +1,4 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +9,7 @@ import '../../core/utils/arabic_format.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/catalog_service.dart';
+import '../../domain/services/outstanding_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -49,11 +49,11 @@ class _CustomersPageState extends State<CustomersPage> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<Customer>>(
-              future: sl<CatalogService>().searchCustomers(_query),
+            child: StreamBuilder<List<Customer>>(
+              stream: sl<CatalogService>().watchCustomers(_query),
               builder: (context, snap) {
                 final items = snap.data ?? const <Customer>[];
-                if (snap.connectionState != ConnectionState.done) {
+                if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (items.isEmpty) return const Center(child: Text(S.empty));
@@ -95,63 +95,99 @@ class _CustomersPageState extends State<CustomersPage> {
     final area = TextEditingController(text: customer?.area ?? '');
     final address = TextEditingController(text: customer?.address ?? '');
     final notes = TextEditingController(text: customer?.notes ?? '');
-    final ok = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: S.customerName),
+      builder: (ctx) {
+        var saving = false;
+        String? error;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setS) => SingleChildScrollView(
+              child: Column(
+                children: [
+                  TextField(
+                    controller: name,
+                    decoration: const InputDecoration(
+                      labelText: S.customerName,
+                    ),
+                  ),
+                  TextField(
+                    controller: phone,
+                    decoration: const InputDecoration(labelText: S.phone),
+                  ),
+                  TextField(
+                    controller: area,
+                    decoration: const InputDecoration(labelText: S.area),
+                  ),
+                  TextField(
+                    controller: address,
+                    decoration: const InputDecoration(labelText: S.address),
+                  ),
+                  TextField(
+                    controller: notes,
+                    decoration: const InputDecoration(labelText: S.notes),
+                  ),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            setS(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              await sl<AppBusyCubit>().guard(() async {
+                                await sl<CatalogService>().upsertCustomer(
+                                  session: context
+                                      .read<AuthCubit>()
+                                      .state
+                                      .session!,
+                                  id: customer?.id,
+                                  name: name.text,
+                                  phone: phone.text,
+                                  area: area.text,
+                                  address: address.text,
+                                  notes: notes.text,
+                                );
+                                await sl<SyncEngine>()
+                                    .maybeSyncAfterLocalWrite();
+                              });
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setS(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(S.save),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
-            TextField(
-              controller: phone,
-              decoration: const InputDecoration(labelText: S.phone),
-            ),
-            TextField(
-              controller: area,
-              decoration: const InputDecoration(labelText: S.area),
-            ),
-            TextField(
-              controller: address,
-              decoration: const InputDecoration(labelText: S.address),
-            ),
-            TextField(
-              controller: notes,
-              decoration: const InputDecoration(labelText: S.notes),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text(S.save),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
-    if (ok != true || !mounted) return;
-    await sl<AppBusyCubit>().guard(() async {
-      await sl<CatalogService>().upsertCustomer(
-        session: context.read<AuthCubit>().state.session!,
-        id: customer?.id,
-        name: name.text,
-        phone: phone.text,
-        area: area.text,
-        address: address.text,
-        notes: notes.text,
-      );
-      await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-    });
-    if (mounted) setState(() {});
   }
 }
 
@@ -161,25 +197,16 @@ class CustomerStatementPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final db = sl<AppDatabase>();
     return Scaffold(
       appBar: AppBar(title: Text('${S.statement} — ${customer.name}')),
-      body: FutureBuilder(
-        future: Future.wait([
-          (db.select(
-            db.customerAccounts,
-          )..where((t) => t.customerId.equals(customer.id))).getSingleOrNull(),
-          (db.select(db.customerAccountTransactions)
-                ..where((t) => t.customerId.equals(customer.id))
-                ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-              .get(),
-        ]),
+      body: StreamBuilder(
+        stream: sl<OutstandingService>().watchStatement(customer.id),
         builder: (context, snap) {
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final account = snap.data![0] as CustomerAccount?;
-          final txs = snap.data![1] as List<CustomerAccountTransaction>;
+          final account = snap.data!.account;
+          final txs = snap.data!.txs;
           final balance = Money.parse(account?.cachedBalance ?? '0.000');
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -189,10 +216,16 @@ class CustomerStatementPage extends StatelessWidget {
                 trailing: MoneyText(balance),
               ),
               const Divider(),
+              if (txs.isEmpty) const Center(child: Text(S.empty)),
               for (final tx in txs)
                 ListTile(
                   title: Text(_accountType(tx.type)),
-                  subtitle: Text(ArabicFormat.dateTime(tx.createdAt)),
+                  subtitle: Text(
+                    [
+                      ArabicFormat.dateTime(tx.createdAt),
+                      if (tx.notes?.isNotEmpty == true) tx.notes!,
+                    ].join(' • '),
+                  ),
                   trailing: MoneyText(Money.parse(tx.amount)),
                 ),
             ],
@@ -207,6 +240,9 @@ class CustomerStatementPage extends StatelessWidget {
     'payment' => 'سداد',
     'sale_cancel' => 'عكس بيع ملغى',
     'payment_cancel' => 'عكس سداد',
+    'opening_balance' => 'رصيد افتتاحي',
+    'manual_debit' => 'مبلغ آجل يدوي',
+    'manual_credit' => 'تخفيض يدوي',
     _ => 'حركة حساب',
   };
 }
@@ -219,12 +255,13 @@ class CustomerStatementRoutePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = sl<AppDatabase>();
-    return FutureBuilder<Customer?>(
-      future: (db.select(
+    return StreamBuilder<Customer?>(
+      stream: (db.select(
         db.customers,
-      )..where((row) => row.id.equals(customerId))).getSingleOrNull(),
+      )..where((row) => row.id.equals(customerId))).watchSingleOrNull(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );

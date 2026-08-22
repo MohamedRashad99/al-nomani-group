@@ -18,6 +18,7 @@ import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/searchable_select.dart';
 
 enum _SalePeriod { all, today, week, month }
 
@@ -52,16 +53,20 @@ class SalesPage extends StatefulWidget {
 
 class _SalesPageState extends State<SalesPage> {
   final _search = TextEditingController();
-  late Future<List<SaleListEntry>> _future;
+  late final Stream<List<SaleListEntry>> _stream = sl<AppDatabase>()
+      .customSelect(
+        'SELECT 1',
+        readsFrom: {
+          sl<AppDatabase>().sales,
+          sl<AppDatabase>().customers,
+          sl<AppDatabase>().saleItems,
+        },
+      )
+      .watch()
+      .asyncMap((_) => _load());
   _SalePeriod _period = _SalePeriod.all;
   _PaymentFilter _payment = _PaymentFilter.all;
   bool _showCancelled = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
 
   @override
   void dispose() {
@@ -123,8 +128,6 @@ class _SalesPageState extends State<SalesPage> {
     }).toList();
   }
 
-  void _refresh() => setState(() => _future = _load());
-
   @override
   Widget build(BuildContext context) {
     final canCreate =
@@ -134,27 +137,19 @@ class _SalesPageState extends State<SalesPage> {
         true;
     return AppScaffold(
       title: S.sales,
-      actions: [
-        IconButton(
-          tooltip: 'تحديث',
-          onPressed: _refresh,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-      ],
       fab: canCreate
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await context.push('/sales/new');
-                _refresh();
               },
               icon: const Icon(Icons.add_rounded),
               label: const Text(S.newSale),
             )
           : null,
-      child: FutureBuilder<List<SaleListEntry>>(
-        future: _future,
+      child: StreamBuilder<List<SaleListEntry>>(
+        stream: _stream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          if (!snapshot.hasData) {
             return const BrandedLoading(message: 'نحمّل سجل المبيعات');
           }
           final entries = _filtered(snapshot.data ?? const []);
@@ -180,7 +175,6 @@ class _SalesPageState extends State<SalesPage> {
                             ? FilledButton.icon(
                                 onPressed: () async {
                                   await context.push('/sales/new');
-                                  _refresh();
                                 },
                                 icon: const Icon(Icons.add),
                                 label: const Text(S.newSale),
@@ -510,26 +504,74 @@ class _NewSalePageState extends State<NewSalePage> {
               children: [
                 _Section(
                   title: 'العميل',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.person_outline),
-                    ),
-                    title: Text(_customer?.name ?? S.selectCustomer),
-                    subtitle: Text(
-                      _customer?.phone ?? 'اختر حساب العميل قبل تأكيد البيع',
-                    ),
-                    trailing: const Icon(Icons.chevron_left),
-                    onTap: _pickCustomer,
+                  child: StreamBuilder<List<Customer>>(
+                    stream: sl<CatalogService>().watchCustomers(''),
+                    builder: (context, snapshot) {
+                      final customers = snapshot.data ?? const <Customer>[];
+                      return SearchableSelectField<String>(
+                        label: S.selectCustomer,
+                        required: true,
+                        value: _customer?.id,
+                        options: [
+                          for (final customer in customers)
+                            SearchableOption(
+                              value: customer.id,
+                              label: customer.name,
+                              subtitle: customer.phone,
+                              searchText:
+                                  '${customer.phone ?? ''} ${customer.area ?? ''}',
+                            ),
+                        ],
+                        onChanged: (id) {
+                          Customer? selected;
+                          for (final customer in customers) {
+                            if (customer.id == id) selected = customer;
+                          }
+                          setState(() => _customer = selected);
+                        },
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 12),
                 _Section(
                   title: 'أصناف الفاتورة',
-                  action: FilledButton.tonalIcon(
-                    onPressed: _pickAndAddProduct,
-                    icon: const Icon(Icons.add),
-                    label: const Text('إضافة صنف'),
+                  action: StreamBuilder<List<Product>>(
+                    stream: sl<CatalogService>().watchProducts(''),
+                    builder: (context, snapshot) {
+                      final products = snapshot.data ?? const <Product>[];
+                      return SizedBox(
+                        width: 220,
+                        child: SearchableSelectField<String>(
+                          label: S.selectProduct,
+                          value: null,
+                          options: [
+                            for (final product in products)
+                              SearchableOption(
+                                value: product.id,
+                                label: product.name,
+                                subtitle:
+                                    '${product.sku} • متوفر ${product.currentStock}',
+                                searchText:
+                                    '${product.sku} ${product.brand ?? ''}',
+                              ),
+                          ],
+                          onChanged: (id) async {
+                            Product? selected;
+                            for (final product in products) {
+                              if (product.id == id) selected = product;
+                            }
+                            if (selected == null) return;
+                            final quantity = await _quantityDialog(
+                              selected,
+                              Quantity.parse('1'),
+                            );
+                            if (quantity == null) return;
+                            _addProduct(selected, quantity);
+                          },
+                        ),
+                      );
+                    },
                   ),
                   child: _lines.isEmpty
                       ? const Padding(
@@ -631,48 +673,6 @@ class _NewSalePageState extends State<NewSalePage> {
         ),
       ),
     );
-  }
-
-  Future<void> _pickCustomer() async {
-    final customers = await sl<CatalogService>().searchCustomers('');
-    if (!mounted) return;
-    final selected = await _SearchPicker.show<Customer>(
-      context: context,
-      title: S.selectCustomer,
-      items: customers,
-      searchableText: (customer) =>
-          '${customer.name} ${customer.phone ?? ''} ${customer.area ?? ''}',
-      tileBuilder: (customer) => ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-        title: Text(customer.name),
-        subtitle: Text(
-          [customer.phone, customer.area].whereType<String>().join(' • '),
-        ),
-      ),
-    );
-    if (selected != null) setState(() => _customer = selected);
-  }
-
-  Future<void> _pickAndAddProduct() async {
-    final products = await sl<CatalogService>().searchProducts('');
-    if (!mounted) return;
-    final selected = await _SearchPicker.show<Product>(
-      context: context,
-      title: S.selectProduct,
-      items: products,
-      searchableText: (product) =>
-          '${product.name} ${product.sku} ${product.brand ?? ''}',
-      tileBuilder: (product) => ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
-        title: Text(product.name),
-        subtitle: Text('${product.sku} • متوفر ${product.currentStock}'),
-        trailing: MoneyText(Money.parse(product.sellingPrice)),
-      ),
-    );
-    if (selected == null || !mounted) return;
-    final quantity = await _quantityDialog(selected, Quantity.parse('1'));
-    if (quantity == null) return;
-    _addProduct(selected, quantity);
   }
 
   void _addProduct(Product product, Quantity quantity) {
@@ -900,74 +900,6 @@ class _AmountRow extends StatelessWidget {
           MoneyText(amount, style: style),
         ],
       ),
-    );
-  }
-}
-
-class _SearchPicker {
-  static Future<T?> show<T>({
-    required BuildContext context,
-    required String title,
-    required List<T> items,
-    required String Function(T item) searchableText,
-    required Widget Function(T item) tileBuilder,
-  }) {
-    return showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) {
-        var query = '';
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final filtered = items
-                .where(
-                  (item) => searchableText(
-                    item,
-                  ).toLowerCase().contains(query.toLowerCase()),
-                )
-                .toList();
-            return FractionallySizedBox(
-              heightFactor: .88,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          autofocus: true,
-                          onChanged: (value) =>
-                              setState(() => query = value.trim()),
-                          decoration: const InputDecoration(
-                            hintText: S.search,
-                            prefixIcon: Icon(Icons.search),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) => InkWell(
-                        onTap: () => Navigator.pop(context, filtered[index]),
-                        child: tileBuilder(filtered[index]),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

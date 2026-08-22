@@ -1,5 +1,4 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -14,30 +13,10 @@ import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/searchable_select.dart';
 
-class CollectionsPage extends StatefulWidget {
+class CollectionsPage extends StatelessWidget {
   const CollectionsPage({super.key});
-
-  @override
-  State<CollectionsPage> createState() => _CollectionsPageState();
-}
-
-class _CollectionsPageState extends State<CollectionsPage> {
-  late Future<List<Collection>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<List<Collection>> _load() {
-    final db = sl<AppDatabase>();
-    return (db.select(db.collections)
-          ..where((t) => t.isDeleted.equals(false))
-          ..orderBy([(t) => OrderingTerm.desc(t.collectedAt)]))
-        .get();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,15 +29,15 @@ class _CollectionsPageState extends State<CollectionsPage> {
       title: S.collections,
       fab: canCreate
           ? FloatingActionButton(
-              onPressed: _create,
+              onPressed: () => _create(context),
               child: const Icon(Icons.add),
             )
           : null,
-      child: FutureBuilder<List<Collection>>(
-        future: _future,
+      child: StreamBuilder<List<Collection>>(
+        stream: sl<CollectionService>().watch(),
         builder: (context, snap) {
           final items = snap.data ?? const <Collection>[];
-          if (snap.connectionState != ConnectionState.done) {
+          if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (items.isEmpty) return const Center(child: Text(S.empty));
@@ -79,93 +58,130 @@ class _CollectionsPageState extends State<CollectionsPage> {
     );
   }
 
-  Future<void> _create() async {
+  static Future<void> _create(BuildContext context) async {
     final customers = await sl<CatalogService>().searchCustomers('');
-    if (!mounted) return;
-    Customer? selected = customers.isEmpty ? null : customers.first;
+    if (!context.mounted) return;
+    String? customerId;
+    var method = 'cash';
     final amount = TextEditingController();
     final notes = TextEditingController();
-    var method = 'cash';
-    final ok = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: StatefulBuilder(
-          builder: (ctx, setS) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<Customer>(
-                initialValue: selected,
-                items: [
-                  for (final c in customers)
-                    DropdownMenuItem(value: c, child: Text(c.name)),
-                ],
-                onChanged: (v) => setS(() => selected = v),
-                decoration: const InputDecoration(labelText: S.customerName),
-              ),
-              TextField(
-                controller: amount,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: S.collectionAmount,
-                ),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: method,
-                items: const [
-                  DropdownMenuItem(value: 'cash', child: Text(S.cash)),
-                  DropdownMenuItem(value: 'transfer', child: Text(S.transfer)),
-                ],
-                onChanged: (v) => setS(() => method = v ?? method),
-                decoration: const InputDecoration(labelText: S.paymentMethod),
-              ),
-              TextField(
-                controller: notes,
-                decoration: const InputDecoration(labelText: S.notes),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(S.save),
-              ),
-              const SizedBox(height: 24),
-            ],
+      builder: (ctx) {
+        var saving = false;
+        String? error;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+            left: 16,
+            right: 16,
+            top: 16,
           ),
-        ),
-      ),
-    );
-    if (ok != true || selected == null || !mounted) return;
-    try {
-      await sl<AppBusyCubit>().guard(() async {
-        await sl<CollectionService>().record(
-          session: context.read<AuthCubit>().state.session!,
-          customerId: selected!.id,
-          amount: Money.parse(amount.text),
-          paymentMethod: method,
-          notes: notes.text,
+          child: StatefulBuilder(
+            builder: (ctx, setS) => SingleChildScrollView(
+              child: Column(
+                children: [
+                  SearchableSelectField<String>(
+                    label: S.customerName,
+                    required: true,
+                    value: customerId,
+                    options: [
+                      for (final customer in customers)
+                        SearchableOption(
+                          value: customer.id,
+                          label: customer.name,
+                          subtitle: customer.phone,
+                          searchText:
+                              '${customer.phone ?? ''} ${customer.area ?? ''}',
+                        ),
+                    ],
+                    onChanged: (value) => setS(() => customerId = value),
+                  ),
+                  TextField(
+                    controller: amount,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: S.collectionAmount,
+                    ),
+                  ),
+                  SearchableSelectField<String>(
+                    label: S.paymentMethod,
+                    required: true,
+                    value: method,
+                    options: const [
+                      SearchableOption(value: 'cash', label: S.cash),
+                      SearchableOption(value: 'transfer', label: S.transfer),
+                    ],
+                    onChanged: (value) => setS(() => method = value ?? method),
+                  ),
+                  TextField(
+                    controller: notes,
+                    decoration: const InputDecoration(labelText: S.notes),
+                  ),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            setS(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              if (customerId == null) {
+                                throw Exception(S.selectCustomer);
+                              }
+                              await sl<AppBusyCubit>().guard(() async {
+                                await sl<CollectionService>().record(
+                                  session: context
+                                      .read<AuthCubit>()
+                                      .state
+                                      .session!,
+                                  customerId: customerId!,
+                                  amount: Money.parse(amount.text),
+                                  paymentMethod: method,
+                                  notes: notes.text,
+                                );
+                                await sl<SyncEngine>()
+                                    .maybeSyncAfterLocalWrite();
+                              });
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(S.collectionSuccess),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setS(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(S.save),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
         );
-        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text(S.collectionSuccess)));
-        setState(() => _future = _load());
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
+      },
+    );
   }
 }

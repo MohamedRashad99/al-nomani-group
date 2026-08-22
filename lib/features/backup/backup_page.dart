@@ -105,6 +105,8 @@ class _BackupView extends StatelessWidget {
                 ),
                 if (h.backupLastError?.isNotEmpty == true)
                   _tile('خطأ Google Sheets', h.backupLastError!),
+                if (h.backupDiagnostic?.isNotEmpty == true)
+                  _tile('تشخيص المزامنة', h.backupDiagnostic!),
                 _tile(S.localDbStatus, 'محلية وجاهزة'),
               ],
               if (state.message != null)
@@ -112,8 +114,8 @@ class _BackupView extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   child: Text(state.message!),
                 ),
-              FutureBuilder(
-                future: sl<ConflictResolutionService>().openConflicts(),
+              StreamBuilder(
+                stream: sl<ConflictResolutionService>().watchOpenConflicts(),
                 builder: (context, snapshot) {
                   final conflicts = snapshot.data ?? const <Conflict>[];
                   if (conflicts.isEmpty) return const SizedBox.shrink();

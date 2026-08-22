@@ -8,7 +8,9 @@ import 'package:al_nomani_group/data/local/app_database.dart';
 import 'package:al_nomani_group/data/sync/sync_queue_repository.dart';
 import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/services/sale_service.dart';
+import 'package:al_nomani_group/domain/services/catalog_service.dart';
 import 'package:al_nomani_group/domain/services/dashboard_service.dart';
+import 'package:al_nomani_group/domain/services/outstanding_service.dart';
 import 'package:al_nomani_group/domain/services/seed_service.dart';
 import 'package:al_nomani_group/domain/session.dart';
 import 'package:al_nomani_group/features/auth/auth_cubit.dart';
@@ -238,7 +240,7 @@ void main() {
 
     expect(find.text('لوحة التحكم'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   test(
@@ -350,6 +352,93 @@ void main() {
       expect(sales.first.isDeleted, isFalse);
     },
   );
+
+  test('product watch emits the saved product immediately', () async {
+    await readyDb();
+    final session = admin();
+    final catalog = sl<CatalogService>();
+    await catalog.upsertProduct(
+      session: session,
+      name: 'سماد اختباري',
+      sku: 'TEST-FERT',
+      purchasePrice: Money.parse('1.000'),
+      sellingPrice: Money.parse('1.500'),
+      currentStock: Quantity.parse('10'),
+      minimumStock: Quantity.parse('1'),
+      unit: 'kg',
+    );
+    final items = await catalog
+        .watchProducts('سماد اختباري')
+        .first
+        .timeout(const Duration(seconds: 3));
+    expect(items.any((item) => item.sku == 'TEST-FERT'), isTrue);
+  });
+
+  test('outstanding add, set, and reduce keep a full ledger', () async {
+    final db = await readyDb();
+    final session = admin().copyWithUser(
+      usersFirstId: (await db.select(db.users).get()).first.id,
+    );
+    final outstanding = sl<OutstandingService>();
+    await outstanding.add(
+      session: session,
+      customerId: 'c-ahmed',
+      amount: Money.parse('40.000'),
+      notes: 'رصيد سابق قبل النظام',
+    );
+    var account = await (db.select(
+      db.customerAccounts,
+    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    expect(Money.parse(account.cachedBalance).toStorage(), '40.000');
+
+    await outstanding.setTarget(
+      session: session,
+      customerId: 'c-ahmed',
+      target: Money.parse('25.000'),
+      notes: 'تصحيح بعد مراجعة كشف قديم',
+    );
+    account = await (db.select(
+      db.customerAccounts,
+    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    expect(Money.parse(account.cachedBalance).toStorage(), '25.000');
+
+    await outstanding.reduce(
+      session: session,
+      customerId: 'c-ahmed',
+      amount: Money.parse('5.000'),
+      notes: 'خصم تسوية',
+    );
+    account = await (db.select(
+      db.customerAccounts,
+    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    expect(Money.parse(account.cachedBalance).toStorage(), '20.000');
+    final txs = await (db.select(
+      db.customerAccountTransactions,
+    )..where((t) => t.customerId.equals('c-ahmed'))).get();
+    expect(txs.length, greaterThanOrEqualTo(3));
+  });
+
+  test('cashier cannot post outstanding amounts', () async {
+    await readyDb();
+    final cashier = AppSession(
+      userId: 'cashier',
+      username: 'cashier',
+      displayName: 'أمين صندوق',
+      roleName: AppRole.cashier,
+      permissions: RolePermissions.matrix[AppRole.cashier]!.toSet(),
+      expiresAt: DateTime.now().add(const Duration(days: 1)),
+      isOfflineVerified: true,
+    );
+    expect(
+      () => sl<OutstandingService>().add(
+        session: cashier,
+        customerId: 'c-ahmed',
+        amount: Money.parse('10.000'),
+        notes: 'غير مسموح',
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
 }
 
 extension on AppSession {

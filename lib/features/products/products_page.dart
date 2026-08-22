@@ -12,6 +12,7 @@ import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/searchable_select.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -47,11 +48,11 @@ class _ProductsPageState extends State<ProductsPage> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<Product>>(
-              future: sl<CatalogService>().searchProducts(_query),
+            child: StreamBuilder<List<Product>>(
+              stream: sl<CatalogService>().watchProducts(_query),
               builder: (context, snap) {
                 final items = snap.data ?? const <Product>[];
-                if (snap.connectionState != ConnectionState.done) {
+                if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (items.isEmpty) return const Center(child: Text(S.empty));
@@ -126,10 +127,18 @@ class _ProductsPageState extends State<ProductsPage> {
     final stock = TextEditingController(text: product?.currentStock ?? '0.000');
     final min = TextEditingController(text: product?.minimumStock ?? '0.000');
     var unit = product?.unit ?? 'kg';
-    final saved = await showModalBottomSheet<bool>(
+    var categoryId = product?.categoryId;
+    final customUnit = TextEditingController(
+      text: product?.customUnitLabel ?? '',
+    );
+    final categories = await sl<CatalogService>().listCategories();
+    if (!mounted) return;
+    await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
+        var saving = false;
+        String? error;
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.viewInsetsOf(ctx).bottom,
@@ -182,22 +191,89 @@ class _ProductsPageState extends State<ProductsPage> {
                     ),
                     keyboardType: TextInputType.number,
                   ),
-                  DropdownButtonFormField<String>(
-                    initialValue: unit,
-                    items: [
-                      for (final u in ProductUnit.values)
-                        DropdownMenuItem(
-                          value: u.code,
-                          child: Text(u.arabicLabel),
+                  SearchableSelectField<String?>(
+                    label: S.category,
+                    value: categoryId,
+                    options: [
+                      const SearchableOption(value: null, label: S.noCategory),
+                      for (final category in categories)
+                        SearchableOption(
+                          value: category.id,
+                          label: category.name,
                         ),
                     ],
-                    onChanged: (v) => setS(() => unit = v ?? unit),
-                    decoration: const InputDecoration(labelText: S.unit),
+                    onChanged: (v) => setS(() => categoryId = v),
                   ),
+                  SearchableSelectField<String>(
+                    label: S.unit,
+                    required: true,
+                    value: unit,
+                    options: [
+                      for (final u in ProductUnit.values)
+                        SearchableOption(value: u.code, label: u.arabicLabel),
+                    ],
+                    onChanged: (v) => setS(() => unit = v ?? unit),
+                  ),
+                  if (unit == ProductUnit.custom.code)
+                    TextField(
+                      controller: customUnit,
+                      decoration: const InputDecoration(
+                        labelText: S.customUnitLabel,
+                      ),
+                    ),
                   const SizedBox(height: 12),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
                   FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text(S.save),
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            setS(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              await sl<AppBusyCubit>().guard(() async {
+                                await sl<CatalogService>().upsertProduct(
+                                  session: context
+                                      .read<AuthCubit>()
+                                      .state
+                                      .session!,
+                                  id: product?.id,
+                                  name: name.text,
+                                  sku: sku.text,
+                                  categoryId: categoryId,
+                                  brand: brand.text,
+                                  purchasePrice: Money.parse(purchase.text),
+                                  sellingPrice: Money.parse(sell.text),
+                                  currentStock: Quantity.parse(stock.text),
+                                  minimumStock: Quantity.parse(min.text),
+                                  unit: unit,
+                                  customUnitLabel:
+                                      unit == ProductUnit.custom.code
+                                      ? customUnit.text
+                                      : null,
+                                );
+                                await sl<SyncEngine>()
+                                    .maybeSyncAfterLocalWrite();
+                              });
+                              if (ctx.mounted) Navigator.pop(ctx, true);
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setS(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(S.save),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -207,30 +283,5 @@ class _ProductsPageState extends State<ProductsPage> {
         );
       },
     );
-    if (saved != true || !mounted) return;
-    try {
-      await sl<AppBusyCubit>().guard(() async {
-        await sl<CatalogService>().upsertProduct(
-          session: context.read<AuthCubit>().state.session!,
-          id: product?.id,
-          name: name.text,
-          sku: sku.text,
-          brand: brand.text,
-          purchasePrice: Money.parse(purchase.text),
-          sellingPrice: Money.parse(sell.text),
-          currentStock: Quantity.parse(stock.text),
-          minimumStock: Quantity.parse(min.text),
-          unit: unit,
-        );
-        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      });
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
   }
 }

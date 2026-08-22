@@ -25,6 +25,7 @@ class SyncHealth {
   final int backupPending;
   final int backupFailed;
   final String? backupLastError;
+  final String? backupDiagnostic;
   final bool serverReachable;
   final bool serverAuthenticated;
 
@@ -42,6 +43,7 @@ class SyncHealth {
     required this.backupPending,
     required this.backupFailed,
     required this.backupLastError,
+    required this.backupDiagnostic,
     required this.serverReachable,
     required this.serverAuthenticated,
   });
@@ -293,6 +295,7 @@ class SyncEngine {
     final backupFailed =
         int.tryParse(await _metadata.get('backup_failed') ?? '') ?? 0;
     final backupLastError = await _metadata.get('backup_last_error');
+    final backupDiagnostic = await _metadata.get('backup_diagnostic');
     final statusAr = failed > 0 || backupFailed > 0
         ? 'توجد مشكلة في المزامنة'
         : pending > 0
@@ -314,6 +317,7 @@ class SyncEngine {
       backupPending: backupPending,
       backupFailed: backupFailed,
       backupLastError: backupLastError,
+      backupDiagnostic: backupDiagnostic,
       serverReachable: probe.reachable,
       serverAuthenticated: probe.authenticated,
     );
@@ -377,6 +381,15 @@ class SyncEngine {
     }
     final error = data['error'] ?? data['last_error'];
     await _metadata.set('backup_last_error', error?.toString() ?? '');
+    final diagnostic =
+        data['diagnostic'] ?? data['configuration_error'] ?? data['error_code'];
+    await _metadata.set('backup_diagnostic', diagnostic?.toString() ?? '');
+    if (data['processed'] != null && data['pending'] == null) {
+      final remainingFailed = data['failed'];
+      if (remainingFailed is num && remainingFailed == 0) {
+        await _metadata.set('backup_pending', '0');
+      }
+    }
   }
 
   Future<void> _markSuccess() async {

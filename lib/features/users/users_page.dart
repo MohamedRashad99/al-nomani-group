@@ -8,15 +8,11 @@ import '../../data/local/app_database.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/searchable_select.dart';
 
-class UsersPage extends StatefulWidget {
+class UsersPage extends StatelessWidget {
   const UsersPage({super.key});
 
-  @override
-  State<UsersPage> createState() => _UsersPageState();
-}
-
-class _UsersPageState extends State<UsersPage> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<AuthCubit>().state.session!;
@@ -24,15 +20,15 @@ class _UsersPageState extends State<UsersPage> {
       title: S.users,
       fab: session.can(AppPermission.usersCreate)
           ? FloatingActionButton(
-              onPressed: () => _edit(null),
+              onPressed: () => _edit(context, null),
               child: const Icon(Icons.add),
             )
           : null,
-      child: FutureBuilder<List<User>>(
-        future: sl<UserAdminService>().list(),
+      child: StreamBuilder<List<User>>(
+        stream: sl<UserAdminService>().watch(),
         builder: (context, snap) {
           final items = snap.data ?? const <User>[];
-          if (snap.connectionState != ConnectionState.done) {
+          if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           return ListView(
@@ -44,7 +40,7 @@ class _UsersPageState extends State<UsersPage> {
                     '${u.username} • ${_roleLabel(u.roleId)} • ${u.isActive ? S.active : S.inactive}',
                   ),
                   onTap: session.can(AppPermission.usersUpdate)
-                      ? () => _edit(u)
+                      ? () => _edit(context, u)
                       : null,
                 ),
             ],
@@ -54,7 +50,7 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  String _roleLabel(String role) => switch (role) {
+  static String _roleLabel(String role) => switch (role) {
     AppRole.admin => 'مدير النظام',
     AppRole.manager => 'مدير',
     AppRole.cashier => 'أمين صندوق',
@@ -62,83 +58,117 @@ class _UsersPageState extends State<UsersPage> {
     _ => 'غير محدد',
   };
 
-  Future<void> _edit(User? user) async {
+  static Future<void> _edit(BuildContext context, User? user) async {
     final username = TextEditingController(text: user?.username ?? '');
     final display = TextEditingController(text: user?.displayName ?? '');
     final password = TextEditingController();
     var role = user?.roleId ?? AppRole.cashier;
     var active = user?.isActive ?? true;
-    final ok = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: StatefulBuilder(
-          builder: (ctx, setS) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: username,
-                decoration: const InputDecoration(labelText: S.username),
-              ),
-              TextField(
-                controller: display,
-                decoration: const InputDecoration(labelText: 'الاسم الظاهر'),
-              ),
-              TextField(
-                controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: S.password),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: role,
-                items: const [
-                  DropdownMenuItem(
-                    value: AppRole.admin,
-                    child: Text('مدير النظام'),
-                  ),
-                  DropdownMenuItem(value: AppRole.manager, child: Text('مدير')),
-                  DropdownMenuItem(
-                    value: AppRole.cashier,
-                    child: Text('أمين صندوق'),
-                  ),
-                  DropdownMenuItem(
-                    value: AppRole.viewer,
-                    child: Text('عرض فقط'),
-                  ),
-                ],
-                onChanged: (v) => setS(() => role = v ?? role),
-              ),
-              SwitchListTile(
-                title: const Text(S.active),
-                value: active,
-                onChanged: (v) => setS(() => active = v),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(S.save),
-              ),
-              const SizedBox(height: 24),
-            ],
+      builder: (ctx) {
+        var saving = false;
+        String? error;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+            left: 16,
+            right: 16,
+            top: 16,
           ),
-        ),
-      ),
+          child: StatefulBuilder(
+            builder: (ctx, setS) => SingleChildScrollView(
+              child: Column(
+                children: [
+                  TextField(
+                    controller: username,
+                    decoration: const InputDecoration(labelText: S.username),
+                  ),
+                  TextField(
+                    controller: display,
+                    decoration: const InputDecoration(
+                      labelText: 'الاسم الظاهر',
+                    ),
+                  ),
+                  TextField(
+                    controller: password,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: S.password),
+                  ),
+                  SearchableSelectField<String>(
+                    label: 'الدور',
+                    required: true,
+                    value: role,
+                    options: const [
+                      SearchableOption(
+                        value: AppRole.admin,
+                        label: 'مدير النظام',
+                      ),
+                      SearchableOption(value: AppRole.manager, label: 'مدير'),
+                      SearchableOption(
+                        value: AppRole.cashier,
+                        label: 'أمين صندوق',
+                      ),
+                      SearchableOption(value: AppRole.viewer, label: 'عرض فقط'),
+                    ],
+                    onChanged: (v) => setS(() => role = v ?? role),
+                  ),
+                  SwitchListTile(
+                    title: const Text(S.active),
+                    value: active,
+                    onChanged: (v) => setS(() => active = v),
+                  ),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            setS(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              await sl<UserAdminService>().upsert(
+                                session: context
+                                    .read<AuthCubit>()
+                                    .state
+                                    .session!,
+                                id: user?.id,
+                                username: username.text,
+                                displayName: display.text,
+                                password: password.text.isEmpty
+                                    ? null
+                                    : password.text,
+                                roleId: role,
+                                isActive: active,
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setS(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(S.save),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
-    if (ok != true || !mounted) return;
-    await sl<UserAdminService>().upsert(
-      session: context.read<AuthCubit>().state.session!,
-      id: user?.id,
-      username: username.text,
-      displayName: display.text,
-      password: password.text.isEmpty ? null : password.text,
-      roleId: role,
-      isActive: active,
-    );
-    if (mounted) setState(() {});
   }
 }

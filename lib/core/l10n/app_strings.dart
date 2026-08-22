@@ -1,7 +1,7 @@
 abstract final class S {
   static const appName = 'مجموعة النعماني';
   static const appSubtitle = 'نظام إدارة المنتجات الزراعية';
-  static const owner = 'أحمد نعمان الجابري';
+  static const owner = 'أحمد نعمان الجعبيري';
 
   static const login = 'تسجيل الدخول';
   static const username = 'اسم المستخدم';
@@ -21,6 +21,18 @@ abstract final class S {
   static const backup = 'النسخ الاحتياطي والمزامنة';
   static const settings = 'الإعدادات';
   static const more = 'المزيد';
+  static const outstanding = 'المبالغ الآجلة';
+  static const outstandingAdd = 'إضافة مبلغ آجل';
+  static const outstandingSet = 'تعيين الرصيد الحالي';
+  static const outstandingReduce = 'تخفيض مبلغ آجل';
+  static const outstandingCash = 'تحصيل نقدي';
+  static const outstandingCashAmount = 'المبلغ النقدي';
+  static const outstandingTotal = 'إجمالي المستحق من العملاء';
+  static const outstandingWarning =
+      'سيُسجَّل كم حركة حساب ولن يُحذف السجل المحاسبي.';
+  static const customUnitLabel = 'اسم الوحدة المخصصة';
+  static const noCategory = 'بدون تصنيف';
+  static const typeOrSelect = 'اكتب للبحث أو افتح القائمة';
 
   static const todaySales = 'مبيعات اليوم';
   static const weeklySales = 'مبيعات الأسبوع';

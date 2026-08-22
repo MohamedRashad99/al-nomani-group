@@ -23,8 +23,8 @@ class ReportsPage extends StatelessWidget {
         true;
     return AppScaffold(
       title: S.reports,
-      child: FutureBuilder<DashboardSnapshot>(
-        future: sl<DashboardService>().load(),
+      child: StreamBuilder<DashboardSnapshot>(
+        stream: sl<DashboardService>().watch(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const BrandedLoading();
           final dashboard = snapshot.data!;

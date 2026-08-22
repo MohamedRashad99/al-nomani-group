@@ -24,26 +24,8 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late Future<_DashboardData> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<_DashboardData> _load() async {
-    final results = await Future.wait([
-      sl<DashboardService>().load(),
-      sl<SyncEngine>().health(),
-    ]);
-    return _DashboardData(
-      results[0] as DashboardSnapshot,
-      results[1] as SyncHealth,
-    );
-  }
-
-  void _refresh() => setState(() => _future = _load());
+  late final Stream<DashboardSnapshot> _stream = sl<DashboardService>().watch();
+  late Future<SyncHealth> _health = sl<SyncEngine>().health();
 
   @override
   Widget build(BuildContext context) {
@@ -51,28 +33,29 @@ class _DashboardPageState extends State<DashboardPage> {
       title: S.dashboard,
       actions: [
         IconButton(
-          tooltip: 'تحديث البيانات',
-          onPressed: _refresh,
+          tooltip: 'تحديث الحالة',
+          onPressed: () => setState(() => _health = sl<SyncEngine>().health()),
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
-      child: FutureBuilder<_DashboardData>(
-        future: _future,
+      child: StreamBuilder<DashboardSnapshot>(
+        stream: _stream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          if (!snapshot.hasData) {
             return const BrandedLoading(message: 'نجهّز ملخص أعمالك');
           }
-          if (!snapshot.hasData) {
-            return BrandedEmptyState(
-              title: 'تعذر تحميل لوحة التحكم',
-              message: 'بياناتك المحلية لم تتأثر. أعد المحاولة.',
-              action: FilledButton(
-                onPressed: _refresh,
-                child: const Text(S.retry),
-              ),
-            );
-          }
-          return _DashboardBody(data: snapshot.data!);
+          return FutureBuilder<SyncHealth>(
+            future: _health,
+            builder: (context, healthSnap) {
+              final health = healthSnap.data;
+              if (health == null) {
+                return const BrandedLoading(message: 'نجهّز ملخص أعمالك');
+              }
+              return _DashboardBody(
+                data: _DashboardData(snapshot.data!, health),
+              );
+            },
+          );
         },
       ),
     );

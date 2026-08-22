@@ -29,6 +29,12 @@ class MorePage extends StatelessWidget {
         const _Module(S.inventory, '/inventory', Icons.warehouse_outlined),
       if (permissions.contains(AppPermission.collectionsView))
         const _Module(S.collections, '/collections', Icons.payments_outlined),
+      if (permissions.contains(AppPermission.outstandingView))
+        const _Module(
+          S.outstanding,
+          '/outstanding',
+          Icons.account_balance_wallet_outlined,
+        ),
       if (permissions.contains(AppPermission.reportsView))
         const _Module(S.reports, '/reports', Icons.analytics_outlined),
       if (permissions.contains(AppPermission.usersView))

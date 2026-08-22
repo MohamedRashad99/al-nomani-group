@@ -32,6 +32,7 @@ Demo login (seed only, empty database): `admin` / `ChangeMe!Admin1`
 - `JWT_SECRET`
 - `DATABASE_URL` (production Postgres)
 - `GOOGLE_SERVICE_ACCOUNT_JSON` (backend only)
+- `GOOGLE_SERVICE_ACCOUNT_FILE` (preferred local path; Docker uses `/run/secrets/google-service-account.json`)
 - `GOOGLE_LIVE_SPREADSHEET_ID` (default: the Al Nomani Live Backup sheet)
 - `GOOGLE_FULL_SPREADSHEET_ID` (second spreadsheet for 5-day full backup)
 - `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` (first deployment only; password at least 12 characters)
@@ -48,7 +49,7 @@ https://docs.google.com/spreadsheets/d/1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp
 
 Share that file with the service-account email as Editor. Create a separate spreadsheet for Full Backup and set `GOOGLE_FULL_SPREADSHEET_ID`; do not reuse the live ID.
 
-The service account JSON is a backend secret. Never place it in Flutter assets or GitHub Pages. The backup screen reports four separate states: API/server reachability, PostgreSQL queue acceptance, Google outbox completion, and full-backup completion.
+The service account JSON is a backend secret. Never place it in Flutter assets or GitHub Pages. For local Docker, put a replacement key in `secrets/google-service-account.json` after revoking any leaked key, then share the live spreadsheet with the service-account email as Editor. The backup screen reports four separate states: API/server reachability, PostgreSQL queue acceptance, Google outbox completion, and full-backup completion.
 
 ## Production API URL
 

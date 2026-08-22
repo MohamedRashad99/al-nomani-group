@@ -75,7 +75,7 @@ class SeedService {
           UsersCompanion.insert(
             id: adminId,
             username: demoAdminUsername,
-            displayName: 'أحمد نعمان الجابري',
+            displayName: 'أحمد نعمان الجعبيري',
             passwordHash: BCrypt.hashpw(demoAdminPassword, BCrypt.gensalt()),
             roleId: AppRole.admin,
             createdAt: now,

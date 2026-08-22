@@ -60,6 +60,29 @@ class AppDatabase extends _$AppDatabase {
       if (from < 1) {
         await m.createAll();
       }
+      if (from < 2) {
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (id, code) VALUES ('outstanding.view', 'outstanding.view')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (id, code) VALUES ('outstanding.create', 'outstanding.create')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO role_permission_links (role_id, permission_id) VALUES ('admin', 'outstanding.view')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO role_permission_links (role_id, permission_id) VALUES ('admin', 'outstanding.create')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO role_permission_links (role_id, permission_id) VALUES ('manager', 'outstanding.view')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO role_permission_links (role_id, permission_id) VALUES ('manager', 'outstanding.create')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO role_permission_links (role_id, permission_id) VALUES ('viewer', 'outstanding.view')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

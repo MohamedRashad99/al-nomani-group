@@ -28,6 +28,13 @@ class CollectionService {
   final AuditService _audit;
   final AccountService _accounts;
 
+  Stream<List<Collection>> watch() {
+    return (_db.select(_db.collections)
+          ..where((t) => t.isDeleted.equals(false))
+          ..orderBy([(t) => OrderingTerm.desc(t.collectedAt)]))
+        .watch();
+  }
+
   Future<String> record({
     required AppSession session,
     required String customerId,

@@ -21,6 +21,7 @@ import '../../domain/services/report_export_service.dart';
 import '../../domain/services/sale_service.dart';
 import '../../domain/services/seed_service.dart';
 import '../../domain/services/import_service.dart';
+import '../../domain/services/outstanding_service.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -120,6 +121,16 @@ Future<void> configureDependencies({
       baseline: sl(),
       config: sl(),
       dio: sl(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => OutstandingService(
+      db: sl(),
+      metadata: sl(),
+      accounts: sl(),
+      audit: sl(),
+      sync: sl(),
+      collections: sl(),
     ),
   );
   sl.registerLazySingleton(AppBusyCubit.new);

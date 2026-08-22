@@ -39,8 +39,16 @@ class AccountService {
       'payment' => -amount,
       'sale_cancel' => -amount,
       'payment_cancel' => amount,
+      'opening_balance' => amount,
+      'manual_debit' => amount,
+      'manual_credit' => -amount,
       _ => throw ValidationException('نوع حركة الحساب غير معروف: $type'),
     };
+    if (current + signed < Money.zero()) {
+      throw const ValidationException(
+        'لا يمكن أن يصبح رصيد العميل سالباً من هذه الحركة.',
+      );
+    }
     final next = current + signed;
     final now = DateTime.now().toUtc();
     final txId = newId();
