@@ -223,6 +223,13 @@ class AppScaffold extends StatelessWidget {
         Icons.people_outline,
         Icons.people_rounded,
       ),
+    if (permissions.contains(AppPermission.outstandingView))
+      const _NavItem(
+        '/outstanding',
+        S.outstanding,
+        Icons.account_balance_wallet_outlined,
+        Icons.account_balance_wallet_rounded,
+      ),
     if (permissions.contains(AppPermission.productsView))
       const _NavItem(
         '/products',
@@ -243,13 +250,6 @@ class AppScaffold extends StatelessWidget {
         S.collections,
         Icons.payments_outlined,
         Icons.payments_rounded,
-      ),
-    if (permissions.contains(AppPermission.outstandingView))
-      const _NavItem(
-        '/outstanding',
-        S.outstanding,
-        Icons.account_balance_wallet_outlined,
-        Icons.account_balance_wallet_rounded,
       ),
     if (permissions.contains(AppPermission.reportsView))
       const _NavItem(
