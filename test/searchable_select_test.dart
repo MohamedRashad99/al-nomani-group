@@ -29,4 +29,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected, 'b');
   });
+
+  testWidgets('searchable select keeps typed text when no option matches', (
+    tester,
+  ) async {
+    String? selected;
+    var custom = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SearchableSelectField<String>(
+            label: 'العميل',
+            allowCustom: true,
+            value: selected,
+            options: const [SearchableOption(value: 'a', label: 'أحمد')],
+            onChanged: (value) => selected = value,
+            onCustomText: (value) => custom = value,
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'عميل جديد');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
+    expect(custom, 'عميل جديد');
+    expect(find.text('عميل جديد'), findsOneWidget);
+  });
 }

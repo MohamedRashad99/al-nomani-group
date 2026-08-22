@@ -416,6 +416,20 @@ void main() {
       db.customerAccountTransactions,
     )..where((t) => t.customerId.equals('c-ahmed'))).get();
     expect(txs.length, greaterThanOrEqualTo(3));
+
+    await outstanding.collectCash(
+      session: session,
+      customerId: 'c-ahmed',
+      amount: Money.parse('8.000'),
+      notes: 'سداد نقدي',
+    );
+    account = await (db.select(
+      db.customerAccounts,
+    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    expect(Money.parse(account.cachedBalance).toStorage(), '12.000');
+    final due = await outstanding.listDue();
+    expect(due.any((row) => row.customer.id == 'c-ahmed'), isTrue);
+    expect(outstanding.totalDue(due) > Money.zero(), isTrue);
   });
 
   test('cashier cannot post outstanding amounts', () async {

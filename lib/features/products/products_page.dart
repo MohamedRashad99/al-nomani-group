@@ -207,6 +207,7 @@ class _ProductsPageState extends State<ProductsPage> {
                   SearchableSelectField<String>(
                     label: S.unit,
                     required: true,
+                    allowCustom: false,
                     value: unit,
                     options: [
                       for (final u in ProductUnit.values)

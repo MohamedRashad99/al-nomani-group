@@ -47,7 +47,19 @@ Future<HttpServer> createServer({required int port, PostgresDb? db}) async {
 
   final handler = Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(corsHeaders())
+      .addMiddleware(
+        corsHeaders(
+          headers: {
+            ACCESS_CONTROL_ALLOW_ORIGIN: '*',
+            ACCESS_CONTROL_ALLOW_METHODS:
+                'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            ACCESS_CONTROL_ALLOW_HEADERS:
+                'Origin, Content-Type, Accept, Authorization, X-Requested-With',
+            ACCESS_CONTROL_EXPOSE_HEADERS: 'Content-Type, Authorization',
+            ACCESS_CONTROL_ALLOW_CREDENTIALS: 'false',
+          },
+        ),
+      )
       .addHandler(
         Cascade()
             .add(public.call)

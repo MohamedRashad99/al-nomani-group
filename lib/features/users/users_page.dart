@@ -99,6 +99,7 @@ class UsersPage extends StatelessWidget {
                   SearchableSelectField<String>(
                     label: 'الدور',
                     required: true,
+                    allowCustom: false,
                     value: role,
                     options: const [
                       SearchableOption(

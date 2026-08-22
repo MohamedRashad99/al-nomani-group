@@ -24,6 +24,8 @@ enum _SalePeriod { all, today, week, month }
 
 enum _PaymentFilter { all, cash, credit, partial }
 
+enum _PayMode { cash, credit }
+
 class SaleListEntry {
   const SaleListEntry({
     required this.sale,
@@ -457,10 +459,12 @@ class NewSalePage extends StatefulWidget {
 
 class _NewSalePageState extends State<NewSalePage> {
   Customer? _customer;
+  String? _customCustomerName;
   final _paid = TextEditingController(text: '0.000');
   final _lines = <SaleLineDraft>[];
   final _products = <String, Product>{};
   bool _saving = false;
+  _PayMode _payMode = _PayMode.credit;
 
   Money get _total =>
       _lines.fold(Money.zero(), (sum, line) => sum + line.lineTotal);
@@ -474,8 +478,22 @@ class _NewSalePageState extends State<NewSalePage> {
   }
 
   Money get _remaining {
+    if (_payMode == _PayMode.cash) return Money.zero();
     final result = _total - _paidAmount;
     return result.isNegative ? Money.zero() : result;
+  }
+
+  void _setPayMode(_PayMode mode) {
+    setState(() {
+      _payMode = mode;
+      _paid.text = mode == _PayMode.cash ? _total.toStorage() : '0.000';
+    });
+  }
+
+  void _syncPaidWithMode() {
+    if (_payMode == _PayMode.cash) {
+      _paid.text = _total.toStorage();
+    }
   }
 
   @override
@@ -511,6 +529,7 @@ class _NewSalePageState extends State<NewSalePage> {
                       return SearchableSelectField<String>(
                         label: S.selectCustomer,
                         required: true,
+                        allowCustom: true,
                         value: _customer?.id,
                         options: [
                           for (final customer in customers)
@@ -527,7 +546,16 @@ class _NewSalePageState extends State<NewSalePage> {
                           for (final customer in customers) {
                             if (customer.id == id) selected = customer;
                           }
-                          setState(() => _customer = selected);
+                          setState(() {
+                            _customer = selected;
+                            if (selected != null) _customCustomerName = null;
+                          });
+                        },
+                        onCustomText: (name) {
+                          setState(() {
+                            _customCustomerName = name;
+                            if (name.isNotEmpty) _customer = null;
+                          });
                         },
                       );
                     },
@@ -584,8 +612,10 @@ class _NewSalePageState extends State<NewSalePage> {
                               _SaleLineTile(
                                 line: _lines[index],
                                 product: _products[_lines[index].productId],
-                                onRemove: () =>
-                                    setState(() => _lines.removeAt(index)),
+                                onRemove: () => setState(() {
+                                  _lines.removeAt(index);
+                                  _syncPaidWithMode();
+                                }),
                                 onEdit: () => _editLine(index),
                               ),
                           ],
@@ -600,44 +630,49 @@ class _NewSalePageState extends State<NewSalePage> {
                         children: [
                           Expanded(
                             child: ChoiceChip(
-                              selected: _paidAmount >= _total && !_total.isZero,
+                              selected: _payMode == _PayMode.cash,
                               label: const Text('نقدي بالكامل'),
-                              onSelected: (_) => setState(
-                                () => _paid.text = _total.toStorage(),
-                              ),
+                              onSelected: (_) => _setPayMode(_PayMode.cash),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: ChoiceChip(
-                              selected: _paidAmount.isZero,
+                              selected: _payMode == _PayMode.credit,
                               label: const Text('آجل'),
-                              onSelected: (_) =>
-                                  setState(() => _paid.text = '0.000'),
+                              onSelected: (_) => _setPayMode(_PayMode.credit),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _paid,
-                        onChanged: (_) => setState(() {}),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                      if (_payMode == _PayMode.credit) ...[
+                        const SizedBox(height: 10),
+                        const Text(
+                          'يمكنك إدخال دفعة نقدية الآن. المتبقي يُحسب تلقائياً ويُسجَّل آجلاً.',
                         ),
-                        decoration: const InputDecoration(
-                          labelText: S.paidAmount,
-                          prefixIcon: Icon(Icons.payments_outlined),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _paid,
+                          onChanged: (_) => setState(() {}),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: S.paidAmount,
+                            hintText: '0.000',
+                            prefixIcon: Icon(Icons.payments_outlined),
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 12),
                       _AmountRow(label: S.total, amount: _total),
                       _AmountRow(label: S.paidAmount, amount: _paidAmount),
-                      _AmountRow(
-                        label: S.remaining,
-                        amount: _remaining,
-                        emphasized: true,
-                      ),
+                      if (_payMode == _PayMode.credit)
+                        _AmountRow(
+                          label: S.remaining,
+                          amount: _remaining,
+                          emphasized: true,
+                        ),
                     ],
                   ),
                 ),
@@ -693,6 +728,7 @@ class _NewSalePageState extends State<NewSalePage> {
           unitPrice: Money.parse(product.sellingPrice),
         ),
       );
+      _syncPaidWithMode();
     });
   }
 
@@ -719,6 +755,7 @@ class _NewSalePageState extends State<NewSalePage> {
         unit: product.unit,
         unitPrice: _lines[index].unitPrice,
       );
+      _syncPaidWithMode();
     });
   }
 
@@ -762,9 +799,14 @@ class _NewSalePageState extends State<NewSalePage> {
   }
 
   Future<void> _confirm() async {
-    if (_customer == null || _lines.isEmpty) {
+    if ((_customer == null &&
+            (_customCustomerName == null || _customCustomerName!.isEmpty)) ||
+        _lines.isEmpty) {
       _message(S.requiredField);
       return;
+    }
+    if (_payMode == _PayMode.cash) {
+      _paid.text = _total.toStorage();
     }
     if (_paidAmount > _total) {
       _message('المبلغ المدفوع لا يمكن أن يتجاوز إجمالي البيع.');
@@ -773,10 +815,16 @@ class _NewSalePageState extends State<NewSalePage> {
     setState(() => _saving = true);
     try {
       await sl<AppBusyCubit>().guard(() async {
+        final session = context.read<AuthCubit>().state.session!;
+        final customerId = await sl<CatalogService>().findOrCreateCustomer(
+          session: session,
+          id: _customer?.id,
+          name: _customCustomerName,
+        );
         await sl<SaleService>().create(
-          context.read<AuthCubit>().state.session!,
+          session,
           SaleDraft(
-            customerId: _customer!.id,
+            customerId: customerId,
             lines: List.of(_lines),
             paidAmount: _paidAmount,
           ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:al_nomani_shared/al_nomani_shared.dart';
@@ -108,7 +109,7 @@ class SyncEngine {
 
   Future<void> maybeSyncAfterLocalWrite() async {
     if (await mode() == SyncMode.nearRealtime) {
-      await syncNow(force: true);
+      unawaited(syncNow(force: true));
     }
   }
 
@@ -160,14 +161,16 @@ class SyncEngine {
       final deviceId = await _metadata.deviceId();
       for (final item in items) {
         await _queue.markProcessing(item.id);
-        try {
-          final response = await _dio.post<Map<String, dynamic>>(
-            '${_config.apiBaseUrl}/api/v1/sync/push',
-            data: {
-              'device_id': deviceId,
-              'app_version': _config.appVersion,
-              'sync_protocol_version': _config.syncProtocolVersion,
-              'operations': [
+      }
+      try {
+        final response = await _dio.post<Map<String, dynamic>>(
+          '${_config.apiBaseUrl}/api/v1/sync/push',
+          data: {
+            'device_id': deviceId,
+            'app_version': _config.appVersion,
+            'sync_protocol_version': _config.syncProtocolVersion,
+            'operations': [
+              for (final item in items)
                 {
                   'operation_id': item.operationId,
                   'entity_type': item.entityType,
@@ -180,14 +183,27 @@ class SyncEngine {
                       1,
                   'created_at': item.createdAt.toIso8601String(),
                 },
-              ],
-            },
-          );
-          final results = (response.data?['results'] as List?) ?? const [];
-          await _storeBackupStatus(response.data?['backup']);
-          final first = results.isEmpty
-              ? <String, dynamic>{}
-              : results.first as Map<String, dynamic>;
+            ],
+          },
+        );
+        final results = (response.data?['results'] as List?) ?? const [];
+        await _storeBackupStatus(response.data?['backup']);
+        final byOperation = <String, Map<String, dynamic>>{
+          for (final raw in results)
+            if (raw is Map)
+              '${(raw['operation_id'] ?? raw['id'] ?? '')}':
+                  Map<String, dynamic>.from(raw),
+        };
+        for (var index = 0; index < items.length; index++) {
+          final item = items[index];
+          final first = byOperation[item.operationId] ??
+              (index < results.length && results[index] is Map
+                  ? Map<String, dynamic>.from(results[index] as Map)
+                  : <String, dynamic>{});
+          if (first.isEmpty) {
+            await _queue.markPending(item.id);
+            continue;
+          }
           final status = first['status'] as String? ?? 'accepted';
           if (status == 'accepted' || status == 'duplicate') {
             await _queue.markSynced(item.id);
@@ -203,21 +219,31 @@ class SyncEngine {
             );
             failed++;
           }
-        } on DioException catch (error) {
-          final message = switch (error.response?.statusCode) {
-            401 || 403 =>
-              'انتهت جلسة الخادم. سجّل الدخول أثناء الاتصال ثم أعد المحاولة.',
-            _ => 'الخادم غير متاح حالياً. بقيت البيانات محفوظة محلياً.',
-          };
-          await _queue.markFailed(item.id, message);
-          failed++;
-        } catch (_) {
-          await _queue.markFailed(
-            item.id,
-            'تعذر تنفيذ العملية. بقيت البيانات محفوظة محلياً.',
-          );
-          failed++;
         }
+      } on DioException catch (error) {
+        final authExpired =
+            error.response?.statusCode == 401 ||
+            error.response?.statusCode == 403;
+        final message = authExpired
+            ? 'انتهت جلسة الخادم. سجّل الدخول أثناء الاتصال ثم أعد المحاولة.'
+            : 'الخادم غير متاح حالياً. بقيت البيانات محفوظة محلياً.';
+        for (final item in items) {
+          if (authExpired) {
+            await _queue.markFailed(item.id, message);
+            failed++;
+          } else {
+            await _queue.markPending(item.id);
+          }
+        }
+        await _metadata.set(SyncConfigKeys.lastSyncError, message);
+      } catch (_) {
+        for (final item in items) {
+          await _queue.markPending(item.id);
+        }
+        await _metadata.set(
+          SyncConfigKeys.lastSyncError,
+          'تعذر تنفيذ العملية. بقيت البيانات محفوظة محلياً، وسيتم استكمال المزامنة لاحقاً.',
+        );
       }
 
       await _finishLog(
@@ -228,9 +254,9 @@ class SyncEngine {
         failed,
         null,
       );
-      if (failed == 0) {
+      if (failed == 0 && accepted > 0) {
         await _markSuccess();
-      } else {
+      } else if (failed > 0) {
         await _metadata.set(
           SyncConfigKeys.lastSyncError,
           'فشلت بعض عمليات المزامنة',

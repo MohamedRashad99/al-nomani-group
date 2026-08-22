@@ -7,6 +7,9 @@ import '../services/auth_service.dart';
 Middleware authMiddleware(AuthService auth) {
   return (Handler inner) {
     return (Request request) async {
+      if (request.method == 'OPTIONS') {
+        return Response.ok('', headers: {'content-type': 'text/plain'});
+      }
       final header = request.headers['authorization'];
       if (header == null || !header.startsWith('Bearer ')) {
         return Response.forbidden(

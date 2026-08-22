@@ -71,6 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       SearchableSelectField<SyncMode>(
                         label: 'وضع المزامنة',
                         required: true,
+                        allowCustom: false,
                         enabled: canUpdate,
                         value: settings.mode,
                         options: const [
@@ -93,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       SearchableSelectField<int>(
                         label: 'الفاصل بين المزامنات',
                         required: true,
+                        allowCustom: false,
                         enabled: canUpdate,
                         value: settings.intervalDays,
                         options: const [

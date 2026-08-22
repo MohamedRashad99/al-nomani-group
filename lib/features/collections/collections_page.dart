@@ -62,6 +62,7 @@ class CollectionsPage extends StatelessWidget {
     final customers = await sl<CatalogService>().searchCustomers('');
     if (!context.mounted) return;
     String? customerId;
+    String? customName;
     var method = 'cash';
     final amount = TextEditingController();
     final notes = TextEditingController();
@@ -85,6 +86,7 @@ class CollectionsPage extends StatelessWidget {
                   SearchableSelectField<String>(
                     label: S.customerName,
                     required: true,
+                    allowCustom: true,
                     value: customerId,
                     options: [
                       for (final customer in customers)
@@ -96,7 +98,14 @@ class CollectionsPage extends StatelessWidget {
                               '${customer.phone ?? ''} ${customer.area ?? ''}',
                         ),
                     ],
-                    onChanged: (value) => setS(() => customerId = value),
+                    onChanged: (value) => setS(() {
+                      customerId = value;
+                      if (value != null) customName = null;
+                    }),
+                    onCustomText: (value) => setS(() {
+                      customName = value;
+                      if (value.isNotEmpty) customerId = null;
+                    }),
                   ),
                   TextField(
                     controller: amount,
@@ -110,6 +119,7 @@ class CollectionsPage extends StatelessWidget {
                   SearchableSelectField<String>(
                     label: S.paymentMethod,
                     required: true,
+                    allowCustom: false,
                     value: method,
                     options: const [
                       SearchableOption(value: 'cash', label: S.cash),
@@ -133,16 +143,20 @@ class CollectionsPage extends StatelessWidget {
                               error = null;
                             });
                             try {
-                              if (customerId == null) {
-                                throw Exception(S.selectCustomer);
-                              }
+                              final session = context
+                                  .read<AuthCubit>()
+                                  .state
+                                  .session!;
+                              final resolvedId = await sl<CatalogService>()
+                                  .findOrCreateCustomer(
+                                    session: session,
+                                    id: customerId,
+                                    name: customName,
+                                  );
                               await sl<AppBusyCubit>().guard(() async {
                                 await sl<CollectionService>().record(
-                                  session: context
-                                      .read<AuthCubit>()
-                                      .state
-                                      .session!,
-                                  customerId: customerId!,
+                                  session: session,
+                                  customerId: resolvedId,
                                   amount: Money.parse(amount.text),
                                   paymentMethod: method,
                                   notes: notes.text,

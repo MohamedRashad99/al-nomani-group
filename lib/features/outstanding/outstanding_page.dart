@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../domain/services/catalog_service.dart';
 import '../../domain/services/outstanding_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -12,7 +13,7 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
 
-enum _OutstandingMode { add, reduce, setExact }
+enum _OutstandingMode { add, cash, setExact }
 
 class OutstandingPage extends StatelessWidget {
   const OutstandingPage({super.key});
@@ -29,36 +30,57 @@ class OutstandingPage extends StatelessWidget {
             )
           : null,
       child: StreamBuilder<List<OutstandingRow>>(
-        stream: sl<OutstandingService>().watch(),
+        stream: sl<OutstandingService>().watchDue(),
         builder: (context, snapshot) {
           final rows = snapshot.data ?? const <OutstandingRow>[];
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (rows.isEmpty) return const Center(child: Text(S.empty));
-          return ListView.builder(
-            itemCount: rows.length,
-            itemBuilder: (context, index) {
-              final row = rows[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          final total = sl<OutstandingService>().totalDue(rows);
+          return Column(
+            children: [
+              Card(
+                margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                 child: ListTile(
-                  title: Text(row.customer.name),
-                  subtitle: Text(
-                    [row.customer.phone, row.customer.area]
-                        .whereType<String>()
-                        .where((value) => value.isNotEmpty)
-                        .join(' • '),
-                  ),
-                  trailing: MoneyText(row.balance),
-                  onTap: () =>
-                      context.push('/customers/${row.customer.id}/statement'),
-                  onLongPress: session.can(AppPermission.outstandingCreate)
-                      ? () => _edit(context, row)
-                      : null,
+                  title: const Text(S.outstandingTotal),
+                  subtitle: Text('${S.customersWithDebt}: ${rows.length}'),
+                  trailing: MoneyText(total),
                 ),
-              );
-            },
+              ),
+              Expanded(
+                child: rows.isEmpty
+                    ? const Center(child: Text(S.empty))
+                    : ListView.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (context, index) {
+                          final row = rows[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            child: ListTile(
+                              title: Text(row.customer.name),
+                              subtitle: Text(
+                                [row.customer.phone, row.customer.area]
+                                    .whereType<String>()
+                                    .where((v) => v.isNotEmpty)
+                                    .join(' • '),
+                              ),
+                              trailing: MoneyText(row.balance),
+                              onTap: () => context.push(
+                                '/customers/${row.customer.id}/statement',
+                              ),
+                              onLongPress:
+                                  session.can(AppPermission.outstandingCreate)
+                                  ? () => _edit(context, row)
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -68,11 +90,11 @@ class OutstandingPage extends StatelessWidget {
   Future<void> _edit(BuildContext context, OutstandingRow? row) async {
     final rows = await sl<OutstandingService>().list();
     if (!context.mounted) return;
-    var customerId = row?.customer.id;
-    var mode = _OutstandingMode.add;
-    final amount = TextEditingController(
-      text: row == null ? '' : row.balance.toStorage(),
-    );
+    String? customerId = row?.customer.id;
+    var customName = row?.customer.name;
+    var mode = row == null ? _OutstandingMode.add : _OutstandingMode.cash;
+    final amount = TextEditingController();
+    final cash = TextEditingController();
     final notes = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
@@ -100,6 +122,7 @@ class OutstandingPage extends StatelessWidget {
                   SearchableSelectField<String>(
                     label: S.customerName,
                     required: true,
+                    allowCustom: true,
                     value: customerId,
                     options: [
                       for (final item in rows)
@@ -111,12 +134,20 @@ class OutstandingPage extends StatelessWidget {
                               '${item.customer.phone ?? ''} ${item.customer.area ?? ''}',
                         ),
                     ],
-                    onChanged: (value) => setS(() => customerId = value),
+                    onChanged: (value) => setS(() {
+                      customerId = value;
+                      if (value != null) customName = null;
+                    }),
+                    onCustomText: (value) => setS(() {
+                      customName = value;
+                      if (value.isNotEmpty) customerId = null;
+                    }),
                   ),
                   const SizedBox(height: 12),
                   SearchableSelectField<_OutstandingMode>(
                     label: 'نوع الحركة',
                     required: true,
+                    allowCustom: false,
                     value: mode,
                     options: const [
                       SearchableOption(
@@ -124,8 +155,8 @@ class OutstandingPage extends StatelessWidget {
                         label: S.outstandingAdd,
                       ),
                       SearchableOption(
-                        value: _OutstandingMode.reduce,
-                        label: S.outstandingReduce,
+                        value: _OutstandingMode.cash,
+                        label: S.outstandingCash,
                       ),
                       SearchableOption(
                         value: _OutstandingMode.setExact,
@@ -135,12 +166,26 @@ class OutstandingPage extends StatelessWidget {
                     onChanged: (value) =>
                         setS(() => mode = value ?? _OutstandingMode.add),
                   ),
+                  if (mode != _OutstandingMode.cash)
+                    TextField(
+                      controller: amount,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: mode == _OutstandingMode.setExact
+                            ? S.outstandingSet
+                            : S.outstandingAdd,
+                      ),
+                    ),
                   TextField(
-                    controller: amount,
+                    controller: cash,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(labelText: S.balance),
+                    decoration: const InputDecoration(
+                      labelText: S.outstandingCashAmount,
+                    ),
                   ),
                   TextField(
                     controller: notes,
@@ -160,37 +205,57 @@ class OutstandingPage extends StatelessWidget {
                               error = null;
                             });
                             try {
-                              if (customerId == null) {
-                                throw Exception(S.selectCustomer);
-                              }
-                              final money = Money.parse(amount.text);
                               final session = context
                                   .read<AuthCubit>()
                                   .state
                                   .session!;
+                              final resolvedId = await sl<CatalogService>()
+                                  .findOrCreateCustomer(
+                                    session: session,
+                                    id: customerId,
+                                    name: customName,
+                                  );
+                              final deferred = _tryMoney(amount.text);
+                              final cashPaid = _tryMoney(cash.text);
+                              if (mode == _OutstandingMode.cash &&
+                                  (cashPaid == null || !cashPaid.isPositive)) {
+                                throw Exception(S.invalidAmount);
+                              }
+                              if (mode != _OutstandingMode.cash &&
+                                  (deferred == null || !deferred.isPositive) &&
+                                  (cashPaid == null || !cashPaid.isPositive)) {
+                                throw Exception(S.invalidAmount);
+                              }
                               await sl<AppBusyCubit>().guard(() async {
-                                switch (mode) {
-                                  case _OutstandingMode.add:
-                                    await sl<OutstandingService>().add(
-                                      session: session,
-                                      customerId: customerId!,
-                                      amount: money,
-                                      notes: notes.text,
-                                    );
-                                  case _OutstandingMode.reduce:
-                                    await sl<OutstandingService>().reduce(
-                                      session: session,
-                                      customerId: customerId!,
-                                      amount: money,
-                                      notes: notes.text,
-                                    );
-                                  case _OutstandingMode.setExact:
-                                    await sl<OutstandingService>().setTarget(
-                                      session: session,
-                                      customerId: customerId!,
-                                      target: money,
-                                      notes: notes.text,
-                                    );
+                                if (mode == _OutstandingMode.setExact &&
+                                    deferred != null) {
+                                  await sl<OutstandingService>().setTarget(
+                                    session: session,
+                                    customerId: resolvedId,
+                                    target: deferred,
+                                    notes: notes.text.isEmpty
+                                        ? 'تعيين رصيد آجل'
+                                        : notes.text,
+                                  );
+                                } else if (mode == _OutstandingMode.add &&
+                                    deferred != null &&
+                                    deferred.isPositive) {
+                                  await sl<OutstandingService>().add(
+                                    session: session,
+                                    customerId: resolvedId,
+                                    amount: deferred,
+                                    notes: notes.text.isEmpty
+                                        ? 'إضافة مبلغ آجل'
+                                        : notes.text,
+                                  );
+                                }
+                                if (cashPaid != null && cashPaid.isPositive) {
+                                  await sl<OutstandingService>().collectCash(
+                                    session: session,
+                                    customerId: resolvedId,
+                                    amount: cashPaid,
+                                    notes: notes.text,
+                                  );
                                 }
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
@@ -219,5 +284,15 @@ class OutstandingPage extends StatelessWidget {
         );
       },
     );
+  }
+
+  static Money? _tryMoney(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    try {
+      return Money.parse(text);
+    } catch (_) {
+      return null;
+    }
   }
 }

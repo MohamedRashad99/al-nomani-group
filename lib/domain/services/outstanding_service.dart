@@ -70,12 +70,18 @@ class OutstandingService {
   }
 
   Future<List<OutstandingRow>> listDue() async {
-    return [for (final row in await list()) if (row.balance.isPositive) row];
+    return [
+      for (final row in await list())
+        if (row.balance.isPositive) row,
+    ];
   }
 
   Stream<List<OutstandingRow>> watchDue() {
     return watch().map(
-      (rows) => [for (final row in rows) if (row.balance.isPositive) row],
+      (rows) => [
+        for (final row in rows)
+          if (row.balance.isPositive) row,
+      ],
     );
   }
 

@@ -20,4 +20,16 @@ class AppSession {
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
   bool can(String permission) => permissions.contains(permission);
+
+  AppSession copyWith({Set<String>? permissions}) {
+    return AppSession(
+      userId: userId,
+      username: username,
+      displayName: displayName,
+      roleName: roleName,
+      permissions: permissions ?? this.permissions,
+      expiresAt: expiresAt,
+      isOfflineVerified: isOfflineVerified,
+    );
+  }
 }
