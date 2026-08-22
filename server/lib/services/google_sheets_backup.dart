@@ -7,6 +7,7 @@ import 'package:googleapis_auth/auth_io.dart';
 
 import '../config/env.dart';
 import '../database/postgres_db.dart';
+import 'sheet_workbook.dart';
 
 class BackupProcessingResult {
   const BackupProcessingResult({
@@ -89,7 +90,18 @@ class GoogleSheetsBackup {
 
   bool get isConfigured =>
       env.googleServiceAccountJson?.isNotEmpty == true &&
-      env.googleLiveSpreadsheetId.isNotEmpty;
+      snapshotSpreadsheetId.isNotEmpty;
+
+  String get snapshotSpreadsheetId {
+    if (env.googleFullSpreadsheetId.isNotEmpty) {
+      return env.googleFullSpreadsheetId;
+    }
+    return env.googleLiveSpreadsheetId;
+  }
+
+  String get spreadsheetUrl => snapshotSpreadsheetId.isEmpty
+      ? ''
+      : 'https://docs.google.com/spreadsheets/d/$snapshotSpreadsheetId/edit';
 
   Future<BackupProcessingResult> processPending({int limit = 100}) async {
     if (!isConfigured) {
@@ -259,24 +271,22 @@ class GoogleSheetsBackup {
 
   Future<BackupProcessingResult> writeFullBackup() async {
     if (env.googleServiceAccountJson?.isNotEmpty != true ||
-        env.googleFullSpreadsheetId.isEmpty) {
+        snapshotSpreadsheetId.isEmpty) {
       return BackupProcessingResult(
         configured: false,
         processed: 0,
         failed: 0,
         error:
             env.googleServiceAccountError ??
-            'ملف النسخة الكاملة أو بيانات Google غير مهيأة.',
+            'بيانات اعتماد Google Sheets أو معرّف الملف غير مهيأ.',
         errorCode: env.googleServiceAccountError != null
             ? 'credentials_invalid'
-            : env.googleFullSpreadsheetId.isEmpty
-            ? 'full_spreadsheet_missing'
+            : snapshotSpreadsheetId.isEmpty
+            ? 'spreadsheet_missing'
             : 'credentials_missing',
         diagnostic:
             env.googleServiceAccountError ??
-            (env.googleFullSpreadsheetId.isEmpty
-                ? 'اضبط GOOGLE_FULL_SPREADSHEET_ID لمعرّف ملف مستقل ثم أعد المحاولة.'
-                : 'أضف ملف Service Account إلى الخادم ثم أعد المحاولة.'),
+            'أضف ملف Service Account إلى الخادم وشارك ملف Google معه بصلاحية محرر.',
       );
     }
 
@@ -286,28 +296,43 @@ class GoogleSheetsBackup {
       INSERT INTO backup_runs (id, kind, spreadsheet_id, status)
       VALUES (@id, 'full', @sheet, 'running')
       ''',
-      params: {'id': runId, 'sheet': env.googleFullSpreadsheetId},
+      params: {'id': runId, 'sheet': snapshotSpreadsheetId},
     );
 
     var rowsWritten = 0;
     try {
       final api = await _api();
-      await _ensureTabs(api, env.googleFullSpreadsheetId);
-      for (final entry in fullBackupTables.entries) {
-        final rows = await _tableSnapshot(entry.value);
-        rowsWritten += rows.length > 1 ? rows.length - 1 : 0;
+      await _ensureTabs(api, snapshotSpreadsheetId);
+      await _writeOverview(api, snapshotSpreadsheetId);
+      for (final sheet in structuredSheets) {
+        final result = await db.query(sheet.sql);
+        final values = buildSheetValues(
+          columns: sheet.columns,
+          rows: [
+            for (final row in result) [for (final value in row) value],
+          ],
+        );
+        rowsWritten += result.length;
         await api.spreadsheets.values.clear(
           ClearValuesRequest(),
-          env.googleFullSpreadsheetId,
-          "'${entry.key}'!A:ZZ",
+          snapshotSpreadsheetId,
+          "'${sheet.tab}'!A:ZZ",
         );
         await api.spreadsheets.values.update(
-          ValueRange(values: rows),
-          env.googleFullSpreadsheetId,
-          "'${entry.key}'!A1",
+          ValueRange(values: values),
+          snapshotSpreadsheetId,
+          "'${sheet.tab}'!A1",
           valueInputOption: 'RAW',
         );
       }
+      await _freezeHeaders(api, snapshotSpreadsheetId);
+      await db.query(
+        '''
+        UPDATE backup_outbox SET
+          status = 'synced', synced_at = NOW(), last_error = NULL
+        WHERE status IN ('pending', 'failed')
+        ''',
+      );
       await db.query(
         '''
         UPDATE backup_runs SET
@@ -378,7 +403,9 @@ class GoogleSheetsBackup {
             env.googleServiceAccountError ??
             'أضف بيانات اعتماد Service Account على الخادم وشارك ملف Google معه بصلاحية محرر.',
       'live_spreadsheet_configured': env.googleLiveSpreadsheetId.isNotEmpty,
-      'full_spreadsheet_configured': env.googleFullSpreadsheetId.isNotEmpty,
+      'full_spreadsheet_configured': snapshotSpreadsheetId.isNotEmpty,
+      'spreadsheet_id': snapshotSpreadsheetId,
+      'spreadsheet_url': spreadsheetUrl,
       'pending': pending.first[0],
       'failed': pending.first[1],
       'last_success_at': pending.first[2]?.toString(),
@@ -495,50 +522,19 @@ class GoogleSheetsBackup {
     return merged;
   }
 
-  Future<List<List<Object?>>> _tableSnapshot(String table) async {
-    final columnRows = await db.query(
-      '''
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = @table
-      ORDER BY ordinal_position
-      ''',
-      params: {'table': table},
-    );
-    final headers = columnRows
-        .map((row) => row[0] as String)
-        .where((column) => column != 'password_hash')
-        .toList();
-    final jsonExpression = table == 'users'
-        ? "(to_jsonb(t) - 'password_hash')::text"
-        : 'row_to_json(t)::text';
-    final result = await db.query('SELECT $jsonExpression FROM $table t');
-    final records = result
-        .map(
-          (row) =>
-              Map<String, dynamic>.from(jsonDecode(row[0] as String) as Map),
-        )
-        .toList();
-    if (headers.isEmpty) return const <List<Object?>>[];
-    return [
-      headers,
-      for (final record in records)
-        [
-          for (final header in headers)
-            record[header] is Map || record[header] is List
-                ? jsonEncode(record[header])
-                : record[header]?.toString(),
-        ],
-    ];
-  }
-
   Future<void> _ensureTabs(SheetsApi api, String spreadsheetId) async {
     final spreadsheet = await api.spreadsheets.get(spreadsheetId);
     final existing = (spreadsheet.sheets ?? [])
         .map((sheet) => sheet.properties?.title)
         .whereType<String>()
         .toSet();
-    final needed = {...tabs.values, ...fullBackupTables.keys, 'Sync Logs'};
+    final needed = {
+      'Overview',
+      ...tabs.values,
+      ...fullBackupTables.keys,
+      ...structuredSheets.map((sheet) => sheet.tab),
+      'Sync Logs',
+    };
     final requests = [
       for (final tab in needed)
         if (!existing.contains(tab))
@@ -552,6 +548,68 @@ class GoogleSheetsBackup {
         spreadsheetId,
       );
     }
+  }
+
+  Future<void> _writeOverview(SheetsApi api, String spreadsheetId) async {
+    final counts = await db.query('''
+      SELECT
+        (SELECT COUNT(*) FROM product_categories WHERE NOT is_deleted),
+        (SELECT COUNT(*) FROM products WHERE NOT is_deleted),
+        (SELECT COUNT(*) FROM customers WHERE NOT is_deleted),
+        (SELECT COUNT(*) FROM sales WHERE NOT is_deleted),
+        (SELECT COUNT(*) FROM sale_items),
+        (SELECT COUNT(*) FROM collections WHERE NOT is_deleted),
+        (SELECT COUNT(*) FROM customer_account_transactions),
+        (SELECT COUNT(*) FROM inventory_movements),
+        (SELECT COUNT(*) FROM users WHERE NOT is_deleted)
+    ''');
+    final row = counts.first;
+    final values = [
+      ['البيان', 'Item', 'العدد'],
+      ['وقت التصدير', 'exported_at', DateTime.now().toUtc().toIso8601String()],
+      ['التصنيفات', 'categories', row[0]],
+      ['المنتجات', 'products', row[1]],
+      ['العملاء', 'customers', row[2]],
+      ['المبيعات', 'sales', row[3]],
+      ['بنود المبيعات', 'sale_items', row[4]],
+      ['التحصيلات', 'collections', row[5]],
+      ['حركات الحساب', 'account_transactions', row[6]],
+      ['حركة المخزون', 'inventory_movements', row[7]],
+      ['المستخدمون', 'users', row[8]],
+    ];
+    await api.spreadsheets.values.clear(
+      ClearValuesRequest(),
+      spreadsheetId,
+      "'Overview'!A:ZZ",
+    );
+    await api.spreadsheets.values.update(
+      ValueRange(values: values),
+      spreadsheetId,
+      "'Overview'!A1",
+      valueInputOption: 'RAW',
+    );
+  }
+
+  Future<void> _freezeHeaders(SheetsApi api, String spreadsheetId) async {
+    final spreadsheet = await api.spreadsheets.get(spreadsheetId);
+    final requests = [
+      for (final sheet in spreadsheet.sheets ?? const <Sheet>[])
+        if (sheet.properties?.sheetId != null)
+          Request(
+            updateSheetProperties: UpdateSheetPropertiesRequest(
+              properties: SheetProperties(
+                sheetId: sheet.properties!.sheetId,
+                gridProperties: GridProperties(frozenRowCount: 2),
+              ),
+              fields: 'gridProperties.frozenRowCount',
+            ),
+          ),
+    ];
+    if (requests.isEmpty) return;
+    await api.spreadsheets.batchUpdate(
+      BatchUpdateSpreadsheetRequest(requests: requests),
+      spreadsheetId,
+    );
   }
 
   String _safeError(Object error) {

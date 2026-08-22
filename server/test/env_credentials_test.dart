@@ -22,6 +22,19 @@ void main() {
     expect(env.googleServiceAccountError, isNull);
   });
 
+  test('uses the live spreadsheet for a full dump when no second file is set', () {
+    final env = Env.loadFrom({
+      'GOOGLE_LIVE_SPREADSHEET_ID':
+          '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
+    });
+
+    expect(env.googleFullSpreadsheetId, env.googleLiveSpreadsheetId);
+    expect(
+      env.googleFullSpreadsheetId,
+      '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
+    );
+  });
+
   test('reports a readable Arabic error for invalid credentials', () {
     final env = Env.loadFrom({
       'GOOGLE_SERVICE_ACCOUNT_JSON': '{"type":"user"}',

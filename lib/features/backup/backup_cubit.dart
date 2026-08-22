@@ -66,6 +66,20 @@ class BackupCubit extends Cubit<BackupState> {
 
   Future<void> fullBackup() async {
     emit(state.copyWith(busy: true, message: null));
+    await _engine.syncNow(force: true);
+    final afterSync = await _engine.health();
+    if (!afterSync.serverReachable || !afterSync.serverAuthenticated) {
+      emit(
+        state.copyWith(
+          busy: false,
+          health: afterSync,
+          message: !afterSync.serverReachable
+              ? 'الخادم غير متاح. شغّل الخادم ثم أعد المحاولة لتحديث Google Sheets.'
+              : 'سجّل الدخول أثناء الاتصال ثم أعد محاولة تحديث الملف.',
+        ),
+      );
+      return;
+    }
     await _engine.requestFullBackup();
     final health = await _engine.health();
     emit(
@@ -73,10 +87,12 @@ class BackupCubit extends Cubit<BackupState> {
         busy: false,
         health: health,
         message: health.backupConfigured == false
-            ? 'النسخة الكاملة غير مهيأة على الخادم.'
+            ? 'تعذر الوصول إلى Google Sheets. أضف Service Account على الخادم وشارك الملف معه كمحرر.'
+            : (health.lastError != null && health.lastError!.isNotEmpty)
+            ? health.lastError
             : health.backupFailed > 0
-            ? 'فشلت النسخة الكاملة. راجع خطأ Google Sheets.'
-            : 'اكتملت النسخة الكاملة.',
+            ? 'فشلت كتابة البيانات إلى Google Sheets. راجع التشخيص أدناه.'
+            : 'تم تحديث ملف Google Sheets بكل البيانات.',
       ),
     );
   }

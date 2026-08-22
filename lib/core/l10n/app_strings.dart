@@ -113,7 +113,7 @@ abstract final class S {
   static const transfer = 'تحويل';
 
   static const syncNow = 'مزامنة الآن';
-  static const fullBackupNow = 'إنشاء نسخة كاملة الآن';
+  static const fullBackupNow = 'تحديث Google Sheets بكل البيانات';
   static const exportLocalBackup = 'تصدير نسخة احتياطية';
   static const retryFailed = 'إعادة محاولة العمليات الفاشلة';
   static const lastSync = 'آخر مزامنة';

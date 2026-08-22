@@ -5,6 +5,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
@@ -181,7 +182,16 @@ class _BackupView extends StatelessWidget {
                   );
                 },
               ),
-              FilledButton(
+              _SheetExportCard(
+                busy: state.busy,
+                canExport: session?.can(AppPermission.backupFullSync) == true,
+                spreadsheetUrl:
+                    h?.spreadsheetUrl ??
+                    _spreadsheetUrl(sl<AppConfig>().googleLiveSpreadsheetId),
+                onExport: () => context.read<BackupCubit>().fullBackup(),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
                 onPressed:
                     state.busy || session?.can(AppPermission.backupSync) != true
                     ? null
@@ -196,15 +206,6 @@ class _BackupView extends StatelessWidget {
                     ? null
                     : () => context.read<BackupCubit>().retryFailed(),
                 child: const Text(S.retryFailed),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed:
-                    state.busy ||
-                        session?.can(AppPermission.backupFullSync) != true
-                    ? null
-                    : () => context.read<BackupCubit>().fullBackup(),
-                child: const Text(S.fullBackupNow),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
@@ -245,6 +246,65 @@ class _BackupView extends StatelessWidget {
     return ListTile(
       title: Text(label),
       subtitle: Text(value, style: TextStyle(color: color)),
+    );
+  }
+}
+
+String _spreadsheetUrl(String id) => id.isEmpty
+    ? ''
+    : 'https://docs.google.com/spreadsheets/d/$id/edit';
+
+class _SheetExportCard extends StatelessWidget {
+  const _SheetExportCard({
+    required this.busy,
+    required this.canExport,
+    required this.spreadsheetUrl,
+    required this.onExport,
+  });
+
+  final bool busy;
+  final bool canExport;
+  final String spreadsheetUrl;
+  final VoidCallback onExport;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'ملف Google Sheets',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'يعيد هذا الزر بناء الملف بالكامل: الملخص، التصنيفات، المنتجات، العملاء، المبيعات، البنود، التحصيلات، الحسابات، المخزون، والمستخدمين.',
+            ),
+            if (spreadsheetUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SelectableText(
+                spreadsheetUrl,
+                style: const TextStyle(color: AppColors.green),
+              ),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: busy || !canExport ? null : onExport,
+              icon: busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.table_view_outlined),
+              label: const Text(S.fullBackupNow),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

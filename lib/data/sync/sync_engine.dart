@@ -29,6 +29,7 @@ class SyncHealth {
   final String? backupDiagnostic;
   final bool serverReachable;
   final bool serverAuthenticated;
+  final String? spreadsheetUrl;
 
   const SyncHealth({
     required this.lastSuccessfulSync,
@@ -47,6 +48,7 @@ class SyncHealth {
     required this.backupDiagnostic,
     required this.serverReachable,
     required this.serverAuthenticated,
+    this.spreadsheetUrl,
   });
 }
 
@@ -274,21 +276,48 @@ class SyncEngine {
   }
 
   Future<void> requestFullBackup() async {
-    if (!await isOnline()) return;
+    if (!await isOnline()) {
+      await _metadata.set(
+        SyncConfigKeys.lastSyncError,
+        'لا يوجد اتصال. تعذر تحديث ملف Google Sheets.',
+      );
+      return;
+    }
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '${_config.apiBaseUrl}/api/v1/backup/full',
+        options: Options(
+          sendTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(minutes: 2),
+        ),
       );
       await _storeBackupStatus(response.data);
-      await _metadata.set(
-        SyncConfigKeys.lastFullBackupAt,
-        DateTime.now().toUtc().toIso8601String(),
-      );
+      final failed = (response.data?['failed'] as num?)?.toInt() ?? 0;
+      if (response.data?['configured'] == true && failed == 0) {
+        await _metadata.set(
+          SyncConfigKeys.lastFullBackupAt,
+          DateTime.now().toUtc().toIso8601String(),
+        );
+        await _metadata.set(SyncConfigKeys.lastSyncError, '');
+      } else {
+        await _metadata.set(
+          SyncConfigKeys.lastSyncError,
+          response.data?['error']?.toString() ??
+              'تعذر كتابة كل البيانات إلى Google Sheets.',
+        );
+      }
     } on DioException catch (error) {
       await _storeBackupStatus(error.response?.data);
+      final body = error.response?.data;
+      final message = body is Map
+          ? (body['error'] ?? body['diagnostic'] ?? body['error_code'])
+                ?.toString()
+          : null;
       await _metadata.set(
         SyncConfigKeys.lastSyncError,
-        'تعذر إنشاء النسخة الكاملة على الخادم.',
+        message == null || message.isEmpty
+            ? 'تعذر إنشاء النسخة الكاملة على الخادم.'
+            : message,
       );
     }
   }
@@ -346,6 +375,7 @@ class SyncEngine {
       backupDiagnostic: backupDiagnostic,
       serverReachable: probe.reachable,
       serverAuthenticated: probe.authenticated,
+      spreadsheetUrl: await _metadata.get('backup_spreadsheet_url'),
     );
   }
 
@@ -410,6 +440,10 @@ class SyncEngine {
     final diagnostic =
         data['diagnostic'] ?? data['configuration_error'] ?? data['error_code'];
     await _metadata.set('backup_diagnostic', diagnostic?.toString() ?? '');
+    final spreadsheetUrl = data['spreadsheet_url']?.toString();
+    if (spreadsheetUrl != null && spreadsheetUrl.isNotEmpty) {
+      await _metadata.set('backup_spreadsheet_url', spreadsheetUrl);
+    }
     if (data['processed'] != null && data['pending'] == null) {
       final remainingFailed = data['failed'];
       if (remainingFailed is num && remainingFailed == 0) {

@@ -47,7 +47,10 @@ class SyncService {
         ),
       );
     }
-    unawaited(backup.processPending());
+    unawaited(() async {
+      await backup.processPending();
+      await backup.writeFullBackup();
+    }());
     return {'results': results, 'backup': await backup.health()};
   }
 

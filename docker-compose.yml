@@ -21,7 +21,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/al_nomani
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
       GOOGLE_LIVE_SPREADSHEET_ID: 1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I
-      GOOGLE_FULL_SPREADSHEET_ID: ${GOOGLE_FULL_SPREADSHEET_ID:-}
+      GOOGLE_FULL_SPREADSHEET_ID: ${GOOGLE_FULL_SPREADSHEET_ID:-1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
       GOOGLE_SERVICE_ACCOUNT_FILE: /run/secrets/google-service-account.json
       SYNC_INTERVAL_DAYS: 5

@@ -55,7 +55,12 @@ class Env {
       googleLiveSpreadsheetId:
           environment['GOOGLE_LIVE_SPREADSHEET_ID'] ??
           '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
-      googleFullSpreadsheetId: environment['GOOGLE_FULL_SPREADSHEET_ID'] ?? '',
+      googleFullSpreadsheetId: () {
+        final full = environment['GOOGLE_FULL_SPREADSHEET_ID']?.trim() ?? '';
+        if (full.isNotEmpty) return full;
+        return environment['GOOGLE_LIVE_SPREADSHEET_ID'] ??
+            '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I';
+      }(),
       googleServiceAccountJson: credentials.json,
       googleServiceAccountFile: credentials.file,
       googleServiceAccountError: credentials.error,
