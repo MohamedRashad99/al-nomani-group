@@ -1,0 +1,11 @@
+{
+  "environment": "development",
+  "api_base_url": "http://localhost:8080",
+  "sync_interval_days": 5,
+  "sync_mode": "near_realtime",
+  "allow_seed": true,
+  "google_live_spreadsheet_id": "1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I",
+  "app_version": "1.0.0",
+  "database_version": 1,
+  "sync_protocol_version": 1
+}

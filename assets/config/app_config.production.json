@@ -1,0 +1,11 @@
+{
+  "environment": "production",
+  "api_base_url": "https://api.example.com",
+  "sync_interval_days": 5,
+  "sync_mode": "scheduled",
+  "allow_seed": false,
+  "google_live_spreadsheet_id": "1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I",
+  "app_version": "1.0.0",
+  "database_version": 1,
+  "sync_protocol_version": 1
+}

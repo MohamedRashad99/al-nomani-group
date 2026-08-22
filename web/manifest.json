@@ -1,11 +1,11 @@
 {
-    "name": "al_nomani_group",
-    "short_name": "al_nomani_group",
+    "name": "مجموعة النعماني",
+    "short_name": "النعماني",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1B5E20",
+    "theme_color": "#2E7D32",
+    "description": "نظام إدارة المنتجات الزراعية — يعمل دون إنترنت",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
