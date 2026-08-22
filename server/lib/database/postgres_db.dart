@@ -21,20 +21,37 @@ class PostgresDb {
         username: uri.userInfo.split(':').first,
         password: uri.userInfo.split(':').skip(1).join(':'),
       ),
-      settings: const ConnectionSettings(sslMode: SslMode.disable),
+      settings: ConnectionSettings(
+        sslMode: env.databaseSsl ? SslMode.require : SslMode.disable,
+      ),
     );
   }
 
   Future<void> migrate() async {
-    final file = File('database/migrations/001_init.sql');
-    final alt = File('../database/migrations/001_init.sql');
-    final sql = await (file.existsSync() ? file : alt).readAsString();
-    final statements = sql
-        .split(';')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty && !s.startsWith('--'));
-    for (final statement in statements) {
-      await connection.execute(Sql('$statement;'));
+    final primary = Directory('database/migrations');
+    final alternate = Directory('../database/migrations');
+    final directory = primary.existsSync() ? primary : alternate;
+    final files =
+        directory
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.sql'))
+            .toList()
+          ..sort((a, b) => a.path.compareTo(b.path));
+
+    for (final file in files) {
+      final sql = await file.readAsString();
+      final withoutComments = sql
+          .split('\n')
+          .where((line) => !line.trimLeft().startsWith('--'))
+          .join('\n');
+      final statements = withoutComments
+          .split(';')
+          .map((statement) => statement.trim())
+          .where((statement) => statement.isNotEmpty);
+      for (final statement in statements) {
+        await connection.execute(Sql('$statement;'));
+      }
     }
   }
 

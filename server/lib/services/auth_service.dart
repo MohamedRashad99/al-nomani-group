@@ -51,13 +51,49 @@ class AuthService {
     if (!active || deleted || !BCrypt.checkpw(password, hash)) {
       throw StateError('invalid');
     }
-    final user = AuthUser(
+    final user = _fromRow(row);
+    return _tokensFor(user);
+  }
+
+  Future<Map<String, dynamic>> refresh(String refreshToken) async {
+    final jwt = JWT.verify(refreshToken, SecretKey(env.jwtSecret));
+    final payload = jwt.payload as Map<String, dynamic>;
+    if (payload['type'] != 'refresh') {
+      throw StateError('invalid refresh token');
+    }
+    final rows = await db.query(
+      'SELECT id, username, display_name, password_hash, role_id, is_active, is_deleted FROM users WHERE id = @id',
+      params: {'id': payload['sub']},
+    );
+    if (rows.isEmpty || rows.first[5] != true || rows.first[6] == true) {
+      throw StateError('inactive user');
+    }
+    return _tokensFor(_fromRow(rows.first));
+  }
+
+  Future<AuthUser> currentUser(String id) async {
+    final rows = await db.query(
+      'SELECT id, username, display_name, password_hash, role_id, is_active, is_deleted FROM users WHERE id = @id',
+      params: {'id': id},
+    );
+    if (rows.isEmpty || rows.first[5] != true || rows.first[6] == true) {
+      throw StateError('user not found');
+    }
+    return _fromRow(rows.first);
+  }
+
+  AuthUser _fromRow(dynamic row) {
+    final role = row[4] as String;
+    return AuthUser(
       id: row[0] as String,
       username: row[1] as String,
       displayName: row[2] as String,
-      role: row[4] as String,
-      permissions: RolePermissions.matrix[row[4] as String] ?? const [],
+      role: role,
+      permissions: RolePermissions.matrix[role] ?? const [],
     );
+  }
+
+  Map<String, dynamic> _tokensFor(AuthUser user) {
     final access = JWT({
       'sub': user.id,
       'role': user.role,

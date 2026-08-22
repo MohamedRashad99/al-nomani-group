@@ -10,6 +10,7 @@ import '../../core/config/app_config.dart';
 import '../../core/errors/app_exception.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
+import '../../data/remote/auth_token_store.dart';
 import '../session.dart';
 
 class AuthService {
@@ -18,28 +19,31 @@ class AuthService {
     required MetadataStore metadata,
     required AppConfig config,
     required Dio dio,
+    required AuthTokenStore tokens,
     FlutterSecureStorage? storage,
   }) : _db = db,
        _metadata = metadata,
        _config = config,
        _dio = dio,
+       _tokens = tokens,
        _storage = storage ?? const FlutterSecureStorage();
 
   final AppDatabase _db;
   final MetadataStore _metadata;
   final AppConfig _config;
   final Dio _dio;
+  final AuthTokenStore _tokens;
   final FlutterSecureStorage _storage;
 
   static const _sessionKey = 'offline_session_v1';
   static const offlineSessionDays = 14;
 
   Future<AppSession> login(String username, String password) async {
+    final normalizedUsername = username.trim();
     final local = await (_db.select(
       _db.users,
-    )..where((t) => t.username.equals(username.trim()))).getSingleOrNull();
+    )..where((t) => t.username.equals(normalizedUsername))).getSingleOrNull();
 
-    var authenticatedOnline = false;
     if (local != null) {
       if (!local.isActive || local.isDeleted) {
         throw const AppException('هذا الحساب معطّل.', code: 'user_disabled');
@@ -52,16 +56,26 @@ class AuthService {
           code: 'login_failed',
         );
       }
-    } else {
-      try {
-        final response = await _dio.post<Map<String, dynamic>>(
-          '${_config.apiBaseUrl}/api/v1/auth/login',
-          data: {'username': username.trim(), 'password': password},
-        );
-        final data = response.data ?? {};
-        await _cacheRemoteUser(data, password);
-        authenticatedOnline = true;
-      } catch (_) {
+    }
+
+    var authenticatedOnline = false;
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/auth/login',
+        data: {'username': normalizedUsername, 'password': password},
+        options: Options(sendTimeout: const Duration(seconds: 5)),
+      );
+      final data = response.data ?? const <String, dynamic>{};
+      final access = data['access_token'] as String?;
+      final refresh = data['refresh_token'] as String?;
+      if (access == null || refresh == null) {
+        throw const FormatException('missing tokens');
+      }
+      await _tokens.save(accessToken: access, refreshToken: refresh);
+      await _cacheRemoteUser(data, password, existingLocal: local);
+      authenticatedOnline = true;
+    } catch (_) {
+      if (local == null) {
         throw const AppException(
           'اسم المستخدم أو كلمة المرور غير صحيحة.',
           code: 'login_failed',
@@ -69,11 +83,9 @@ class AuthService {
       }
     }
 
-    final user =
-        local ??
-        await (_db.select(
-          _db.users,
-        )..where((t) => t.username.equals(username.trim()))).getSingle();
+    final user = await (_db.select(
+      _db.users,
+    )..where((t) => t.username.equals(normalizedUsername))).getSingle();
     if (!user.isActive || user.isDeleted) {
       throw const AppException('هذا الحساب معطّل.', code: 'user_disabled');
     }
@@ -118,7 +130,12 @@ class AuthService {
     return session;
   }
 
-  Future<void> logout() => _storage.delete(key: _sessionKey);
+  Future<void> logout() async {
+    await Future.wait([
+      _storage.delete(key: _sessionKey),
+      _tokens.clear(),
+    ]);
+  }
 
   Future<Set<String>> _permissionsFor(String roleId) async {
     final rows = await (_db.select(
@@ -148,11 +165,14 @@ class AuthService {
   Future<void> _cacheRemoteUser(
     Map<String, dynamic> data,
     String password,
+    {User? existingLocal}
   ) async {
     final now = DateTime.now().toUtc();
     final deviceId = await _metadata.deviceId();
     final user = data['user'] as Map<String, dynamic>? ?? data;
-    final id = user['id'] as String? ?? newId();
+    final serverId = user['id'] as String? ?? newId();
+    final id = existingLocal?.id ?? serverId;
+    await _metadata.set('server_user_id', serverId);
     await _db
         .into(_db.users)
         .insertOnConflictUpdate(
@@ -165,7 +185,7 @@ class AuthService {
             passwordHash: Value(BCrypt.hashpw(password, BCrypt.gensalt())),
             roleId: Value(user['role'] as String? ?? AppRole.cashier),
             isActive: Value(user['is_active'] as bool? ?? true),
-            createdAt: Value(now),
+            createdAt: Value(existingLocal?.createdAt ?? now),
             updatedAt: Value(now),
             deviceId: Value(deviceId),
           ),

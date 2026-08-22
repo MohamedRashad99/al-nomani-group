@@ -8,6 +8,9 @@ class Env {
   final String? googleServiceAccountJson;
   final int syncIntervalDays;
   final bool allowSeed;
+  final String? bootstrapAdminUsername;
+  final String? bootstrapAdminPassword;
+  final bool databaseSsl;
 
   const Env({
     required this.jwtSecret,
@@ -17,6 +20,9 @@ class Env {
     required this.googleServiceAccountJson,
     required this.syncIntervalDays,
     required this.allowSeed,
+    required this.bootstrapAdminUsername,
+    required this.bootstrapAdminPassword,
+    required this.databaseSsl,
   });
 
   factory Env.load() {
@@ -30,13 +36,18 @@ class Env {
           '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
       googleFullSpreadsheetId:
           Platform.environment['GOOGLE_FULL_SPREADSHEET_ID'] ??
-          Platform.environment['GOOGLE_LIVE_SPREADSHEET_ID'] ??
-          '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
+          '',
       googleServiceAccountJson:
           Platform.environment['GOOGLE_SERVICE_ACCOUNT_JSON'],
       syncIntervalDays:
           int.tryParse(Platform.environment['SYNC_INTERVAL_DAYS'] ?? '') ?? 5,
       allowSeed: (Platform.environment['ALLOW_SEED'] ?? 'true') == 'true',
+      bootstrapAdminUsername:
+          Platform.environment['BOOTSTRAP_ADMIN_USERNAME'],
+      bootstrapAdminPassword:
+          Platform.environment['BOOTSTRAP_ADMIN_PASSWORD'],
+      databaseSsl:
+          (Platform.environment['DATABASE_SSL'] ?? 'false') == 'true',
     );
   }
 }

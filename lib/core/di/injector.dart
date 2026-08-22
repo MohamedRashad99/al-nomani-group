@@ -3,6 +3,9 @@ import 'package:get_it/get_it.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
+import '../../data/remote/auth_interceptor.dart';
+import '../../data/remote/auth_token_store.dart';
+import '../../data/sync/sync_baseline_service.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
 import '../../domain/services/account_service.dart';
@@ -34,16 +37,27 @@ Future<void> configureDependencies({
 
   sl.registerSingleton<AppConfig>(config);
   sl.registerSingleton<AppDatabase>(database ?? AppDatabase());
-  sl.registerLazySingleton(
-    () => Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 12),
-        receiveTimeout: const Duration(seconds: 30),
+  sl.registerLazySingleton(AuthTokenStore.new);
+  sl.registerLazySingleton<Dio>(() {
+    final options = BaseOptions(
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: const {'Accept': 'application/json'},
+    );
+    final client = Dio(options);
+    final refreshClient = Dio(options);
+    client.interceptors.add(
+      AuthInterceptor(
+        tokens: sl(),
+        config: config,
+        refreshClient: refreshClient,
       ),
-    ),
-  );
+    );
+    return client;
+  });
   sl.registerLazySingleton(() => MetadataStore(sl()));
   sl.registerLazySingleton(() => SyncQueueRepository(sl()));
+  sl.registerLazySingleton(() => SyncBaselineService(sl(), sl(), sl()));
   sl.registerLazySingleton(() => AuditService(sl()));
   sl.registerLazySingleton(() => AccountService(sl(), sl()));
   sl.registerLazySingleton(
@@ -79,13 +93,20 @@ Future<void> configureDependencies({
   );
   sl.registerLazySingleton(() => SeedService(sl(), sl(), sl()));
   sl.registerLazySingleton(
-    () => AuthService(db: sl(), metadata: sl(), config: sl(), dio: sl()),
+    () => AuthService(
+      db: sl(),
+      metadata: sl(),
+      config: sl(),
+      dio: sl(),
+      tokens: sl(),
+    ),
   );
   sl.registerLazySingleton(
     () => SyncEngine(
       db: sl(),
       metadata: sl(),
       queue: sl(),
+      baseline: sl(),
       config: sl(),
       dio: sl(),
     ),

@@ -4,6 +4,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
+import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 
 class SyncRoutes {
@@ -24,7 +25,8 @@ class SyncRoutes {
           headers: {'content-type': 'application/json'},
         );
       }
-      final result = await sync.push(body);
+      final user = request.context['user'] as AuthUser;
+      final result = await sync.push(body, user);
       return Response.ok(
         jsonEncode(result),
         headers: {'content-type': 'application/json'},

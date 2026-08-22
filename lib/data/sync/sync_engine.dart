@@ -8,6 +8,7 @@ import 'package:drift/drift.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
+import 'sync_baseline_service.dart';
 import 'sync_queue_repository.dart';
 
 class SyncHealth {
@@ -20,6 +21,10 @@ class SyncHealth {
   final String? lastError;
   final bool online;
   final String statusAr;
+  final bool? backupConfigured;
+  final int backupPending;
+  final int backupFailed;
+  final String? backupLastError;
 
   const SyncHealth({
     required this.lastSuccessfulSync,
@@ -31,6 +36,10 @@ class SyncHealth {
     required this.lastError,
     required this.online,
     required this.statusAr,
+    required this.backupConfigured,
+    required this.backupPending,
+    required this.backupFailed,
+    required this.backupLastError,
   });
 }
 
@@ -39,12 +48,14 @@ class SyncEngine {
     required AppDatabase db,
     required MetadataStore metadata,
     required SyncQueueRepository queue,
+    required SyncBaselineService baseline,
     required AppConfig config,
     required Dio dio,
     Connectivity? connectivity,
   }) : _db = db,
        _metadata = metadata,
        _queue = queue,
+       _baseline = baseline,
        _config = config,
        _dio = dio,
        _connectivity = connectivity ?? Connectivity();
@@ -52,6 +63,7 @@ class SyncEngine {
   final AppDatabase _db;
   final MetadataStore _metadata;
   final SyncQueueRepository _queue;
+  final SyncBaselineService _baseline;
   final AppConfig _config;
   final Dio _dio;
   final Connectivity _connectivity;
@@ -117,6 +129,7 @@ class SyncEngine {
     var accepted = 0;
     var failed = 0;
     try {
+      await _baseline.ensureEnqueued();
       final items = await _queue.pending();
       await _db
           .into(_db.syncLogs)
@@ -132,6 +145,7 @@ class SyncEngine {
           );
 
       if (items.isEmpty) {
+        await _retryServerBackup();
         await _finishLog(logId, 'success', 0, 0, 0, null);
         await _markSuccess();
         return;
@@ -161,6 +175,7 @@ class SyncEngine {
             },
           );
           final results = (response.data?['results'] as List?) ?? const [];
+          await _storeBackupStatus(response.data?['backup']);
           final first = results.isEmpty
               ? <String, dynamic>{}
               : results.first as Map<String, dynamic>;
@@ -179,10 +194,20 @@ class SyncEngine {
             );
             failed++;
           }
-        } catch (e) {
+        } on DioException catch (error) {
+          final message = switch (error.response?.statusCode) {
+            401 || 403 => 'انتهت جلسة الخادم. سجّل الدخول أثناء الاتصال ثم أعد المحاولة.',
+            _ => 'الخادم غير متاح حالياً. بقيت البيانات محفوظة محلياً.',
+          };
           await _queue.markFailed(
             item.id,
-            'تعذر تنفيذ العملية. تم حفظ البيانات محلياً، وسيتم استكمال المزامنة لاحقاً.',
+            message,
+          );
+          failed++;
+        } catch (_) {
+          await _queue.markFailed(
+            item.id,
+            'تعذر تنفيذ العملية. بقيت البيانات محفوظة محلياً.',
           );
           failed++;
         }
@@ -218,7 +243,10 @@ class SyncEngine {
   Future<void> requestFullBackup() async {
     if (!await isOnline()) return;
     try {
-      await _dio.post('${_config.apiBaseUrl}/api/v1/backup/full');
+      final response = await _dio.post<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/backup/full',
+      );
+      await _storeBackupStatus(response.data);
       await _metadata.set(
         SyncConfigKeys.lastFullBackupAt,
         DateTime.now().toUtc().toIso8601String(),
@@ -232,6 +260,7 @@ class SyncEngine {
   }
 
   Future<SyncHealth> health() async {
+    await _refreshServerBackupHealth();
     final last = DateTime.tryParse(
       await _metadata.get(SyncConfigKeys.lastSuccessfulSyncAt) ?? '',
     );
@@ -246,10 +275,21 @@ class SyncEngine {
     final synced = await _queue.countByStatus(SyncStatus.synced);
     final error = await _metadata.get(SyncConfigKeys.lastSyncError);
     final online = await isOnline();
-    final statusAr = failed > 0
+    final backupConfiguredRaw = await _metadata.get('backup_configured');
+    final backupConfigured = backupConfiguredRaw == null
+        ? null
+        : backupConfiguredRaw == 'true';
+    final backupPending =
+        int.tryParse(await _metadata.get('backup_pending') ?? '') ?? 0;
+    final backupFailed =
+        int.tryParse(await _metadata.get('backup_failed') ?? '') ?? 0;
+    final backupLastError = await _metadata.get('backup_last_error');
+    final statusAr = failed > 0 || backupFailed > 0
         ? 'توجد مشكلة في المزامنة'
         : pending > 0
         ? 'في انتظار المزامنة'
+        : backupConfigured == false
+        ? 'النسخ السحابي غير مهيأ'
         : 'محمي';
     return SyncHealth(
       lastSuccessfulSync: last,
@@ -261,7 +301,53 @@ class SyncEngine {
       lastError: error,
       online: online,
       statusAr: statusAr,
+      backupConfigured: backupConfigured,
+      backupPending: backupPending,
+      backupFailed: backupFailed,
+      backupLastError: backupLastError,
     );
+  }
+
+  Future<void> _retryServerBackup() async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/backup/retry',
+      );
+      await _storeBackupStatus(response.data);
+    } on DioException catch (error) {
+      await _storeBackupStatus(error.response?.data);
+    }
+  }
+
+  Future<void> _refreshServerBackupHealth() async {
+    if (!await isOnline()) return;
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/backup/health',
+      );
+      await _storeBackupStatus(response.data);
+    } catch (_) {
+      // Local health remains available while the central server is offline.
+    }
+  }
+
+  Future<void> _storeBackupStatus(dynamic raw) async {
+    if (raw is! Map) return;
+    final data = Map<String, dynamic>.from(raw);
+    final configured = data['configured'];
+    if (configured is bool) {
+      await _metadata.set('backup_configured', '$configured');
+    }
+    final pending = data['pending'];
+    if (pending != null) {
+      await _metadata.set('backup_pending', '$pending');
+    }
+    final failed = data['failed'];
+    if (failed != null) {
+      await _metadata.set('backup_failed', '$failed');
+    }
+    final error = data['error'] ?? data['last_error'];
+    await _metadata.set('backup_last_error', error?.toString() ?? '');
   }
 
   Future<void> _markSuccess() async {

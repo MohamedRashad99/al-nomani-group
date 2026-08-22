@@ -7,6 +7,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'config/env.dart';
 import 'database/postgres_db.dart';
+import 'database/server_seeder.dart';
 import 'middleware/auth_middleware.dart';
 import 'routes/auth_routes.dart';
 import 'routes/backup_routes.dart';
@@ -22,9 +23,10 @@ Future<HttpServer> createServer({required int port, PostgresDb? db}) async {
   final database = db ?? PostgresDb(env);
   await database.open();
   await database.migrate();
+  await ServerSeeder(database, env).seedBootstrapAdmin();
 
   final auth = AuthService(database, env);
-  final sheets = GoogleSheetsBackup(env);
+  final sheets = GoogleSheetsBackup(env, database);
   final sync = SyncService(database, sheets);
   BackupScheduler(env, sheets).start();
 

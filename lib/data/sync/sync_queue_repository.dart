@@ -32,17 +32,61 @@ class SyncQueueRepository {
         );
   }
 
-  Future<List<SyncQueueData>> pending() {
-    return (_db.select(_db.syncQueue)
-          ..where(
-            (t) => t.status.isIn([
-              SyncStatus.pending.name,
-              SyncStatus.failed.name,
-            ]),
-          )
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .get();
+  Future<void> enqueueIfAbsent({
+    required SyncEntityType entityType,
+    required String entityId,
+    required SyncOperationType operation,
+    required Map<String, dynamic> payload,
+    required String operationId,
+  }) async {
+    final existing =
+        await (_db.select(_db.syncQueue)
+              ..where((row) => row.operationId.equals(operationId)))
+            .getSingleOrNull();
+    if (existing != null) return;
+    await enqueue(
+      entityType: entityType,
+      entityId: entityId,
+      operation: operation,
+      payload: payload,
+      operationId: operationId,
+    );
   }
+
+  Future<List<SyncQueueData>> pending() async {
+    final rows =
+        await (_db.select(_db.syncQueue)..where(
+              (t) => t.status.isIn([
+                SyncStatus.pending.name,
+                SyncStatus.failed.name,
+                SyncStatus.processing.name,
+              ]),
+            ))
+            .get();
+    rows.sort((a, b) {
+      final priority = _priority(a.entityType).compareTo(
+        _priority(b.entityType),
+      );
+      return priority != 0 ? priority : a.createdAt.compareTo(b.createdAt);
+    });
+    return rows;
+  }
+
+  int _priority(String entityType) => switch (entityType) {
+    'category' => 0,
+    'customer' => 1,
+    'customerAccount' => 2,
+    'product' => 3,
+    'sale' => 4,
+    'saleItem' => 5,
+    'inventoryMovement' => 6,
+    'customerAccountTransaction' => 7,
+    'collection' => 8,
+    'auditLog' => 9,
+    'setting' => 10,
+    'user' => 11,
+    _ => 99,
+  };
 
   Future<int> countByStatus(SyncStatus status) async {
     final query = _db.selectOnly(_db.syncQueue)

@@ -29,5 +29,24 @@ class AuthRoutes {
           headers: {'content-type': 'application/json'},
         );
       }
+    })
+    ..post('/refresh', (Request request) async {
+      final body =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      try {
+        final result = await auth.refresh(
+          body['refresh_token'] as String? ?? '',
+        );
+        return Response.ok(
+          jsonEncode(result),
+          headers: {'content-type': 'application/json'},
+        );
+      } catch (_) {
+        return Response(
+          401,
+          body: jsonEncode({'error': 'انتهت جلسة الدخول.'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
     });
 }
