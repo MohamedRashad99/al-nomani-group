@@ -16,7 +16,7 @@ Middleware authMiddleware(AuthService auth) {
       }
       try {
         final user = auth.verify(header.substring(7));
-        return inner(request.change(context: {'user': user}));
+        return await inner(request.change(context: {'user': user}));
       } catch (_) {
         return Response.forbidden(
           jsonEncode({'error': 'جلسة غير صالحة'}),

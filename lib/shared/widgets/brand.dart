@@ -63,9 +63,7 @@ class BrandMark extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: light
-                        ? Colors.white70
-                        : AppColors.muted,
+                    color: light ? Colors.white70 : AppColors.muted,
                   ),
                 ),
               ],

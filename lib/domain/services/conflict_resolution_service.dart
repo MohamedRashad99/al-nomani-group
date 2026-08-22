@@ -53,13 +53,12 @@ class ConflictResolutionService {
       if (keepLocal) {
         final nextVersion = ((server['version'] as num?)?.toInt() ?? 1) + 1;
         local['version'] = nextVersion;
-        await (_db.update(_db.syncQueue)
-              ..where(
-                (row) =>
-                    row.entityType.equals(conflict.entityType) &
-                    row.entityId.equals(conflict.entityId) &
-                    row.lastError.equals('تعارض في الإصدار'),
-              ))
+        await (_db.update(_db.syncQueue)..where(
+              (row) =>
+                  row.entityType.equals(conflict.entityType) &
+                  row.entityId.equals(conflict.entityId) &
+                  row.lastError.equals('تعارض في الإصدار'),
+            ))
             .write(
               SyncQueueCompanion(
                 payload: Value(jsonEncode(local)),
@@ -73,18 +72,13 @@ class ConflictResolutionService {
           nextVersion,
         );
       } else {
-        await _applyServer(
-          conflict.entityType,
-          conflict.entityId,
-          server,
-        );
-        await (_db.update(_db.syncQueue)
-              ..where(
-                (row) =>
-                    row.entityType.equals(conflict.entityType) &
-                    row.entityId.equals(conflict.entityId) &
-                    row.lastError.equals('تعارض في الإصدار'),
-              ))
+        await _applyServer(conflict.entityType, conflict.entityId, server);
+        await (_db.update(_db.syncQueue)..where(
+              (row) =>
+                  row.entityType.equals(conflict.entityType) &
+                  row.entityId.equals(conflict.entityId) &
+                  row.lastError.equals('تعارض في الإصدار'),
+            ))
             .write(
               SyncQueueCompanion(
                 status: const Value('synced'),
@@ -115,11 +109,7 @@ class ConflictResolutionService {
     });
   }
 
-  Future<void> _setLocalVersion(
-    String type,
-    String id,
-    int version,
-  ) async {
+  Future<void> _setLocalVersion(String type, String id, int version) async {
     switch (type) {
       case 'product':
         await (_db.update(_db.products)..where((row) => row.id.equals(id)))
@@ -130,11 +120,9 @@ class ConflictResolutionService {
             .write(CustomersCompanion(version: Value(version)));
         return;
       case 'category':
-        await (_db.update(
-          _db.productCategories,
-        )..where((row) => row.id.equals(id))).write(
-          ProductCategoriesCompanion(version: Value(version)),
-        );
+        await (_db.update(_db.productCategories)
+              ..where((row) => row.id.equals(id)))
+            .write(ProductCategoriesCompanion(version: Value(version)));
         return;
       default:
         return;
@@ -151,42 +139,42 @@ class ConflictResolutionService {
         DateTime.now().toUtc();
     switch (type) {
       case 'product':
-        await (_db.update(_db.products)..where((row) => row.id.equals(id)))
-            .write(
-              ProductsCompanion(
-                name: Value(server['name'] as String),
-                sku: Value(server['sku'] as String),
-                categoryId: Value(server['category_id'] as String?),
-                brand: Value(server['brand'] as String?),
-                description: Value(server['description'] as String?),
-                purchasePrice: Value(server['purchase_price'].toString()),
-                sellingPrice: Value(server['selling_price'].toString()),
-                currentStock: Value(server['current_stock'].toString()),
-                minimumStock: Value(server['minimum_stock'].toString()),
-                unit: Value(server['unit'] as String),
-                customUnitLabel: Value(
-                  server['custom_unit_label'] as String?,
-                ),
-                isActive: Value(server['is_active'] as bool? ?? true),
-                version: Value((server['version'] as num?)?.toInt() ?? 1),
-                updatedAt: Value(updatedAt),
-              ),
-            );
+        await (_db.update(
+          _db.products,
+        )..where((row) => row.id.equals(id))).write(
+          ProductsCompanion(
+            name: Value(server['name'] as String),
+            sku: Value(server['sku'] as String),
+            categoryId: Value(server['category_id'] as String?),
+            brand: Value(server['brand'] as String?),
+            description: Value(server['description'] as String?),
+            purchasePrice: Value(server['purchase_price'].toString()),
+            sellingPrice: Value(server['selling_price'].toString()),
+            currentStock: Value(server['current_stock'].toString()),
+            minimumStock: Value(server['minimum_stock'].toString()),
+            unit: Value(server['unit'] as String),
+            customUnitLabel: Value(server['custom_unit_label'] as String?),
+            isActive: Value(server['is_active'] as bool? ?? true),
+            version: Value((server['version'] as num?)?.toInt() ?? 1),
+            updatedAt: Value(updatedAt),
+          ),
+        );
         return;
       case 'customer':
-        await (_db.update(_db.customers)..where((row) => row.id.equals(id)))
-            .write(
-              CustomersCompanion(
-                name: Value(server['name'] as String),
-                phone: Value(server['phone'] as String?),
-                address: Value(server['address'] as String?),
-                area: Value(server['area'] as String?),
-                notes: Value(server['notes'] as String?),
-                isActive: Value(server['is_active'] as bool? ?? true),
-                version: Value((server['version'] as num?)?.toInt() ?? 1),
-                updatedAt: Value(updatedAt),
-              ),
-            );
+        await (_db.update(
+          _db.customers,
+        )..where((row) => row.id.equals(id))).write(
+          CustomersCompanion(
+            name: Value(server['name'] as String),
+            phone: Value(server['phone'] as String?),
+            address: Value(server['address'] as String?),
+            area: Value(server['area'] as String?),
+            notes: Value(server['notes'] as String?),
+            isActive: Value(server['is_active'] as bool? ?? true),
+            version: Value((server['version'] as num?)?.toInt() ?? 1),
+            updatedAt: Value(updatedAt),
+          ),
+        );
         return;
       case 'category':
         await (_db.update(

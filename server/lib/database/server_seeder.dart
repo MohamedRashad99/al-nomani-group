@@ -57,10 +57,7 @@ class ServerSeeder {
             VALUES (@role, @permission)
             ON CONFLICT DO NOTHING
           '''),
-          parameters: {
-            'role': AppRole.admin,
-            'permission': code,
-          },
+          parameters: {'role': AppRole.admin, 'permission': code},
         );
       }
       await tx.execute(
@@ -80,4 +77,3 @@ class ServerSeeder {
     });
   }
 }
-

@@ -85,11 +85,7 @@ class AppScaffold extends StatelessWidget {
                       expanded ? 20 : 14,
                       22,
                     ),
-                    child: BrandMark(
-                      size: 48,
-                      showText: expanded,
-                      light: true,
-                    ),
+                    child: BrandMark(size: 48, showText: expanded, light: true),
                   ),
                   Expanded(
                     child: ListView(
@@ -182,8 +178,7 @@ class AppScaffold extends StatelessWidget {
   List<_NavItem> _primaryItems(List<_NavItem> all) {
     final preferred = ['/dashboard', '/sales', '/customers', '/inventory'];
     final primary = [
-      for (final path in preferred)
-        ...all.where((item) => item.path == path),
+      for (final path in preferred) ...all.where((item) => item.path == path),
     ];
     return [
       ...primary.take(4),
@@ -305,7 +300,9 @@ class _RailItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
-        color: selected ? Colors.white.withValues(alpha: .15) : Colors.transparent,
+        color: selected
+            ? Colors.white.withValues(alpha: .15)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

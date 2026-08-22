@@ -97,6 +97,10 @@ class SyncService {
           (id, entity_type, entity_id, local_payload, server_payload)
         VALUES
           (@id, @type, @entity, @local, @server)
+        ON CONFLICT (id) DO UPDATE SET
+          local_payload = EXCLUDED.local_payload,
+          server_payload = EXCLUDED.server_payload,
+          created_at = NOW()
         ''',
         params: {
           'id': operationId,
@@ -442,6 +446,19 @@ class SyncService {
             'created': _timestamp(payload['created_at']),
           },
         );
+        await tx.execute(
+          Sql.named('''
+            UPDATE customer_accounts SET
+              cached_balance = @balance::numeric,
+              version = version + 1,
+              updated_at = NOW()
+            WHERE id = @account
+          '''),
+          parameters: {
+            'account': payload['account_id'],
+            'balance': payload['running_balance'],
+          },
+        );
         return;
       case 'inventoryMovement':
         await tx.execute(
@@ -470,6 +487,18 @@ class SyncService {
             'user': authenticatedUser.id,
             'device': payload['device_id'] ?? deviceId,
             'created': _timestamp(payload['created_at']),
+          },
+        );
+        await tx.execute(
+          Sql.named('''
+            UPDATE products SET
+              current_stock = @stock::numeric,
+              updated_at = NOW()
+            WHERE id = @product
+          '''),
+          parameters: {
+            'product': payload['product_id'],
+            'stock': payload['new_stock'],
           },
         );
         return;

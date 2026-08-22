@@ -26,7 +26,10 @@ void main() {
   group('Quantity', () {
     test('supports fractional kg', () {
       expect(Quantity.parse('0.250').toStorage(), '0.250');
-      expect((Quantity.parse('1') - Quantity.parse('0.500')).toStorage(), '0.500');
+      expect(
+        (Quantity.parse('1') - Quantity.parse('0.500')).toStorage(),
+        '0.500',
+      );
     });
   });
 }

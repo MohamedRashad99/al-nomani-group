@@ -69,9 +69,8 @@ class _CustomersPageState extends State<CustomersPage> {
                       child: ListTile(
                         title: Text(c.name),
                         subtitle: Text('${c.phone ?? ''} • ${c.area ?? ''}'),
-                        onTap: () => context.push(
-                          '/customers/${c.id}/statement',
-                        ),
+                        onTap: () =>
+                            context.push('/customers/${c.id}/statement'),
                         trailing: session.can(AppPermission.customersUpdate)
                             ? IconButton(
                                 icon: const Icon(Icons.edit),
@@ -221,10 +220,9 @@ class CustomerStatementRoutePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final db = sl<AppDatabase>();
     return FutureBuilder<Customer?>(
-      future:
-          (db.select(
-            db.customers,
-          )..where((row) => row.id.equals(customerId))).getSingleOrNull(),
+      future: (db.select(
+        db.customers,
+      )..where((row) => row.id.equals(customerId))).getSingleOrNull(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
@@ -233,9 +231,7 @@ class CustomerStatementRoutePage extends StatelessWidget {
         }
         final customer = snapshot.data;
         if (customer == null) {
-          return const Scaffold(
-            body: Center(child: Text('العميل غير موجود.')),
-          );
+          return const Scaffold(body: Center(child: Text('العميل غير موجود.')));
         }
         return CustomerStatementPage(customer: customer);
       },

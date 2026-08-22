@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class AppConfig {
@@ -30,17 +29,29 @@ class AppConfig {
   bool get isDevelopment => environment != 'production';
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
+    final environment = json['environment'] as String? ?? 'development';
+    final apiBaseUrl =
+        json['api_base_url'] as String? ?? 'http://localhost:8080';
+    final allowSeed = json['allow_seed'] as bool? ?? false;
+    if (environment == 'production' &&
+        (allowSeed ||
+            apiBaseUrl.contains('localhost') ||
+            apiBaseUrl.contains('example.com'))) {
+      throw const FormatException(
+        'إعدادات الإنتاج غير آمنة: اضبط عنوان API وأوقف البيانات التجريبية.',
+      );
+    }
     final modeRaw = json['sync_mode'] as String? ?? 'scheduled';
     return AppConfig(
-      environment: json['environment'] as String? ?? 'development',
-      apiBaseUrl: json['api_base_url'] as String? ?? 'http://localhost:8080',
+      environment: environment,
+      apiBaseUrl: apiBaseUrl,
       syncIntervalDays:
           json['sync_interval_days'] as int? ??
           SyncDefaults.productionIntervalDays,
       syncMode: modeRaw == 'near_realtime'
           ? SyncMode.nearRealtime
           : SyncMode.scheduled,
-      allowSeed: json['allow_seed'] as bool? ?? false,
+      allowSeed: allowSeed,
       googleLiveSpreadsheetId:
           json['google_live_spreadsheet_id'] as String? ?? '',
       appVersion: json['app_version'] as String? ?? AppVersions.appVersion,
@@ -57,17 +68,8 @@ class AppConfig {
       final raw = await rootBundle.loadString('assets/config/app_config.json');
       return AppConfig.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (e) {
-      debugPrint('تعذر تحميل الإعدادات، سيتم استخدام القيم الافتراضية الآمنة.');
-      return const AppConfig(
-        environment: 'development',
-        apiBaseUrl: 'http://localhost:8080',
-        syncIntervalDays: SyncDefaults.productionIntervalDays,
-        syncMode: SyncMode.nearRealtime,
-        allowSeed: true,
-        googleLiveSpreadsheetId: '1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I',
-        appVersion: AppVersions.appVersion,
-        databaseVersion: AppVersions.databaseVersion,
-        syncProtocolVersion: AppVersions.syncProtocolVersion,
+      throw StateError(
+        'تعذر تحميل إعدادات التشغيل. تم إيقاف البدء لتجنب الاتصال ببيئة خاطئة: $e',
       );
     }
   }

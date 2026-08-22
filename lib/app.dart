@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,6 +9,7 @@ import 'app_router.dart';
 import 'core/di/injector.dart';
 import 'core/l10n/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'data/sync/sync_engine.dart';
 import 'features/app/app_busy_cubit.dart';
 import 'features/app/update_banner.dart';
 import 'features/auth/auth_cubit.dart';
@@ -18,8 +21,28 @@ class AlNomaniApp extends StatefulWidget {
   State<AlNomaniApp> createState() => _AlNomaniAppState();
 }
 
-class _AlNomaniAppState extends State<AlNomaniApp> {
+class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
   late final GoRouter _router = createRouter(sl<AuthCubit>());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _router.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(sl<SyncEngine>().maybeRunScheduled());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

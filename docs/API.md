@@ -8,16 +8,13 @@ Base URL is configured per environment (`API_BASE_URL`). All mutating routes req
 | --- | --- | --- | --- |
 | POST | `/auth/login` | no | Username/password → JWT |
 | POST | `/auth/refresh` | refresh | New access token |
-| GET | `/auth/me` | yes | Current user + permissions |
 
 ## Sync (idempotent)
 
 | Method | Path | Description |
 | --- | --- | --- |
 | POST | `/sync/push` | Upload a batch of queue operations. Each item has `operation_id`. Duplicates return the original result. |
-| GET | `/sync/pull` | Changes since `since` / `cursor` for the device |
-| GET | `/sync/status` | Server time, protocol version, last accepted op |
-| POST | `/sync/conflicts/resolve` | Admin reconciliation |
+| GET | `/sync/status` | Server time and protocol version |
 
 Push body:
 
@@ -42,14 +39,17 @@ Push body:
 
 Response per operation: `accepted` | `duplicate` | `conflict` | `rejected` with Arabic-safe `error_code`.
 
-## Resources
+## Implemented resources
 
-Standard CRUD (view/create/update, soft-delete or cancel) for:
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/products` | Central product list |
+| POST | `/users` | Admin online user provisioning/password update |
+| GET | `/backup/health` | Durable Google outbox and full-backup health |
+| POST | `/backup/retry` | Retry live backup outbox |
+| POST | `/backup/full` | PostgreSQL full snapshot to the separate full spreadsheet |
 
-- `/products` `/categories` `/customers` `/sales` `/collections`
-- `/inventory/movements` `/users` `/roles`
-- `/reports/sales` `/reports/debt` `/reports/inventory`
-- `/backup/live` `/backup/full` `/reconciliation`
+Local conflict resolution is performed in the admin backup screen. Choosing the server applies its version locally; choosing local increments the version and retries the same idempotency key.
 
 ## Money
 

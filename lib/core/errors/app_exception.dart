@@ -15,13 +15,15 @@ class ValidationException extends AppException {
 
 class PermissionException extends AppException {
   const PermissionException()
-      : super('ليست لديك صلاحية لتنفيذ هذه العملية.', code: 'permission_denied');
+    : super('ليست لديك صلاحية لتنفيذ هذه العملية.', code: 'permission_denied');
 }
 
 class MigrationException extends AppException {
-  const MigrationException(super.messageAr, {super.cause}) : super(code: 'migration_failed');
+  const MigrationException(super.messageAr, {super.cause})
+    : super(code: 'migration_failed');
 }
 
 class SyncException extends AppException {
-  const SyncException(super.messageAr, {super.cause}) : super(code: 'sync_error');
+  const SyncException(super.messageAr, {super.cause})
+    : super(code: 'sync_error');
 }

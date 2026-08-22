@@ -39,10 +39,9 @@ class SyncQueueRepository {
     required Map<String, dynamic> payload,
     required String operationId,
   }) async {
-    final existing =
-        await (_db.select(_db.syncQueue)
-              ..where((row) => row.operationId.equals(operationId)))
-            .getSingleOrNull();
+    final existing = await (_db.select(
+      _db.syncQueue,
+    )..where((row) => row.operationId.equals(operationId))).getSingleOrNull();
     if (existing != null) return;
     await enqueue(
       entityType: entityType,
@@ -64,9 +63,9 @@ class SyncQueueRepository {
             ))
             .get();
     rows.sort((a, b) {
-      final priority = _priority(a.entityType).compareTo(
-        _priority(b.entityType),
-      );
+      final priority = _priority(
+        a.entityType,
+      ).compareTo(_priority(b.entityType));
       return priority != 0 ? priority : a.createdAt.compareTo(b.createdAt);
     });
     return rows;

@@ -18,7 +18,34 @@ Future<void> main() async {
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('${S.migrationFailed}\n\n$e'),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/al_nomani_logo.png',
+                          width: 96,
+                          height: 96,
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'تعذر بدء النظام بأمان',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '${S.migrationFailed}\n\n$e',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

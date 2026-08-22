@@ -66,20 +66,22 @@ class _InventoryPageState extends State<InventoryPage> {
                         trailing: !canMove
                             ? null
                             : Wrap(
-                          spacing: 4,
-                          children: [
-                            IconButton(
-                              tooltip: S.stockIn,
-                              onPressed: () => _move(p, 'stock_in'),
-                              icon: const Icon(Icons.add_circle_outline),
-                            ),
-                            IconButton(
-                              tooltip: S.stockOut,
-                              onPressed: () => _move(p, 'stock_out'),
-                              icon: const Icon(Icons.remove_circle_outline),
-                            ),
-                          ],
-                        ),
+                                spacing: 4,
+                                children: [
+                                  IconButton(
+                                    tooltip: S.stockIn,
+                                    onPressed: () => _move(p, 'stock_in'),
+                                    icon: const Icon(Icons.add_circle_outline),
+                                  ),
+                                  IconButton(
+                                    tooltip: S.stockOut,
+                                    onPressed: () => _move(p, 'stock_out'),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                  ),
+                                ],
+                              ),
                         onTap: () => _showMovements(p),
                       ),
                     );

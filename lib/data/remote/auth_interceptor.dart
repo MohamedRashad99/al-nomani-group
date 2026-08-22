@@ -30,9 +30,10 @@ class AuthInterceptor extends QueuedInterceptor {
 
   @override
   Future<void> onError(
-    DioException error,
+    DioException err,
     ErrorInterceptorHandler handler,
   ) async {
+    final error = err;
     if (error.response?.statusCode != 401 &&
         error.response?.statusCode != 403) {
       handler.next(error);
@@ -62,10 +63,7 @@ class AuthInterceptor extends QueuedInterceptor {
         handler.next(error);
         return;
       }
-      await _tokens.save(
-        accessToken: access,
-        refreshToken: rotatedRefresh,
-      );
+      await _tokens.save(accessToken: access, refreshToken: rotatedRefresh);
 
       final request = error.requestOptions;
       request.extra['authRetried'] = true;

@@ -1,5 +1,4 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -101,22 +100,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           labelText: 'الفاصل بين المزامنات',
                         ),
                         items: const [
-                          DropdownMenuItem(
-                            value: 1,
-                            child: Text('كل يوم'),
-                          ),
-                          DropdownMenuItem(
-                            value: 3,
-                            child: Text('كل ٣ أيام'),
-                          ),
-                          DropdownMenuItem(
-                            value: 5,
-                            child: Text('كل ٥ أيام'),
-                          ),
-                          DropdownMenuItem(
-                            value: 7,
-                            child: Text('كل ٧ أيام'),
-                          ),
+                          DropdownMenuItem(value: 1, child: Text('كل يوم')),
+                          DropdownMenuItem(value: 3, child: Text('كل ٣ أيام')),
+                          DropdownMenuItem(value: 5, child: Text('كل ٥ أيام')),
+                          DropdownMenuItem(value: 7, child: Text('كل ٧ أيام')),
                         ],
                         onChanged: !canUpdate
                             ? null
@@ -178,20 +165,24 @@ class _SettingsPageState extends State<SettingsPage> {
     final db = sl<AppDatabase>();
     final now = DateTime.now().toUtc();
     await db.transaction(() async {
-      await db.into(db.settings).insertOnConflictUpdate(
-        SettingsCompanion.insert(
-          key: SyncConfigKeys.syncMode,
-          value: mode.name,
-          updatedAt: now,
-        ),
-      );
-      await db.into(db.settings).insertOnConflictUpdate(
-        SettingsCompanion.insert(
-          key: SyncConfigKeys.syncIntervalDays,
-          value: '$days',
-          updatedAt: now,
-        ),
-      );
+      await db
+          .into(db.settings)
+          .insertOnConflictUpdate(
+            SettingsCompanion.insert(
+              key: SyncConfigKeys.syncMode,
+              value: mode.name,
+              updatedAt: now,
+            ),
+          );
+      await db
+          .into(db.settings)
+          .insertOnConflictUpdate(
+            SettingsCompanion.insert(
+              key: SyncConfigKeys.syncIntervalDays,
+              value: '$days',
+              updatedAt: now,
+            ),
+          );
       for (final entry in {
         SyncConfigKeys.syncMode: mode.name,
         SyncConfigKeys.syncIntervalDays: '$days',

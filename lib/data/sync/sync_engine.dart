@@ -25,6 +25,8 @@ class SyncHealth {
   final int backupPending;
   final int backupFailed;
   final String? backupLastError;
+  final bool serverReachable;
+  final bool serverAuthenticated;
 
   const SyncHealth({
     required this.lastSuccessfulSync,
@@ -40,6 +42,8 @@ class SyncHealth {
     required this.backupPending,
     required this.backupFailed,
     required this.backupLastError,
+    required this.serverReachable,
+    required this.serverAuthenticated,
   });
 }
 
@@ -199,13 +203,11 @@ class SyncEngine {
           }
         } on DioException catch (error) {
           final message = switch (error.response?.statusCode) {
-            401 || 403 => 'انتهت جلسة الخادم. سجّل الدخول أثناء الاتصال ثم أعد المحاولة.',
+            401 || 403 =>
+              'انتهت جلسة الخادم. سجّل الدخول أثناء الاتصال ثم أعد المحاولة.',
             _ => 'الخادم غير متاح حالياً. بقيت البيانات محفوظة محلياً.',
           };
-          await _queue.markFailed(
-            item.id,
-            message,
-          );
+          await _queue.markFailed(item.id, message);
           failed++;
         } catch (_) {
           await _queue.markFailed(
@@ -264,7 +266,10 @@ class SyncEngine {
   }
 
   Future<SyncHealth> health() async {
-    await _refreshServerBackupHealth();
+    final probe = await _probeServer();
+    if (probe.reachable && probe.authenticated) {
+      await _refreshServerBackupHealth();
+    }
     final last = DateTime.tryParse(
       await _metadata.get(SyncConfigKeys.lastSuccessfulSyncAt) ?? '',
     );
@@ -309,7 +314,27 @@ class SyncEngine {
       backupPending: backupPending,
       backupFailed: backupFailed,
       backupLastError: backupLastError,
+      serverReachable: probe.reachable,
+      serverAuthenticated: probe.authenticated,
     );
+  }
+
+  Future<({bool reachable, bool authenticated})> _probeServer() async {
+    if (!await isOnline()) {
+      return (reachable: false, authenticated: false);
+    }
+    try {
+      await _dio.get<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/sync/status',
+      );
+      return (reachable: true, authenticated: true);
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        return (reachable: true, authenticated: false);
+      }
+      return (reachable: false, authenticated: false);
+    }
   }
 
   Future<void> _retryServerBackup() async {
@@ -396,6 +421,25 @@ class SyncEngine {
     SyncQueueData item,
     Map<String, dynamic> result,
   ) async {
+    final existing =
+        await (_db.select(_db.conflicts)..where(
+              (row) =>
+                  row.entityType.equals(item.entityType) &
+                  row.entityId.equals(item.entityId) &
+                  row.status.equals('open'),
+            ))
+            .getSingleOrNull();
+    if (existing != null) {
+      await (_db.update(
+        _db.conflicts,
+      )..where((row) => row.id.equals(existing.id))).write(
+        ConflictsCompanion(
+          localPayload: Value(item.payload),
+          serverPayload: Value(jsonEncode(result['server'] ?? {})),
+        ),
+      );
+      return;
+    }
     await _db
         .into(_db.conflicts)
         .insert(

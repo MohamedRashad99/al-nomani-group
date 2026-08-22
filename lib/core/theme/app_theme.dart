@@ -81,7 +81,9 @@ abstract final class AppTheme {
           minimumSize: const Size(44, 48),
           backgroundColor: AppColors.green,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
       navigationBarTheme: const NavigationBarThemeData(

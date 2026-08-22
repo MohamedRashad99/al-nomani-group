@@ -167,8 +167,7 @@ class _SalesPageState extends State<SalesPage> {
                 showCancelled: _showCancelled,
                 onChanged: () => setState(() {}),
                 onPeriodChanged: (value) => setState(() => _period = value),
-                onPaymentChanged: (value) =>
-                    setState(() => _payment = value),
+                onPaymentChanged: (value) => setState(() => _payment = value),
                 onCancelledChanged: (value) =>
                     setState(() => _showCancelled = value),
               ),
@@ -469,7 +468,8 @@ class _NewSalePageState extends State<NewSalePage> {
   final _products = <String, Product>{};
   bool _saving = false;
 
-  Money get _total => _lines.fold(Money.zero(), (sum, line) => sum + line.lineTotal);
+  Money get _total =>
+      _lines.fold(Money.zero(), (sum, line) => sum + line.lineTotal);
 
   Money get _paidAmount {
     try {
@@ -534,9 +534,7 @@ class _NewSalePageState extends State<NewSalePage> {
                   child: _lines.isEmpty
                       ? const Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text('لم تتم إضافة أصناف بعد'),
-                          ),
+                          child: Center(child: Text('لم تتم إضافة أصناف بعد')),
                         )
                       : Column(
                           children: [
@@ -707,13 +705,9 @@ class _NewSalePageState extends State<NewSalePage> {
         .asMap()
         .entries
         .where(
-          (entry) =>
-              entry.key != index && entry.value.productId == product.id,
+          (entry) => entry.key != index && entry.value.productId == product.id,
         )
-        .fold(
-          Quantity.zero(),
-          (sum, entry) => sum + entry.value.quantity,
-        );
+        .fold(Quantity.zero(), (sum, entry) => sum + entry.value.quantity);
     if (others + quantity > Quantity.parse(product.currentStock)) {
       _message(S.insufficientStock);
       return;
@@ -728,10 +722,7 @@ class _NewSalePageState extends State<NewSalePage> {
     });
   }
 
-  Future<Quantity?> _quantityDialog(
-    Product product,
-    Quantity initial,
-  ) async {
+  Future<Quantity?> _quantityDialog(Product product, Quantity initial) async {
     final controller = TextEditingController(text: initial.toStorage());
     final value = await showDialog<String>(
       context: context,
@@ -805,9 +796,7 @@ class _NewSalePageState extends State<NewSalePage> {
 
   void _message(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 }
 
@@ -834,7 +823,7 @@ class _Section extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                if (action != null) action!,
+                ?action,
               ],
             ),
             const SizedBox(height: 10),
@@ -1141,9 +1130,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'سيتم عكس المخزون وحساب العميل. لن تُحذف الفاتورة.',
-            ),
+            const Text('سيتم عكس المخزون وحساب العميل. لن تُحذف الفاتورة.'),
             const SizedBox(height: 12),
             TextField(
               controller: reason,
@@ -1204,10 +1191,7 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.muted),
-            ),
+            child: Text(label, style: const TextStyle(color: AppColors.muted)),
           ),
           Flexible(child: Text(value, textAlign: TextAlign.end)),
         ],

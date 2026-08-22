@@ -211,7 +211,7 @@ class DashboardService {
     final changePercent = yesterdaySales.isZero
         ? (todaySales.isZero ? 0.0 : 100.0)
         : ((todaySales.minorUnits - yesterdaySales.minorUnits).toDouble() /
-              yesterdaySales.minorUnits.toDouble()) *
+                  yesterdaySales.minorUnits.toDouble()) *
               100;
 
     final lowStockProducts =
@@ -246,9 +246,7 @@ class DashboardService {
       customerNames: {
         for (final customer in customers) customer.id: customer.name,
       },
-      productNames: {
-        for (final product in products) product.id: product.name,
-      },
+      productNames: {for (final product in products) product.id: product.name},
     );
   }
 }

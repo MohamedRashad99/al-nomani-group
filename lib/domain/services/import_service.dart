@@ -165,10 +165,9 @@ class ImportService {
     var count = 0;
     for (final row in valid) {
       final sku = row.values['sku'] ?? '';
-      final product =
-          await (_db.select(
-            _db.products,
-          )..where((product) => product.sku.equals(sku))).getSingleOrNull();
+      final product = await (_db.select(
+        _db.products,
+      )..where((product) => product.sku.equals(sku))).getSingleOrNull();
       if (product == null) continue;
       await _inventory.adjust(
         session: session,
@@ -180,9 +179,7 @@ class ImportService {
       count++;
     }
     if (count == 0) {
-      throw const ValidationException(
-        'لم يتم العثور على رموز منتجات مطابقة.',
-      );
+      throw const ValidationException('لم يتم العثور على رموز منتجات مطابقة.');
     }
     return count;
   }

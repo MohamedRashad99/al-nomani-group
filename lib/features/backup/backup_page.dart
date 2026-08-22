@@ -70,6 +70,25 @@ class _BackupView extends StatelessWidget {
                 ),
                 _tile(S.internetStatus, h.online ? S.online : S.offline),
                 _tile(
+                  'الخادم المركزي',
+                  !h.serverReachable
+                      ? 'غير متاح'
+                      : h.serverAuthenticated
+                      ? 'متصل والجلسة صالحة'
+                      : 'متصل لكن جلسة الدخول منتهية',
+                  color: h.serverReachable && h.serverAuthenticated
+                      ? AppColors.green
+                      : AppColors.danger,
+                ),
+                _tile(
+                  'قبول PostgreSQL',
+                  h.failed > 0
+                      ? 'توجد عمليات مرفوضة أو لم تصل'
+                      : h.pending > 0
+                      ? 'توجد عمليات محلية لم تُقبل بعد'
+                      : 'كل العمليات المستلمة مقبولة',
+                ),
+                _tile(
                   S.backupStatus,
                   h.backupConfigured == false
                       ? 'غير مهيأ'
@@ -139,9 +158,7 @@ class _BackupView extends StatelessWidget {
                                     );
                                   }
                                   if (context.mounted) {
-                                    await context
-                                        .read<BackupCubit>()
-                                        .refresh();
+                                    await context.read<BackupCubit>().refresh();
                                   }
                                 },
                                 itemBuilder: (_) => const [
@@ -163,15 +180,16 @@ class _BackupView extends StatelessWidget {
                 },
               ),
               FilledButton(
-                onPressed: state.busy ||
-                        session?.can(AppPermission.backupSync) != true
+                onPressed:
+                    state.busy || session?.can(AppPermission.backupSync) != true
                     ? null
                     : () => context.read<BackupCubit>().syncNow(),
                 child: const Text(S.syncNow),
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
-                onPressed: state.busy ||
+                onPressed:
+                    state.busy ||
                         session?.can(AppPermission.backupRetry) != true
                     ? null
                     : () => context.read<BackupCubit>().retryFailed(),
@@ -179,7 +197,8 @@ class _BackupView extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
-                onPressed: state.busy ||
+                onPressed:
+                    state.busy ||
                         session?.can(AppPermission.backupFullSync) != true
                     ? null
                     : () => context.read<BackupCubit>().fullBackup(),

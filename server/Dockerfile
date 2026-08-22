@@ -1,4 +1,4 @@
-FROM dart:3.11.5 AS build
+FROM dart:3.13.0 AS build
 WORKDIR /app
 COPY packages/shared packages/shared
 COPY server server

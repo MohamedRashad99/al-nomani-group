@@ -50,7 +50,7 @@ class GoogleSheetsBackup {
     'sale': 'Sales',
     'saleItem': 'Sale Items',
     'customerAccount': 'Customer Accounts',
-    'customerAccountTransaction': 'Customer Accounts',
+    'customerAccountTransaction': 'Customer Account Transactions',
     'collection': 'Collections',
     'inventoryMovement': 'Inventory Movements',
     'user': 'Users',
@@ -64,7 +64,8 @@ class GoogleSheetsBackup {
     'Customers': 'customers',
     'Sales': 'sales',
     'Sale Items': 'sale_items',
-    'Customer Accounts': 'customer_account_transactions',
+    'Customer Accounts': 'customer_accounts',
+    'Customer Account Transactions': 'customer_account_transactions',
     'Collections': 'collections',
     'Inventory Movements': 'inventory_movements',
     'Users': 'users',
@@ -88,7 +89,7 @@ class GoogleSheetsBackup {
 
     final rows = await db.query(
       '''
-      SELECT id, entity_type, entity_id, payload
+      SELECT id, operation_id, entity_type, entity_id, payload
       FROM backup_outbox
       WHERE status IN ('pending', 'failed')
       ORDER BY created_at
@@ -112,10 +113,11 @@ class GoogleSheetsBackup {
       await _ensureTabs(api, env.googleLiveSpreadsheetId);
       for (final row in rows) {
         final outboxId = row[0] as String;
-        final entityType = row[1] as String;
-        final entityId = row[2] as String;
+        final operationId = row[1] as String;
+        final entityType = row[2] as String;
+        final entityId = row[3] as String;
         final payload = Map<String, dynamic>.from(
-          jsonDecode(row[3] as String) as Map,
+          jsonDecode(row[4] as String) as Map,
         );
         try {
           final tab = tabs[entityType] ?? 'Sync Logs';
@@ -125,6 +127,59 @@ class GoogleSheetsBackup {
             tab: tab,
             entityId: entityId,
             payload: payload,
+          );
+          if (entityType == 'sale') {
+            for (final rawItem in (payload['items'] as List?) ?? const []) {
+              final item = Map<String, dynamic>.from(rawItem as Map);
+              final itemId = item['id'] as String?;
+              if (itemId == null || itemId.isEmpty) continue;
+              await _upsertByStableId(
+                api: api,
+                spreadsheetId: env.googleLiveSpreadsheetId,
+                tab: 'Sale Items',
+                entityId: itemId,
+                payload: item,
+              );
+            }
+          }
+          if (entityType == 'inventoryMovement' &&
+              payload['product_id'] is String) {
+            await _upsertByStableId(
+              api: api,
+              spreadsheetId: env.googleLiveSpreadsheetId,
+              tab: 'Products',
+              entityId: payload['product_id'] as String,
+              payload: {
+                'id': payload['product_id'],
+                'current_stock': payload['new_stock'],
+              },
+            );
+          }
+          if (entityType == 'customerAccountTransaction' &&
+              payload['account_id'] is String) {
+            await _upsertByStableId(
+              api: api,
+              spreadsheetId: env.googleLiveSpreadsheetId,
+              tab: 'Customer Accounts',
+              entityId: payload['account_id'] as String,
+              payload: {
+                'id': payload['account_id'],
+                'customer_id': payload['customer_id'],
+                'cached_balance': payload['running_balance'],
+              },
+            );
+          }
+          await _upsertByStableId(
+            api: api,
+            spreadsheetId: env.googleLiveSpreadsheetId,
+            tab: 'Sync Logs',
+            entityId: operationId,
+            payload: {
+              'id': operationId,
+              'entity_type': entityType,
+              'entity_id': entityId,
+              'status': 'accepted',
+            },
           );
           await db.query(
             '''
@@ -154,6 +209,17 @@ class GoogleSheetsBackup {
     } catch (error) {
       failed = rows.length;
       lastError = _safeError(error);
+      for (final row in rows) {
+        await db.query(
+          '''
+          UPDATE backup_outbox SET
+            status = 'failed', retry_count = retry_count + 1,
+            last_attempt_at = NOW(), last_error = @error
+          WHERE id = @id
+          ''',
+          params: {'id': row[0], 'error': lastError},
+        );
+      }
     }
 
     return BackupProcessingResult(
@@ -236,25 +302,21 @@ class GoogleSheetsBackup {
   }
 
   Future<Map<String, dynamic>> health() async {
-    final pending = await db.query(
-      '''
+    final pending = await db.query('''
       SELECT
         COUNT(*) FILTER (WHERE status = 'pending'),
         COUNT(*) FILTER (WHERE status = 'failed'),
         MAX(synced_at),
         MAX(last_error) FILTER (WHERE status = 'failed')
       FROM backup_outbox
-      ''',
-    );
-    final latestFull = await db.query(
-      '''
+      ''');
+    final latestFull = await db.query('''
       SELECT status, finished_at, error_message
       FROM backup_runs
       WHERE kind = 'full'
       ORDER BY started_at DESC
       LIMIT 1
-      ''',
-    );
+      ''');
     return {
       'configured': isConfigured,
       'live_spreadsheet_configured': env.googleLiveSpreadsheetId.isNotEmpty,
@@ -297,17 +359,29 @@ class GoogleSheetsBackup {
       ...payload,
       'backup_updated_at': DateTime.now().toUtc().toIso8601String(),
     };
-    final headers = normalized.keys.toList();
-    await _ensureHeader(api, spreadsheetId, tab, headers);
+    final headers = await _ensureHeader(
+      api,
+      spreadsheetId,
+      tab,
+      normalized.keys.toList(),
+    );
     final existing = await api.spreadsheets.values.get(
       spreadsheetId,
-      "'$tab'!A:A",
+      "'$tab'!A:ZZ",
     );
     final values = existing.values ?? const [];
     final index = values.indexWhere(
       (row) => row.isNotEmpty && row.first.toString() == entityId,
     );
-    final output = [for (final header in headers) normalized[header]];
+    final existingRow = index >= 1 ? values[index] : const <Object?>[];
+    final output = [
+      for (var column = 0; column < headers.length; column++)
+        normalized.containsKey(headers[column])
+            ? normalized[headers[column]]
+            : column < existingRow.length
+            ? existingRow[column]
+            : null,
+    ];
     if (index >= 1) {
       await api.spreadsheets.values.update(
         ValueRange(values: [output]),
@@ -326,7 +400,7 @@ class GoogleSheetsBackup {
     }
   }
 
-  Future<void> _ensureHeader(
+  Future<List<String>> _ensureHeader(
     SheetsApi api,
     String spreadsheetId,
     String tab,
@@ -336,7 +410,9 @@ class GoogleSheetsBackup {
       spreadsheetId,
       "'$tab'!1:1",
     );
-    final existing = current.values?.firstOrNull;
+    final existing = current.values?.firstOrNull
+        ?.map((value) => value.toString())
+        .toList();
     if (existing == null || existing.isEmpty) {
       await api.spreadsheets.values.update(
         ValueRange(values: [headers]),
@@ -344,20 +420,48 @@ class GoogleSheetsBackup {
         "'$tab'!A1",
         valueInputOption: 'RAW',
       );
+      return headers;
     }
+    final merged = [...existing];
+    for (final header in headers) {
+      if (!merged.contains(header)) merged.add(header);
+    }
+    if (merged.length != existing.length) {
+      await api.spreadsheets.values.update(
+        ValueRange(values: [merged]),
+        spreadsheetId,
+        "'$tab'!A1",
+        valueInputOption: 'RAW',
+      );
+    }
+    return merged;
   }
 
   Future<List<List<Object?>>> _tableSnapshot(String table) async {
-    final result = await db.query('SELECT row_to_json(t)::text FROM $table t');
+    final columnRows = await db.query(
+      '''
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = @table
+      ORDER BY ordinal_position
+      ''',
+      params: {'table': table},
+    );
+    final headers = columnRows
+        .map((row) => row[0] as String)
+        .where((column) => column != 'password_hash')
+        .toList();
+    final jsonExpression = table == 'users'
+        ? "(to_jsonb(t) - 'password_hash')::text"
+        : 'row_to_json(t)::text';
+    final result = await db.query('SELECT $jsonExpression FROM $table t');
     final records = result
         .map(
-          (row) => Map<String, dynamic>.from(
-            jsonDecode(row[0] as String) as Map,
-          ),
+          (row) =>
+              Map<String, dynamic>.from(jsonDecode(row[0] as String) as Map),
         )
         .toList();
-    if (records.isEmpty) return const <List<Object?>>[];
-    final headers = records.expand((record) => record.keys).toSet().toList();
+    if (headers.isEmpty) return const <List<Object?>>[];
     return [
       headers,
       for (final record in records)

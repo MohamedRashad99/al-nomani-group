@@ -48,9 +48,7 @@ class AuthService {
       if (!local.isActive || local.isDeleted) {
         throw const AppException('هذا الحساب معطّل.', code: 'user_disabled');
       }
-      if (BCrypt.checkpw(password, local.passwordHash)) {
-        authenticatedOnline = false;
-      } else {
+      if (!BCrypt.checkpw(password, local.passwordHash)) {
         throw const AppException(
           'اسم المستخدم أو كلمة المرور غير صحيحة.',
           code: 'login_failed',
@@ -131,10 +129,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    await Future.wait([
-      _storage.delete(key: _sessionKey),
-      _tokens.clear(),
-    ]);
+    await Future.wait([_storage.delete(key: _sessionKey), _tokens.clear()]);
   }
 
   Future<Set<String>> _permissionsFor(String roleId) async {
@@ -164,9 +159,9 @@ class AuthService {
 
   Future<void> _cacheRemoteUser(
     Map<String, dynamic> data,
-    String password,
-    {User? existingLocal}
-  ) async {
+    String password, {
+    User? existingLocal,
+  }) async {
     final now = DateTime.now().toUtc();
     final deviceId = await _metadata.deviceId();
     final user = data['user'] as Map<String, dynamic>? ?? data;

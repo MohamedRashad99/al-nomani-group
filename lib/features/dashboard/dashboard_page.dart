@@ -354,7 +354,9 @@ class _WelcomeHeader extends StatelessWidget {
                         ? Icons.cloud_done_outlined
                         : Icons.cloud_off_outlined,
                     size: 18,
-                    color: healthy ? const Color(0xFFB9F6CA) : Colors.orange[100],
+                    color: healthy
+                        ? const Color(0xFFB9F6CA)
+                        : Colors.orange[100],
                   ),
                   const SizedBox(width: 7),
                   Text(
@@ -416,7 +418,11 @@ class _KpiCard extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: value),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: value,
+            ),
             const SizedBox(height: 2),
             Text(
               helper,
@@ -442,21 +448,21 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = [
       if (permissions.contains(AppPermission.salesCreate))
-        const _Action('بيع جديد', '/sales/new', Icons.add_shopping_cart_rounded),
+        const _Action(
+          'بيع جديد',
+          '/sales/new',
+          Icons.add_shopping_cart_rounded,
+        ),
       if (permissions.contains(AppPermission.collectionsCreate))
-        const _Action(
-          'تسجيل تحصيل',
-          '/collections',
-          Icons.payments_rounded,
-        ),
+        const _Action('تسجيل تحصيل', '/collections', Icons.payments_rounded),
       if (permissions.contains(AppPermission.inventoryAdjust))
-        const _Action(
-          'تسوية المخزون',
-          '/inventory',
-          Icons.inventory_rounded,
-        ),
+        const _Action('تسوية المخزون', '/inventory', Icons.inventory_rounded),
       if (permissions.contains(AppPermission.customersCreate))
-        const _Action('عميل جديد', '/customers', Icons.person_add_alt_1_rounded),
+        const _Action(
+          'عميل جديد',
+          '/customers',
+          Icons.person_add_alt_1_rounded,
+        ),
     ];
     if (actions.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -607,9 +613,9 @@ class _DebtPanel extends StatelessWidget {
           children: [
             MoneyText(
               snapshot.outstandingDebt,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppColors.orange,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: AppColors.orange),
             ),
             const Text('إجمالي الرصيد المستحق'),
             const Spacer(),
@@ -677,7 +683,8 @@ class _LowStockPanel extends StatelessWidget {
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: Quantity.parse(product.currentStock).isZero
+                      backgroundColor:
+                          Quantity.parse(product.currentStock).isZero
                           ? const Color(0xFFFFEBEE)
                           : const Color(0xFFFFF3E0),
                       child: Icon(
@@ -733,7 +740,9 @@ class _RankingPanel extends StatelessWidget {
                           ? Icon(icon, color: AppColors.green, size: 20)
                           : Text(
                               ArabicFormat.number(index + 1),
-                              style: const TextStyle(color: AppColors.darkGreen),
+                              style: const TextStyle(
+                                color: AppColors.darkGreen,
+                              ),
                             ),
                     ),
                     title: Text(
@@ -861,7 +870,7 @@ class _Panel extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (action != null) action!,
+                ?action,
               ],
             ),
             const SizedBox(height: 14),

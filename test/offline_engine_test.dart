@@ -1,13 +1,21 @@
+import 'dart:convert';
+
+import 'package:al_nomani_group/app.dart';
 import 'package:al_nomani_group/core/config/app_config.dart';
 import 'package:al_nomani_group/core/di/injector.dart';
+import 'package:al_nomani_group/core/utils/arabic_format.dart';
 import 'package:al_nomani_group/data/local/app_database.dart';
 import 'package:al_nomani_group/data/sync/sync_queue_repository.dart';
 import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/services/sale_service.dart';
+import 'package:al_nomani_group/domain/services/dashboard_service.dart';
 import 'package:al_nomani_group/domain/services/seed_service.dart';
 import 'package:al_nomani_group/domain/session.dart';
+import 'package:al_nomani_group/features/auth/auth_cubit.dart';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AppConfig _config() => const AppConfig(
@@ -117,6 +125,121 @@ void main() {
       );
     },
   );
+
+  test(
+    'dashboard aggregates trends and named rankings from local data',
+    () async {
+      final db = await readyDb();
+      final session = admin().copyWithUser(
+        usersFirstId: (await db.select(db.users).get()).first.id,
+      );
+      await sl<SaleService>().create(
+        session,
+        SaleDraft(
+          customerId: 'c-ahmed',
+          paidAmount: Money.parse('5.500'),
+          lines: [
+            SaleLineDraft(
+              productId: 'p-imidacloprid',
+              quantity: Quantity.parse('1'),
+              unit: 'l',
+              unitPrice: Money.parse('5.500'),
+            ),
+          ],
+        ),
+      );
+
+      final dashboard = await sl<DashboardService>().load();
+      expect(dashboard.todaySales.toStorage(), '5.500');
+      expect(dashboard.salesTrend, hasLength(7));
+      expect(dashboard.topProducts.first.name, isNotEmpty);
+      expect(dashboard.topCustomers.first.name, isNotEmpty);
+    },
+  );
+
+  test(
+    'sale cancellation reverses inventory and customer debt without deletion',
+    () async {
+      final db = await readyDb();
+      final session = admin().copyWithUser(
+        usersFirstId: (await db.select(db.users).get()).first.id,
+      );
+      final before = await (db.select(
+        db.products,
+      )..where((row) => row.id.equals('p-npk'))).getSingle();
+      final result = await sl<SaleService>().create(
+        session,
+        SaleDraft(
+          customerId: 'c-salem',
+          paidAmount: Money.zero(),
+          lines: [
+            SaleLineDraft(
+              productId: 'p-npk',
+              quantity: Quantity.parse('2'),
+              unit: 'kg',
+              unitPrice: Money.parse('10.500'),
+            ),
+          ],
+        ),
+      );
+      await sl<SaleService>().cancel(session, result.saleId, 'اختبار العكس');
+
+      final sale = await (db.select(
+        db.sales,
+      )..where((row) => row.id.equals(result.saleId))).getSingle();
+      final after = await (db.select(
+        db.products,
+      )..where((row) => row.id.equals('p-npk'))).getSingle();
+      final account = await (db.select(
+        db.customerAccounts,
+      )..where((row) => row.customerId.equals('c-salem'))).getSingle();
+      expect(sale.status, 'cancelled');
+      expect(sale.isDeleted, isFalse);
+      expect(after.currentStock, before.currentStock);
+      expect(account.cachedBalance, '0.000');
+    },
+  );
+
+  test('business codes are presented with Arabic labels', () {
+    expect(ArabicFormat.paymentMethod('cash'), 'نقداً');
+    expect(ArabicFormat.status('cancelled'), 'ملغاة');
+    expect(ArabicFormat.movementType('stock_in'), 'إدخال مخزون');
+  });
+
+  testWidgets('dashboard has no overflow at iPhone 13 dimensions', (
+    tester,
+  ) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final db = await readyDb();
+    final user = (await db.select(db.users).get()).first;
+    await const FlutterSecureStorage().write(
+      key: 'offline_session_v1',
+      value: jsonEncode({
+        'user_id': user.id,
+        'username': user.username,
+        'display_name': user.displayName,
+        'role_name': user.roleId,
+        'permissions': AppPermission.all,
+        'expires_at': DateTime.now()
+            .add(const Duration(days: 1))
+            .toIso8601String(),
+      }),
+    );
+    await sl<AuthCubit>().restore();
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const AlNomaniApp());
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(find.text('لوحة التحكم'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   test(
     'sale transaction rolls back inventory and queue together on invalid stock',

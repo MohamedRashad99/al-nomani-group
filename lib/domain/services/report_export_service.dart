@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
@@ -92,9 +91,7 @@ class ReportExportService {
                 headers: rows.first.map((value) => value.toString()).toList(),
                 data: rows
                     .skip(1)
-                    .map(
-                      (row) => row.map((value) => value.toString()).toList(),
-                    )
+                    .map((row) => row.map((value) => value.toString()).toList())
                     .toList(),
                 headerStyle: pw.TextStyle(font: font),
                 cellStyle: pw.TextStyle(font: font, fontSize: 8),

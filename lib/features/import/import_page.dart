@@ -125,23 +125,22 @@ class _ImportPageState extends State<ImportPage> {
                         subtitle: Text(
                           row.error ??
                               row.values.entries
-                                  .map((entry) => '${entry.key}: ${entry.value}')
+                                  .map(
+                                    (entry) => '${entry.key}: ${entry.value}',
+                                  )
                                   .join(' • '),
                         ),
                         trailing: Icon(
                           row.error == null
                               ? Icons.check_circle
                               : Icons.error_outline,
-                          color: row.error == null
-                              ? Colors.green
-                              : Colors.red,
+                          color: row.error == null ? Colors.green : Colors.red,
                         ),
                       ),
                     const SizedBox(height: 14),
                     FilledButton.icon(
                       onPressed:
-                          _busy ||
-                              _rows.every((row) => row.error != null)
+                          _busy || _rows.every((row) => row.error != null)
                           ? null
                           : _confirm,
                       icon: _busy
