@@ -1,11 +1,14 @@
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
-import '../../data/local/app_database.dart';
 import '../../domain/services/dashboard_service.dart';
+import '../../domain/services/report_export_service.dart';
+import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
 
 class ReportsPage extends StatelessWidget {
@@ -13,58 +16,140 @@ class ReportsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canExport =
+        context.watch<AuthCubit>().state.session?.can(
+          AppPermission.reportsExport,
+        ) ==
+        true;
     return AppScaffold(
       title: S.reports,
       child: FutureBuilder<DashboardSnapshot>(
         future: sl<DashboardService>().load(),
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final d = snap.data!;
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const BrandedLoading();
+          final dashboard = snapshot.data!;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              ListTile(
-                title: const Text(S.monthlySales),
-                trailing: MoneyText(d.monthlySales),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: 280,
+                    child: StatCard(
+                      label: S.monthlySales,
+                      child: MoneyText(dashboard.monthlySales),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 280,
+                    child: StatCard(
+                      label: S.outstandingDebt,
+                      child: MoneyText(dashboard.outstandingDebt),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 280,
+                    child: StatCard(
+                      label: S.monthlyCollections,
+                      child: MoneyText(dashboard.monthlyCollections),
+                    ),
+                  ),
+                ],
               ),
-              ListTile(
-                title: const Text(S.outstandingDebt),
-                trailing: MoneyText(d.outstandingDebt),
-              ),
-              ListTile(
-                title: const Text(S.monthlyCollections),
-                trailing: MoneyText(d.monthlyCollections),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () async {
-                  final db = sl<AppDatabase>();
-                  final sales = await db.select(db.sales).get();
-                  final csv = StringBuffer(
-                    'id,sale_number,subtotal,paid,remaining,sold_at\n',
-                  );
-                  for (final s in sales) {
-                    csv.writeln(
-                      '${s.id},${s.saleNumber},${s.subtotal},${s.paidAmount},${s.remainingAmount},${s.soldAt}',
-                    );
-                  }
-                  await Clipboard.setData(ClipboardData(text: csv.toString()));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('تم نسخ تقرير المبيعات CSV.'),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'تصدير تقرير المبيعات',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    );
-                  }
-                },
-                child: const Text(S.export),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'نزّل ملفاً حقيقياً إلى جهازك للاحتفاظ به أو مشاركته.',
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _ExportButton(
+                            label: S.csv,
+                            icon: Icons.table_rows_outlined,
+                            enabled: canExport,
+                            type: ReportFileType.csv,
+                          ),
+                          _ExportButton(
+                            label: S.excel,
+                            icon: Icons.grid_on_outlined,
+                            enabled: canExport,
+                            type: ReportFileType.excel,
+                          ),
+                          _ExportButton(
+                            label: 'PDF',
+                            icon: Icons.picture_as_pdf_outlined,
+                            enabled: canExport,
+                            type: ReportFileType.pdf,
+                          ),
+                        ],
+                      ),
+                      if (!canExport) ...[
+                        const SizedBox(height: 10),
+                        const Text(S.noPermission),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+class _ExportButton extends StatelessWidget {
+  const _ExportButton({
+    required this.label,
+    required this.icon,
+    required this.enabled,
+    required this.type,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool enabled;
+  final ReportFileType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      onPressed: !enabled
+          ? null
+          : () async {
+              try {
+                await sl<ReportExportService>().exportSales(type);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('تم تنزيل ملف $label.')),
+                  );
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error.toString())));
+                }
+              }
+            },
+      icon: Icon(icon),
+      label: Text(label),
     );
   }
 }

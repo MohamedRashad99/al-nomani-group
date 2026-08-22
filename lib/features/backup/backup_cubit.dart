@@ -52,11 +52,14 @@ class BackupCubit extends Cubit<BackupState> {
   Future<void> syncNow() async {
     emit(state.copyWith(busy: true, message: null));
     await _engine.syncNow(force: true);
+    final health = await _engine.health();
     emit(
       state.copyWith(
         busy: false,
-        health: await _engine.health(),
-        message: 'اكتملت محاولة المزامنة.',
+        health: health,
+        message: health.failed > 0 || health.backupFailed > 0
+            ? 'اكتملت المحاولة مع أخطاء. راجع التفاصيل أدناه.'
+            : 'اكتملت المزامنة والنسخ الاحتياطي.',
       ),
     );
   }
@@ -64,11 +67,16 @@ class BackupCubit extends Cubit<BackupState> {
   Future<void> fullBackup() async {
     emit(state.copyWith(busy: true, message: null));
     await _engine.requestFullBackup();
+    final health = await _engine.health();
     emit(
       state.copyWith(
         busy: false,
-        health: await _engine.health(),
-        message: 'تم طلب النسخة الكاملة.',
+        health: health,
+        message: health.backupConfigured == false
+            ? 'النسخة الكاملة غير مهيأة على الخادم.'
+            : health.backupFailed > 0
+            ? 'فشلت النسخة الكاملة. راجع خطأ Google Sheets.'
+            : 'اكتملت النسخة الكاملة.',
       ),
     );
   }

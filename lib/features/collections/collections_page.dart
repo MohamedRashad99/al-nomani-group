@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/utils/arabic_format.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/catalog_service.dart';
@@ -40,12 +41,19 @@ class _CollectionsPageState extends State<CollectionsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final canCreate =
+        context.watch<AuthCubit>().state.session?.can(
+          AppPermission.collectionsCreate,
+        ) ==
+        true;
     return AppScaffold(
       title: S.collections,
-      fab: FloatingActionButton(
-        onPressed: _create,
-        child: const Icon(Icons.add),
-      ),
+      fab: canCreate
+          ? FloatingActionButton(
+              onPressed: _create,
+              child: const Icon(Icons.add),
+            )
+          : null,
       child: FutureBuilder<List<Collection>>(
         future: _future,
         builder: (context, snap) {
@@ -61,7 +69,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
               return ListTile(
                 title: MoneyText(Money.parse(c.amount)),
                 subtitle: Text(
-                  '${c.paymentMethod} • ${c.collectedAt.toLocal()}',
+                  '${ArabicFormat.paymentMethod(c.paymentMethod)} • ${ArabicFormat.dateTime(c.collectedAt)}',
                 ),
               );
             },

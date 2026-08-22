@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:bcrypt/bcrypt.dart';
 import 'package:postgres/postgres.dart';
 
 import '../database/postgres_db.dart';
@@ -517,17 +518,31 @@ class SyncService {
         }
         await tx.execute(
           Sql.named('''
-            UPDATE users SET
-              display_name = @display, role_id = @role,
-              is_active = @active, version = @version, updated_at = NOW()
-            WHERE username = @username
+            INSERT INTO users
+              (id, username, display_name, password_hash, role_id, is_active,
+               version, device_id, created_at, updated_at)
+            VALUES
+              (@id, @username, @display, @locked_hash, @role, FALSE,
+               @version, @device, NOW(), NOW())
+            ON CONFLICT (username) DO UPDATE SET
+              display_name = EXCLUDED.display_name,
+              role_id = EXCLUDED.role_id,
+              is_active = @active,
+              version = EXCLUDED.version,
+              updated_at = NOW()
           '''),
           parameters: {
+            'id': payload['id'],
             'username': payload['username'],
             'display': payload['display_name'],
             'role': payload['role_id'],
             'active': payload['is_active'] ?? true,
             'version': payload['version'] ?? 1,
+            'device': deviceId,
+            'locked_hash': BCrypt.hashpw(
+              'offline-account-${payload['id']}',
+              BCrypt.gensalt(),
+            ),
           },
         );
         return;

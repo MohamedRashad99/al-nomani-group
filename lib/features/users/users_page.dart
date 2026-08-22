@@ -19,12 +19,15 @@ class UsersPage extends StatefulWidget {
 class _UsersPageState extends State<UsersPage> {
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthCubit>().state.session!;
     return AppScaffold(
       title: S.users,
-      fab: FloatingActionButton(
-        onPressed: () => _edit(null),
-        child: const Icon(Icons.add),
-      ),
+      fab: session.can(AppPermission.usersCreate)
+          ? FloatingActionButton(
+              onPressed: () => _edit(null),
+              child: const Icon(Icons.add),
+            )
+          : null,
       child: FutureBuilder<List<User>>(
         future: sl<UserAdminService>().list(),
         builder: (context, snap) {
@@ -38,9 +41,11 @@ class _UsersPageState extends State<UsersPage> {
                 ListTile(
                   title: Text(u.displayName),
                   subtitle: Text(
-                    '${u.username} • ${u.roleId} • ${u.isActive ? S.active : S.inactive}',
+                    '${u.username} • ${_roleLabel(u.roleId)} • ${u.isActive ? S.active : S.inactive}',
                   ),
-                  onTap: () => _edit(u),
+                  onTap: session.can(AppPermission.usersUpdate)
+                      ? () => _edit(u)
+                      : null,
                 ),
             ],
           );
@@ -48,6 +53,14 @@ class _UsersPageState extends State<UsersPage> {
       ),
     );
   }
+
+  String _roleLabel(String role) => switch (role) {
+    AppRole.admin => 'مدير النظام',
+    AppRole.manager => 'مدير',
+    AppRole.cashier => 'أمين صندوق',
+    AppRole.viewer => 'عرض فقط',
+    _ => 'غير محدد',
+  };
 
   Future<void> _edit(User? user) async {
     final username = TextEditingController(text: user?.username ?? '');

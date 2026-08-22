@@ -48,3 +48,7 @@ flutter:
   assets:
     - assets/config/
     - assets/images/
+  fonts:
+    - family: NotoKufiArabic
+      fonts:
+        - asset: assets/fonts/NotoKufiArabic-Regular.ttf

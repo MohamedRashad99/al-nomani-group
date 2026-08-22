@@ -168,7 +168,10 @@ class SyncEngine {
                   'entity_id': item.entityId,
                   'operation': item.operation,
                   'payload': jsonDecode(item.payload),
-                  'version': 1,
+                  'version':
+                      ((jsonDecode(item.payload) as Map)['version'] as num?)
+                          ?.toInt() ??
+                      1,
                   'created_at': item.createdAt.toIso8601String(),
                 },
               ],
@@ -251,7 +254,8 @@ class SyncEngine {
         SyncConfigKeys.lastFullBackupAt,
         DateTime.now().toUtc().toIso8601String(),
       );
-    } catch (_) {
+    } on DioException catch (error) {
+      await _storeBackupStatus(error.response?.data);
       await _metadata.set(
         SyncConfigKeys.lastSyncError,
         'تعذر إنشاء النسخة الكاملة على الخادم.',

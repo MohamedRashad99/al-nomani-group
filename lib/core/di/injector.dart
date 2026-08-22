@@ -14,8 +14,10 @@ import '../../domain/services/auth_service.dart';
 import '../../domain/services/backup_export_service.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/collection_service.dart';
+import '../../domain/services/conflict_resolution_service.dart';
 import '../../domain/services/dashboard_service.dart';
 import '../../domain/services/inventory_service.dart';
+import '../../domain/services/report_export_service.dart';
 import '../../domain/services/sale_service.dart';
 import '../../domain/services/seed_service.dart';
 import '../../domain/services/import_service.dart';
@@ -59,6 +61,7 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(() => SyncQueueRepository(sl()));
   sl.registerLazySingleton(() => SyncBaselineService(sl(), sl(), sl()));
   sl.registerLazySingleton(() => AuditService(sl()));
+  sl.registerLazySingleton(() => ConflictResolutionService(sl(), sl(), sl()));
   sl.registerLazySingleton(() => AccountService(sl(), sl()));
   sl.registerLazySingleton(
     () => InventoryService(db: sl(), metadata: sl(), queue: sl(), audit: sl()),
@@ -85,11 +88,19 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(
     () => CatalogService(db: sl(), metadata: sl(), queue: sl(), audit: sl()),
   );
-  sl.registerLazySingleton(() => ImportService(sl(), sl()));
+  sl.registerLazySingleton(() => ImportService(sl(), sl(), sl()));
   sl.registerLazySingleton(() => DashboardService(sl()));
   sl.registerLazySingleton(() => BackupExportService(sl()));
+  sl.registerLazySingleton(() => ReportExportService(sl()));
   sl.registerLazySingleton(
-    () => UserAdminService(db: sl(), metadata: sl(), queue: sl(), audit: sl()),
+    () => UserAdminService(
+      db: sl(),
+      metadata: sl(),
+      queue: sl(),
+      audit: sl(),
+      dio: sl(),
+      config: sl(),
+    ),
   );
   sl.registerLazySingleton(() => SeedService(sl(), sl(), sl()));
   sl.registerLazySingleton(

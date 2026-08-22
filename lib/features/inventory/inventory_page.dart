@@ -25,6 +25,10 @@ class _InventoryPageState extends State<InventoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthCubit>().state.session;
+    final canMove =
+        session?.can(AppPermission.inventoryAdjust) == true ||
+        session?.can(AppPermission.inventoryCreate) == true;
     return AppScaffold(
       title: S.inventory,
       child: Column(
@@ -59,7 +63,9 @@ class _InventoryPageState extends State<InventoryPage> {
                       child: ListTile(
                         title: Text(p.name),
                         subtitle: Text('${S.currentStock}: ${p.currentStock}'),
-                        trailing: Wrap(
+                        trailing: !canMove
+                            ? null
+                            : Wrap(
                           spacing: 4,
                           children: [
                             IconButton(

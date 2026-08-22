@@ -3,6 +3,27 @@ import 'package:drift/drift.dart';
 
 import '../../data/local/app_database.dart';
 
+class DashboardRank {
+  const DashboardRank({
+    required this.id,
+    required this.name,
+    required this.amount,
+    this.secondary,
+  });
+
+  final String id;
+  final String name;
+  final Money amount;
+  final String? secondary;
+}
+
+class SalesTrendPoint {
+  const SalesTrendPoint({required this.date, required this.amount});
+
+  final DateTime date;
+  final Money amount;
+}
+
 class DashboardSnapshot {
   final Money todaySales;
   final Money weeklySales;
@@ -17,8 +38,13 @@ class DashboardSnapshot {
   final List<Sale> recentSales;
   final List<Collection> recentCollections;
   final List<InventoryMovement> recentMovements;
-  final List<(String, Money)> topProducts;
-  final List<(String, Money)> topCustomers;
+  final List<DashboardRank> topProducts;
+  final List<DashboardRank> topCustomers;
+  final List<Product> lowStockProducts;
+  final List<SalesTrendPoint> salesTrend;
+  final double todaySalesChangePercent;
+  final Map<String, String> customerNames;
+  final Map<String, String> productNames;
 
   const DashboardSnapshot({
     required this.todaySales,
@@ -36,6 +62,11 @@ class DashboardSnapshot {
     required this.recentMovements,
     required this.topProducts,
     required this.topCustomers,
+    required this.lowStockProducts,
+    required this.salesTrend,
+    required this.todaySalesChangePercent,
+    required this.customerNames,
+    required this.productNames,
   });
 }
 
@@ -50,6 +81,7 @@ class DashboardService {
       Duration(days: startToday.weekday % 7),
     );
     final startMonth = DateTime.utc(now.year, now.month, 1);
+    final startYesterday = startToday.subtract(const Duration(days: 1));
 
     final sales =
         await (_db.select(_db.sales)..where(
@@ -65,6 +97,8 @@ class DashboardService {
       _db.products,
     )..where((t) => t.isDeleted.equals(false))).get();
     final accounts = await _db.select(_db.customerAccounts).get();
+    final saleItems = await _db.select(_db.saleItems).get();
+    final customers = await _db.select(_db.customers).get();
 
     Money sumSales(DateTime from) => sales
         .where((s) => s.soldAt.isAfter(from) || s.soldAt.isAtSameMomentAs(from))
@@ -107,8 +141,91 @@ class DashboardService {
               ..limit(8))
             .get();
 
+    final productById = {for (final product in products) product.id: product};
+    final productTotals = <String, Money>{};
+    for (final item in saleItems) {
+      productTotals.update(
+        item.productId,
+        (value) => value + Money.parse(item.lineTotal),
+        ifAbsent: () => Money.parse(item.lineTotal),
+      );
+    }
+    final topProducts =
+        productTotals.entries
+            .map(
+              (entry) => DashboardRank(
+                id: entry.key,
+                name: productById[entry.key]?.name ?? 'منتج غير متاح',
+                amount: entry.value,
+                secondary: productById[entry.key]?.sku,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.amount.compareTo(a.amount));
+
+    final customerById = {
+      for (final customer in customers) customer.id: customer,
+    };
+    final customerTotals = <String, Money>{};
+    for (final sale in sales) {
+      customerTotals.update(
+        sale.customerId,
+        (value) => value + Money.parse(sale.subtotal),
+        ifAbsent: () => Money.parse(sale.subtotal),
+      );
+    }
+    final topCustomers =
+        customerTotals.entries
+            .map(
+              (entry) => DashboardRank(
+                id: entry.key,
+                name: customerById[entry.key]?.name ?? 'عميل غير متاح',
+                amount: entry.value,
+                secondary: customerById[entry.key]?.area,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.amount.compareTo(a.amount));
+
+    final salesTrend = <SalesTrendPoint>[];
+    for (var daysAgo = 6; daysAgo >= 0; daysAgo--) {
+      final day = startToday.subtract(Duration(days: daysAgo));
+      final nextDay = day.add(const Duration(days: 1));
+      final amount = sales
+          .where(
+            (sale) =>
+                !sale.soldAt.isBefore(day) && sale.soldAt.isBefore(nextDay),
+          )
+          .fold(Money.zero(), (sum, sale) => sum + Money.parse(sale.subtotal));
+      salesTrend.add(SalesTrendPoint(date: day, amount: amount));
+    }
+
+    final todaySales = sumSales(startToday);
+    final yesterdaySales = sales
+        .where(
+          (sale) =>
+              !sale.soldAt.isBefore(startYesterday) &&
+              sale.soldAt.isBefore(startToday),
+        )
+        .fold(Money.zero(), (sum, sale) => sum + Money.parse(sale.subtotal));
+    final changePercent = yesterdaySales.isZero
+        ? (todaySales.isZero ? 0.0 : 100.0)
+        : ((todaySales.minorUnits - yesterdaySales.minorUnits).toDouble() /
+              yesterdaySales.minorUnits.toDouble()) *
+              100;
+
+    final lowStockProducts =
+        products.where((product) {
+          final stock = Quantity.parse(product.currentStock);
+          return stock <= Quantity.parse(product.minimumStock);
+        }).toList()..sort(
+          (a, b) => Quantity.parse(
+            a.currentStock,
+          ).compareTo(Quantity.parse(b.currentStock)),
+        );
+
     return DashboardSnapshot(
-      todaySales: sumSales(startToday),
+      todaySales: todaySales,
       weeklySales: sumSales(startWeek),
       monthlySales: sumSales(startMonth),
       outstandingDebt: debt,
@@ -121,8 +238,17 @@ class DashboardService {
       recentSales: recentSales.take(6).toList(),
       recentCollections: recentCols.take(6).toList(),
       recentMovements: movements,
-      topProducts: const [],
-      topCustomers: const [],
+      topProducts: topProducts.take(5).toList(),
+      topCustomers: topCustomers.take(5).toList(),
+      lowStockProducts: lowStockProducts.take(6).toList(),
+      salesTrend: salesTrend,
+      todaySalesChangePercent: changePercent,
+      customerNames: {
+        for (final customer in customers) customer.id: customer.name,
+      },
+      productNames: {
+        for (final product in products) product.id: product.name,
+      },
     );
   }
 }

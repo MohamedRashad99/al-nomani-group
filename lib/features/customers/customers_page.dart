@@ -2,9 +2,11 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/utils/arabic_format.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/catalog_service.dart';
@@ -67,11 +69,8 @@ class _CustomersPageState extends State<CustomersPage> {
                       child: ListTile(
                         title: Text(c.name),
                         subtitle: Text('${c.phone ?? ''} • ${c.area ?? ''}'),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CustomerStatementPage(customer: c),
-                          ),
+                        onTap: () => context.push(
+                          '/customers/${c.id}/statement',
                         ),
                         trailing: session.can(AppPermission.customersUpdate)
                             ? IconButton(
@@ -193,14 +192,53 @@ class CustomerStatementPage extends StatelessWidget {
               const Divider(),
               for (final tx in txs)
                 ListTile(
-                  title: Text(tx.type),
-                  subtitle: Text(tx.createdAt.toLocal().toString()),
+                  title: Text(_accountType(tx.type)),
+                  subtitle: Text(ArabicFormat.dateTime(tx.createdAt)),
                   trailing: MoneyText(Money.parse(tx.amount)),
                 ),
             ],
           );
         },
       ),
+    );
+  }
+
+  String _accountType(String type) => switch (type) {
+    'sale' => 'بيع',
+    'payment' => 'سداد',
+    'sale_cancel' => 'عكس بيع ملغى',
+    'payment_cancel' => 'عكس سداد',
+    _ => 'حركة حساب',
+  };
+}
+
+class CustomerStatementRoutePage extends StatelessWidget {
+  const CustomerStatementRoutePage({super.key, required this.customerId});
+
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context) {
+    final db = sl<AppDatabase>();
+    return FutureBuilder<Customer?>(
+      future:
+          (db.select(
+            db.customers,
+          )..where((row) => row.id.equals(customerId))).getSingleOrNull(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final customer = snapshot.data;
+        if (customer == null) {
+          return const Scaffold(
+            body: Center(child: Text('العميل غير موجود.')),
+          );
+        }
+        return CustomerStatementPage(customer: customer);
+      },
     );
   }
 }

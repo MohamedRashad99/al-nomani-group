@@ -1,7 +1,9 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:bcrypt/bcrypt.dart';
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/errors/app_exception.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
@@ -15,15 +17,21 @@ class UserAdminService {
     required MetadataStore metadata,
     required SyncQueueRepository queue,
     required AuditService audit,
+    required Dio dio,
+    required AppConfig config,
   }) : _db = db,
        _metadata = metadata,
        _queue = queue,
-       _audit = audit;
+       _audit = audit,
+       _dio = dio,
+       _config = config;
 
   final AppDatabase _db;
   final MetadataStore _metadata;
   final SyncQueueRepository _queue;
   final AuditService _audit;
+  final Dio _dio;
+  final AppConfig _config;
 
   Future<List<User>> list() =>
       (_db.select(_db.users)..where((t) => t.isDeleted.equals(false))).get();
@@ -48,7 +56,7 @@ class UserAdminService {
       throw const ValidationException('كلمة المرور يجب ألا تقل عن 8 أحرف.');
     }
 
-    return _db.transaction(() async {
+    final userId = await _db.transaction(() async {
       final now = DateTime.now().toUtc();
       final deviceId = await _metadata.deviceId();
       final userId = id ?? newId();
@@ -112,6 +120,23 @@ class UserAdminService {
       );
       return userId;
     });
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '${_config.apiBaseUrl}/api/v1/users',
+        data: {
+          'id': userId,
+          'username': username.trim(),
+          'display_name': displayName.trim(),
+          if (password?.isNotEmpty == true) 'password': password,
+          'role_id': roleId,
+          'is_active': isActive,
+        },
+      );
+    } catch (_) {
+      // The local account remains usable offline. Its metadata stays queued;
+      // an administrator can set its server password when online.
+    }
+    return userId;
   }
 
   Future<void> disable(AppSession session, String userId) async {

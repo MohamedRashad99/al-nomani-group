@@ -1,11 +1,18 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/file_download.dart';
+import '../../data/local/app_database.dart';
+import '../../domain/services/conflict_resolution_service.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../auth/auth_cubit.dart';
 import 'backup_cubit.dart';
 
 class BackupPage extends StatelessWidget {
@@ -25,6 +32,7 @@ class _BackupView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthCubit>().state.session;
     return AppScaffold(
       title: S.backup,
       child: BlocBuilder<BackupCubit, BackupState>(
@@ -61,7 +69,23 @@ class _BackupView extends StatelessWidget {
                       : h.lastError!,
                 ),
                 _tile(S.internetStatus, h.online ? S.online : S.offline),
-                _tile(S.backupStatus, h.statusAr),
+                _tile(
+                  S.backupStatus,
+                  h.backupConfigured == false
+                      ? 'غير مهيأ'
+                      : h.backupFailed > 0
+                      ? 'فشل النسخ إلى Google Sheets'
+                      : h.backupPending > 0
+                      ? '${h.backupPending} نسخة في انتظار Google Sheets'
+                      : 'Google Sheets جاهز',
+                  color: h.backupFailed > 0
+                      ? AppColors.danger
+                      : h.backupConfigured == false
+                      ? AppColors.warning
+                      : AppColors.green,
+                ),
+                if (h.backupLastError?.isNotEmpty == true)
+                  _tile('خطأ Google Sheets', h.backupLastError!),
                 _tile(S.localDbStatus, 'محلية وجاهزة'),
               ],
               if (state.message != null)
@@ -69,22 +93,94 @@ class _BackupView extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   child: Text(state.message!),
                 ),
+              FutureBuilder(
+                future: sl<ConflictResolutionService>().openConflicts(),
+                builder: (context, snapshot) {
+                  final conflicts = snapshot.data ?? const <Conflict>[];
+                  if (conflicts.isEmpty) return const SizedBox.shrink();
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'تعارضات تحتاج مراجعة',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          for (final conflict in conflicts)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                '${conflict.entityType} • ${conflict.entityId}',
+                              ),
+                              subtitle: const Text(
+                                'اختر النسخة المعتمدة. ستبقى النسختان محفوظتين في سجل التعارض.',
+                              ),
+                              isThreeLine: true,
+                              trailing: PopupMenuButton<String>(
+                                onSelected: (value) async {
+                                  final service =
+                                      sl<ConflictResolutionService>();
+                                  final currentSession = context
+                                      .read<AuthCubit>()
+                                      .state
+                                      .session!;
+                                  if (value == 'server') {
+                                    await service.acceptServer(
+                                      currentSession,
+                                      conflict.id,
+                                    );
+                                  } else {
+                                    await service.keepLocal(
+                                      currentSession,
+                                      conflict.id,
+                                    );
+                                  }
+                                  if (context.mounted) {
+                                    await context
+                                        .read<BackupCubit>()
+                                        .refresh();
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'server',
+                                    child: Text('اعتماد نسخة الخادم'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'local',
+                                    child: Text('الاحتفاظ بالنسخة المحلية'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
               FilledButton(
-                onPressed: state.busy
+                onPressed: state.busy ||
+                        session?.can(AppPermission.backupSync) != true
                     ? null
                     : () => context.read<BackupCubit>().syncNow(),
                 child: const Text(S.syncNow),
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
-                onPressed: state.busy
+                onPressed: state.busy ||
+                        session?.can(AppPermission.backupRetry) != true
                     ? null
                     : () => context.read<BackupCubit>().retryFailed(),
                 child: const Text(S.retryFailed),
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
-                onPressed: state.busy
+                onPressed: state.busy ||
+                        session?.can(AppPermission.backupFullSync) != true
                     ? null
                     : () => context.read<BackupCubit>().fullBackup(),
                 child: const Text(S.fullBackupNow),
@@ -98,12 +194,17 @@ class _BackupView extends StatelessWidget {
                         await cubit.exportLocal();
                         final json = cubit.state.exportJson;
                         if (json != null && context.mounted) {
-                          await Clipboard.setData(ClipboardData(text: json));
+                          await downloadBytes(
+                            Uint8List.fromList(utf8.encode(json)),
+                            filename:
+                                'al-nomani-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json',
+                            mimeType: 'application/json;charset=utf-8',
+                          );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'تم نسخ النسخة الاحتياطية إلى الحافظة.',
+                                  'تم تنزيل النسخة الاحتياطية المحلية.',
                                 ),
                               ),
                             );

@@ -15,36 +15,81 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.sand,
-      fontFamily: 'Tahoma',
+      fontFamily: 'NotoKufiArabic',
+      visualDensity: VisualDensity.standard,
+      textTheme: const TextTheme(
+        headlineLarge: TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.w800,
+          height: 1.35,
+          color: AppColors.text,
+        ),
+        headlineSmall: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          height: 1.45,
+          color: AppColors.text,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.text,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: AppColors.text,
+        ),
+        bodyMedium: TextStyle(fontSize: 13, height: 1.6),
+        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.darkGreen,
-        foregroundColor: Colors.white,
-        centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.text,
+        centerTitle: false,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
         color: AppColors.card,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: EdgeInsets.zero,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFE4E9E1)),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFDDE4DA)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFDDE4DA)),
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(44, 48),
           backgroundColor: AppColors.green,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
       navigationBarTheme: const NavigationBarThemeData(
         backgroundColor: Colors.white,
         indicatorColor: Color(0xFFC8E6C9),
+        height: 72,
       ),
+      dividerTheme: const DividerThemeData(color: Color(0xFFE4E9E1)),
     );
   }
 }
