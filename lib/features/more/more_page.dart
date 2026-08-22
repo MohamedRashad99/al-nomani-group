@@ -23,8 +23,6 @@ class MorePage extends StatelessWidget {
           '/import',
           Icons.upload_file_outlined,
         ),
-      if (permissions.contains(AppPermission.productsView))
-        const _Module(S.products, '/products', Icons.inventory_2_outlined),
       if (permissions.contains(AppPermission.inventoryView))
         const _Module(S.inventory, '/inventory', Icons.warehouse_outlined),
       if (permissions.contains(AppPermission.collectionsView))

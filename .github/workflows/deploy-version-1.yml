@@ -1,0 +1,49 @@
+name: Deploy version_1 preview
+
+on:
+  push:
+    branches: [version_1]
+  workflow_dispatch:
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: sudo apt-get update -qq && sudo apt-get install -y libsqlite3-dev
+      - run: dart pub get --directory packages/shared
+      - run: flutter pub get
+      - name: Web SQLite assets
+        run: bash tool/prepare_web_db.sh
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Build preview web
+        run: |
+          flutter build web --release --no-wasm-dry-run --base-href /al-nomani-group/
+          cp web/version.json build/web/version.json
+          cp web/sqlite3.wasm build/web/sqlite3.wasm
+          cp web/drift_worker.js build/web/drift_worker.js
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      - name: Deploy to GitHub Pages
+        id: pages
+        uses: actions/deploy-pages@v4

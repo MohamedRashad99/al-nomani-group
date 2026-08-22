@@ -29,7 +29,7 @@ class AppScaffold extends StatelessWidget {
     final session = context.watch<AuthCubit>().state.session;
     final items = _items(session?.permissions ?? {});
 
-    if (form == AppFormFactor.phone) {
+    if (Breakpoints.isPhone(context)) {
       final primary = _primaryItems(items);
       return Scaffold(
         appBar: AppBar(
@@ -50,18 +50,19 @@ class AppScaffold extends StatelessWidget {
           ),
           actions: actions,
         ),
-        drawer: _AppDrawer(items: items),
+        drawer: _AppDrawer(items: items, sessionName: session?.displayName),
         body: SafeArea(child: child),
         floatingActionButton: fab,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selected(context, primary),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           onDestinationSelected: (index) => context.go(primary[index].path),
           destinations: [
             for (final item in primary)
               NavigationDestination(
                 selectedIcon: Icon(item.selectedIcon),
                 icon: Icon(item.icon),
-                label: item.label,
+                label: item.shortLabel,
               ),
           ],
         ),
@@ -176,10 +177,18 @@ class AppScaffold extends StatelessWidget {
   }
 
   List<_NavItem> _primaryItems(List<_NavItem> all) {
-    final preferred = ['/dashboard', '/sales', '/customers', '/inventory'];
-    final primary = [
-      for (final path in preferred) ...all.where((item) => item.path == path),
-    ];
+    const preferred = ['/dashboard', '/sales', '/customers', '/products'];
+    final primary = <_NavItem>[];
+    for (final path in preferred) {
+      for (final item in all) {
+        if (item.path == path) primary.add(item);
+      }
+    }
+    for (final item in all) {
+      if (primary.length >= 4) break;
+      if (primary.any((entry) => entry.path == item.path)) continue;
+      primary.add(item);
+    }
     return [
       ...primary.take(4),
       const _NavItem(
@@ -187,6 +196,7 @@ class AppScaffold extends StatelessWidget {
         S.more,
         Icons.grid_view_outlined,
         Icons.grid_view_rounded,
+        shortLabel: S.more,
       ),
     ];
   }
@@ -208,6 +218,7 @@ class AppScaffold extends StatelessWidget {
       S.dashboard,
       Icons.dashboard_outlined,
       Icons.dashboard_rounded,
+      shortLabel: 'الرئيسية',
     ),
     if (permissions.contains(AppPermission.salesView))
       const _NavItem(
@@ -229,6 +240,7 @@ class AppScaffold extends StatelessWidget {
         S.outstanding,
         Icons.account_balance_wallet_outlined,
         Icons.account_balance_wallet_rounded,
+        shortLabel: 'الآجلة',
       ),
     if (permissions.contains(AppPermission.productsView))
       const _NavItem(
@@ -271,6 +283,7 @@ class AppScaffold extends StatelessWidget {
         S.backup,
         Icons.cloud_sync_outlined,
         Icons.cloud_sync_rounded,
+        shortLabel: 'المزامنة',
       ),
     if (permissions.contains(AppPermission.settingsView))
       const _NavItem(
@@ -283,12 +296,20 @@ class AppScaffold extends StatelessWidget {
 }
 
 class _NavItem {
-  const _NavItem(this.path, this.label, this.icon, this.selectedIcon);
+  const _NavItem(
+    this.path,
+    this.label,
+    this.icon,
+    this.selectedIcon, {
+    String? shortLabel,
+  }) : shortLabelOverride = shortLabel;
 
   final String path;
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+  final String? shortLabelOverride;
+  String get shortLabel => shortLabelOverride ?? label;
 }
 
 class _RailItem extends StatelessWidget {
@@ -350,9 +371,10 @@ class _RailItem extends StatelessWidget {
 }
 
 class _AppDrawer extends StatelessWidget {
-  const _AppDrawer({required this.items});
+  const _AppDrawer({required this.items, this.sessionName});
 
   final List<_NavItem> items;
+  final String? sessionName;
 
   @override
   Widget build(BuildContext context) {
@@ -362,9 +384,18 @@ class _AppDrawer extends StatelessWidget {
         child: Column(
           children: [
             const Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
               child: BrandMark(size: 52),
             ),
+            if (sessionName != null)
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE7F3E6),
+                  child: Icon(Icons.person, color: AppColors.darkGreen),
+                ),
+                title: Text(sessionName!),
+                subtitle: const Text('القائمة الجانبية'),
+              ),
             const Divider(),
             Expanded(
               child: ListView(
