@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
-import 'package:shelf_cors_headers/shelf_cors_headers.dart';
 import 'package:shelf_router/shelf_router.dart';
 
 import 'config/env.dart';
 import 'database/postgres_db.dart';
 import 'database/server_seeder.dart';
 import 'middleware/auth_middleware.dart';
+import 'middleware/cors_middleware.dart';
 import 'routes/auth_routes.dart';
 import 'routes/backup_routes.dart';
 import 'routes/resource_routes.dart';
@@ -47,19 +47,7 @@ Future<HttpServer> createServer({required int port, PostgresDb? db}) async {
 
   final handler = Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(
-        corsHeaders(
-          headers: {
-            ACCESS_CONTROL_ALLOW_ORIGIN: '*',
-            ACCESS_CONTROL_ALLOW_METHODS:
-                'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-            ACCESS_CONTROL_ALLOW_HEADERS:
-                'Origin, Content-Type, Accept, Authorization, X-Requested-With',
-            ACCESS_CONTROL_EXPOSE_HEADERS: 'Content-Type, Authorization',
-            ACCESS_CONTROL_ALLOW_CREDENTIALS: 'false',
-          },
-        ),
-      )
+      .addMiddleware(corsMiddleware())
       .addHandler(
         Cascade()
             .add(public.call)

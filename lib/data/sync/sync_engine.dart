@@ -152,7 +152,7 @@ class SyncEngine {
           );
 
       if (items.isEmpty) {
-        await _retryServerBackup();
+        await _refreshServerBackupHealth();
         await _finishLog(logId, 'success', 0, 0, 0, null);
         await _markSuccess();
         return;
@@ -367,7 +367,7 @@ class SyncEngine {
     }
   }
 
-  Future<void> _retryServerBackup() async {
+  Future<void> retryServerBackup() async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '${_config.apiBaseUrl}/api/v1/backup/retry',

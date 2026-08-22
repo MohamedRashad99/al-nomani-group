@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -400,7 +401,7 @@ class GoogleSheetsBackup {
     final credentials = ServiceAccountCredentials.fromJson(jsonDecode(raw));
     final client = await clientViaServiceAccount(credentials, [
       SheetsApi.spreadsheetsScope,
-    ]);
+    ]).timeout(const Duration(seconds: 15));
     return SheetsApi(client);
   }
 

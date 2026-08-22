@@ -82,8 +82,20 @@ class BackupCubit extends Cubit<BackupState> {
   }
 
   Future<void> retryFailed() async {
+    emit(state.copyWith(busy: true, message: null));
     await _queue.retryFailed();
-    await syncNow();
+    await _engine.syncNow(force: true);
+    await _engine.retryServerBackup();
+    final health = await _engine.health();
+    emit(
+      state.copyWith(
+        busy: false,
+        health: health,
+        message: health.failed > 0 || health.backupFailed > 0
+            ? 'اكتملت المحاولة مع أخطاء. راجع التفاصيل أدناه.'
+            : 'اكتملت إعادة المحاولة.',
+      ),
+    );
   }
 
   Future<void> exportLocal() async {

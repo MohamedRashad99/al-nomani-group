@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:bcrypt/bcrypt.dart';
@@ -46,8 +47,8 @@ class SyncService {
         ),
       );
     }
-    final backupResult = await backup.processPending();
-    return {'results': results, 'backup': backupResult.toJson()};
+    unawaited(backup.processPending());
+    return {'results': results, 'backup': await backup.health()};
   }
 
   Future<Map<String, dynamic>> _applyOne({

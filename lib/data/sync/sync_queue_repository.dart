@@ -116,7 +116,7 @@ class SyncQueueRepository {
 
   Future<void> markPending(String id) async {
     await (_db.update(_db.syncQueue)..where((t) => t.id.equals(id))).write(
-      const SyncQueueCompanion(status: Value('pending')),
+      SyncQueueCompanion(status: Value(SyncStatus.pending.name)),
     );
   }
 
