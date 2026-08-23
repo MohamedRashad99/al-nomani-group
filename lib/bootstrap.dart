@@ -8,6 +8,7 @@ import 'core/di/injector.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'data/local/app_database.dart';
 import 'data/local/metadata_store.dart';
+import 'data/sync/firebase_sync_service.dart';
 import 'data/sync/sync_engine.dart';
 import 'domain/services/seed_service.dart';
 import 'features/auth/auth_cubit.dart';
@@ -32,6 +33,7 @@ Future<void> bootstrap({AppDatabase? database}) async {
   await meta.set('sync_protocol_version', '${AppVersions.syncProtocolVersion}');
   await sl<SeedService>().seedIfEmpty();
   await FirebaseBootstrap.ensure();
+  await sl<FirebaseSyncService>().hydrateLocal(sl<AppDatabase>());
   await sl<AuthCubit>().restore();
   unawaited(sl<SyncEngine>().maybeRunScheduled());
 }

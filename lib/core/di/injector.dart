@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../data/local/app_database.dart';
@@ -6,6 +7,7 @@ import '../../data/local/metadata_store.dart';
 import '../../data/remote/auth_interceptor.dart';
 import '../../data/remote/auth_token_store.dart';
 import '../../data/sync/arabic_workbook_builder.dart';
+import '../../data/sync/firebase_sync_service.dart';
 import '../../data/sync/google_sheets_live_sync.dart';
 import '../../data/sync/sync_baseline_service.dart';
 import '../../data/sync/sync_engine.dart';
@@ -42,7 +44,13 @@ Future<void> configureDependencies({
 
   sl.registerSingleton<AppConfig>(config);
   sl.registerSingleton<AppDatabase>(database ?? AppDatabase());
-  sl.registerLazySingleton(AuthTokenStore.new);
+  sl.registerLazySingleton(
+    () => const FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      webOptions: WebOptions(),
+    ),
+  );
+  sl.registerLazySingleton(() => AuthTokenStore(sl()));
   sl.registerLazySingleton<Dio>(() {
     final options = BaseOptions(
       connectTimeout: const Duration(seconds: 5),
@@ -113,10 +121,12 @@ Future<void> configureDependencies({
       config: sl(),
       dio: sl(),
       tokens: sl(),
+      storage: sl(),
     ),
   );
   sl.registerLazySingleton(() => ArabicWorkbookBuilder(sl()));
   sl.registerLazySingleton(() => GoogleSheetsLiveSync(sl(), sl(), sl()));
+  sl.registerLazySingleton(FirebaseSyncService.new);
   sl.registerLazySingleton(
     () => SyncEngine(
       db: sl(),
@@ -125,6 +135,7 @@ Future<void> configureDependencies({
       baseline: sl(),
       config: sl(),
       dio: sl(),
+      firebase: sl(),
       sheets: sl(),
     ),
   );

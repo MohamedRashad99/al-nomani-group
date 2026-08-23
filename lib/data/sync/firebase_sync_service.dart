@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drift/drift.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/firebase/firebase_bootstrap.dart';
 import '../local/app_database.dart';
@@ -216,5 +217,364 @@ class FirebaseSyncService {
       ];
     }
     return value.toString();
+  }
+
+  Future<int> hydrateLocal(AppDatabase db) async {
+    if (!await ensureReady()) return 0;
+    var written = 0;
+    try {
+      written += await _hydrateCustomers(db);
+      written += await _hydrateCategories(db);
+      written += await _hydrateProducts(db);
+      written += await _hydrateSales(db);
+      written += await _hydrateSaleItems(db);
+      written += await _hydrateCollections(db);
+      written += await _hydrateAccounts(db);
+      written += await _hydrateAccountTx(db);
+      written += await _hydrateInventory(db);
+      written += await _hydrateUsers(db);
+    } catch (error) {
+      debugPrint('Firebase hydrate failed: $error');
+    }
+    return written;
+  }
+
+  Future<List<Map<String, dynamic>>> _sectionDocs(String section) async {
+    final snap = await _company.collection(section).get();
+    return [
+      for (final doc in snap.docs)
+        if (doc.data()['operation'] != 'delete')
+          {'id': doc.id, ...doc.data()},
+    ];
+  }
+
+  String _text(Map<String, dynamic> data, List<String> keys, [String fallback = '']) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value == null) continue;
+      final text = '$value';
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return fallback;
+  }
+
+  DateTime _date(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is Timestamp) return value.toDate().toUtc();
+      if (value is DateTime) return value.toUtc();
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed.toUtc();
+      }
+    }
+    return DateTime.now().toUtc();
+  }
+
+  int _versionOf(Map<String, dynamic> data) {
+    final value = data['version'];
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 1;
+  }
+
+  Future<int> _hydrateCustomers(AppDatabase db) async {
+    final docs = await _sectionDocs('customers');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.customers)
+          .insertOnConflictUpdate(
+            CustomersCompanion(
+              id: Value(id),
+              name: Value(_text(data, const ['name'], 'عميل')),
+              phone: Value(_text(data, const ['phone'])),
+              address: Value(_text(data, const ['address'])),
+              area: Value(_text(data, const ['area'])),
+              notes: Value(_text(data, const ['notes'])),
+              isActive: Value(data['is_active'] != false && data['isActive'] != false),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateCategories(AppDatabase db) async {
+    final docs = await _sectionDocs('categories');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.productCategories)
+          .insertOnConflictUpdate(
+            ProductCategoriesCompanion(
+              id: Value(id),
+              name: Value(_text(data, const ['name'], 'تصنيف')),
+              description: Value(_text(data, const ['description'])),
+              isActive: Value(data['is_active'] != false && data['isActive'] != false),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateProducts(AppDatabase db) async {
+    final docs = await _sectionDocs('products');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.products)
+          .insertOnConflictUpdate(
+            ProductsCompanion(
+              id: Value(id),
+              name: Value(_text(data, const ['name'], 'منتج')),
+              sku: Value(_text(data, const ['sku'], id)),
+              categoryId: Value(_text(data, const ['category_id', 'categoryId'])),
+              brand: Value(_text(data, const ['brand'])),
+              description: Value(_text(data, const ['description'])),
+              purchasePrice: Value(_text(data, const ['purchase_price', 'purchasePrice'], '0')),
+              sellingPrice: Value(_text(data, const ['selling_price', 'sellingPrice'], '0')),
+              currentStock: Value(_text(data, const ['current_stock', 'currentStock'], '0')),
+              minimumStock: Value(_text(data, const ['minimum_stock', 'minimumStock'], '0')),
+              unit: Value(_text(data, const ['unit'], 'pcs')),
+              customUnitLabel: Value(_text(data, const ['custom_unit_label', 'customUnitLabel'])),
+              isActive: Value(data['is_active'] != false && data['isActive'] != false),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateSales(AppDatabase db) async {
+    final docs = await _sectionDocs('sales');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.sales)
+          .insertOnConflictUpdate(
+            SalesCompanion(
+              id: Value(id),
+              customerId: Value(_text(data, const ['customer_id', 'customerId'])),
+              saleNumber: Value(_text(data, const ['sale_number', 'saleNumber'], id)),
+              status: Value(_text(data, const ['status'], 'completed')),
+              subtotal: Value(_text(data, const ['subtotal'], '0')),
+              paidAmount: Value(_text(data, const ['paid_amount', 'paidAmount'], '0')),
+              remainingAmount: Value(
+                _text(data, const ['remaining_amount', 'remainingAmount'], '0'),
+              ),
+              notes: Value(_text(data, const ['notes'])),
+              soldAt: Value(_date(data, const ['sold_at', 'soldAt'])),
+              createdBy: Value(_text(data, const ['created_by', 'createdBy'])),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateSaleItems(AppDatabase db) async {
+    final docs = await _sectionDocs('sale_items');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      await db
+          .into(db.saleItems)
+          .insertOnConflictUpdate(
+            SaleItemsCompanion(
+              id: Value(id),
+              saleId: Value(_text(data, const ['sale_id', 'saleId'])),
+              productId: Value(_text(data, const ['product_id', 'productId'])),
+              quantity: Value(_text(data, const ['quantity'], '0')),
+              unit: Value(_text(data, const ['unit'], 'pcs')),
+              unitPrice: Value(_text(data, const ['unit_price', 'unitPrice'], '0')),
+              lineTotal: Value(_text(data, const ['line_total', 'lineTotal'], '0')),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateCollections(AppDatabase db) async {
+    final docs = await _sectionDocs('collections');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.collections)
+          .insertOnConflictUpdate(
+            CollectionsCompanion(
+              id: Value(id),
+              customerId: Value(_text(data, const ['customer_id', 'customerId'])),
+              amount: Value(_text(data, const ['amount'], '0')),
+              paymentMethod: Value(
+                _text(data, const ['payment_method', 'paymentMethod'], 'cash'),
+              ),
+              collectedAt: Value(_date(data, const ['collected_at', 'collectedAt'])),
+              notes: Value(_text(data, const ['notes'])),
+              createdBy: Value(_text(data, const ['created_by', 'createdBy'])),
+              status: Value(_text(data, const ['status'], 'completed')),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateAccounts(AppDatabase db) async {
+    final docs = await _sectionDocs('accounts');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.customerAccounts)
+          .insertOnConflictUpdate(
+            CustomerAccountsCompanion(
+              id: Value(id),
+              customerId: Value(_text(data, const ['customer_id', 'customerId'])),
+              cachedBalance: Value(
+                _text(data, const ['cached_balance', 'cachedBalance'], '0'),
+              ),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateAccountTx(AppDatabase db) async {
+    final docs = await _sectionDocs('account_transactions');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      await db
+          .into(db.customerAccountTransactions)
+          .insertOnConflictUpdate(
+            CustomerAccountTransactionsCompanion(
+              id: Value(id),
+              accountId: Value(_text(data, const ['account_id', 'accountId'])),
+              customerId: Value(_text(data, const ['customer_id', 'customerId'])),
+              type: Value(_text(data, const ['type'], 'sale')),
+              amount: Value(_text(data, const ['amount'], '0')),
+              runningBalance: Value(
+                _text(data, const ['running_balance', 'runningBalance'], '0'),
+              ),
+              referenceType: Value(
+                _text(data, const ['reference_type', 'referenceType']),
+              ),
+              referenceId: Value(_text(data, const ['reference_id', 'referenceId'])),
+              notes: Value(_text(data, const ['notes'])),
+              createdBy: Value(_text(data, const ['created_by', 'createdBy'])),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateInventory(AppDatabase db) async {
+    final docs = await _sectionDocs('inventory');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId']);
+      if (id.isEmpty) continue;
+      await db
+          .into(db.inventoryMovements)
+          .insertOnConflictUpdate(
+            InventoryMovementsCompanion(
+              id: Value(id),
+              productId: Value(_text(data, const ['product_id', 'productId'])),
+              type: Value(_text(data, const ['type'], 'adjustment')),
+              quantity: Value(_text(data, const ['quantity'], '0')),
+              unit: Value(_text(data, const ['unit'], 'pcs')),
+              previousStock: Value(
+                _text(data, const ['previous_stock', 'previousStock'], '0'),
+              ),
+              newStock: Value(_text(data, const ['new_stock', 'newStock'], '0')),
+              referenceType: Value(_text(data, const ['reference_type', 'referenceType'])),
+              referenceId: Value(_text(data, const ['reference_id', 'referenceId'])),
+              notes: Value(_text(data, const ['notes'])),
+              createdBy: Value(_text(data, const ['created_by', 'createdBy'])),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
+            ),
+          );
+    }
+    return docs.length;
+  }
+
+  Future<int> _hydrateUsers(AppDatabase db) async {
+    final docs = await _sectionDocs('users');
+    for (final data in docs) {
+      final id = _text(data, const ['id', 'entityId', 'erpUserId']);
+      if (id.isEmpty) continue;
+      final existing = await (db.select(
+        db.users,
+      )..where((t) => t.id.equals(id))).getSingleOrNull();
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.users)
+          .insertOnConflictUpdate(
+            UsersCompanion(
+              id: Value(id),
+              username: Value(
+                _text(data, const ['username'], existing?.username ?? id),
+              ),
+              displayName: Value(
+                _text(data, const [
+                  'display_name',
+                  'displayName',
+                  'erpDisplayName',
+                ], existing?.displayName ?? 'مستخدم'),
+              ),
+              passwordHash: Value(
+                existing?.passwordHash ??
+                    _text(data, const ['password_hash', 'passwordHash'], ''),
+              ),
+              roleId: Value(
+                _text(data, const ['role_id', 'roleId', 'erpRole'], 'cashier'),
+              ),
+              isActive: Value(data['is_active'] != false && data['isActive'] != false),
+              version: Value(_versionOf(data)),
+              deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
+              createdAt: Value(
+                existing?.createdAt ?? _date(data, const ['created_at', 'createdAt']),
+              ),
+              updatedAt: Value(now),
+            ),
+          );
+    }
+    return docs.length;
   }
 }

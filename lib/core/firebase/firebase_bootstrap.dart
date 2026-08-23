@@ -35,6 +35,9 @@ class FirebaseBootstrap {
           ),
         );
       }
+      if (kIsWeb) {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      }
       if (FirebaseAuth.instance.currentUser == null) {
         await FirebaseAuth.instance.signInAnonymously();
       }

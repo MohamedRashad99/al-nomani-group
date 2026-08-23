@@ -30,7 +30,10 @@ jobs:
       - run: dart pub get --directory packages/shared
       - run: flutter pub get
       - name: Web SQLite assets
-        run: bash tool/prepare_web_db.sh
+        run: |
+          bash tool/prepare_web_db.sh
+          test -s web/sqlite3.wasm
+          test -s web/drift_worker.js
       - run: dart run build_runner build --delete-conflicting-outputs
       - name: Build preview web
         run: |

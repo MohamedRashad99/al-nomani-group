@@ -1,6 +1,7 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 part 'tables.dart';
 part 'app_database.g.dart';
@@ -94,8 +95,30 @@ QueryExecutor _open() {
   return driftDatabase(
     name: 'al_nomani_erp',
     web: DriftWebOptions(
-      sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-      driftWorker: Uri.parse('drift_worker.js'),
+      sqlite3Wasm: _webAssetUri('sqlite3.wasm'),
+      driftWorker: _webAssetUri('drift_worker.js'),
+      onResult: (result) {
+        debugPrint(
+          'Drift web storage: ${result.chosenImplementation} '
+          'missing=${result.missingFeatures}',
+        );
+        if (result.chosenImplementation == WasmStorageImplementation.inMemory) {
+          debugPrint(
+            'تحذير: قاعدة البيانات تعمل في الذاكرة فقط ولن تُحفظ بعد إغلاق التطبيق.',
+          );
+        }
+      },
     ),
   );
+}
+
+Uri _webAssetUri(String name) {
+  final base = Uri.base;
+  final path = base.path;
+  final directory = path.endsWith('.html') || path.split('/').last.contains('.')
+      ? path.substring(0, path.lastIndexOf('/') + 1)
+      : path.endsWith('/')
+      ? path
+      : '$path/';
+  return base.replace(path: directory).resolve(name);
 }

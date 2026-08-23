@@ -124,14 +124,22 @@ class AuthService {
     final user = await (_db.select(
       _db.users,
     )..where((t) => t.id.equals(session.userId))).getSingleOrNull();
-    if (user == null || !user.isActive || user.isDeleted) return null;
-    final permissions = await _permissionsFor(user.roleId);
+    if (user != null && (!user.isActive || user.isDeleted)) {
+      await _storage.delete(key: _sessionKey);
+      return null;
+    }
+    if (user == null) {
+      await _ensureLocalUser(session);
+    }
+    final permissions = user == null
+        ? session.permissions
+        : await _permissionsFor(user.roleId);
     final refreshed = AppSession(
       userId: session.userId,
       username: session.username,
       displayName: session.displayName,
       roleName: session.roleName,
-      permissions: permissions,
+      permissions: permissions.isEmpty ? session.permissions : permissions,
       expiresAt: session.expiresAt,
       isOfflineVerified: session.isOfflineVerified,
     );
@@ -169,6 +177,25 @@ class AuthService {
     await _metadata.set('last_username', session.username);
     await _metadata.set('last_display_name', session.displayName);
     await _metadata.set('last_role', session.roleName);
+  }
+
+  Future<void> _ensureLocalUser(AppSession session) async {
+    final now = DateTime.now().toUtc();
+    await _db
+        .into(_db.users)
+        .insertOnConflictUpdate(
+          UsersCompanion(
+            id: Value(session.userId),
+            username: Value(session.username),
+            displayName: Value(session.displayName),
+            passwordHash: Value(BCrypt.hashpw(newId(), BCrypt.gensalt())),
+            roleId: Value(session.roleName),
+            isActive: const Value(true),
+            createdAt: Value(now),
+            updatedAt: Value(now),
+            deviceId: Value(await _metadata.deviceId()),
+          ),
+        );
   }
 
   Future<void> _cacheRemoteUser(
