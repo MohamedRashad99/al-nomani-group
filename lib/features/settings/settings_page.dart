@@ -241,9 +241,20 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await sl<SyncEngine>().syncNow(force: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('اكتملت المزامنة.')));
+      final health = await sl<SyncEngine>().health();
+      if (!mounted) return;
+      final failed = health.failed > 0 || health.backupFailed > 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            failed
+                ? health.backupLastError ??
+                      health.lastError ??
+                      'اكتملت المحاولة مع أخطاء.'
+                : S.syncSuccess,
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(

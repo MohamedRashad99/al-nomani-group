@@ -37,7 +37,17 @@ class _BackupView extends StatelessWidget {
     final session = context.watch<AuthCubit>().state.session;
     return AppScaffold(
       title: S.backup,
-      child: BlocBuilder<BackupCubit, BackupState>(
+      child: BlocListener<BackupCubit, BackupState>(
+        listenWhen: (previous, current) =>
+            current.message != null && current.message != previous.message,
+        listener: (context, state) {
+          final message = state.message;
+          if (message == null) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+        },
+        child: BlocBuilder<BackupCubit, BackupState>(
         builder: (context, state) {
           final h = state.health;
           return ListView(
@@ -239,6 +249,7 @@ class _BackupView extends StatelessWidget {
             ],
           );
         },
+        ),
       ),
     );
   }

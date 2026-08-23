@@ -4,6 +4,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/config/app_config.dart';
@@ -57,7 +58,14 @@ class AuthService {
     }
 
     var authenticatedOnline = false;
+    final skipRemoteLogin =
+        kIsWeb &&
+        (_config.apiBaseUrl.contains('localhost') ||
+            _config.apiBaseUrl.contains('127.0.0.1'));
     try {
+      if (skipRemoteLogin) {
+        throw const FormatException('skip remote login on web localhost');
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         '${_config.apiBaseUrl}/api/v1/auth/login',
         data: {'username': normalizedUsername, 'password': password},

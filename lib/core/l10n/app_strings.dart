@@ -113,6 +113,7 @@ abstract final class S {
   static const transfer = 'تحويل';
 
   static const syncNow = 'مزامنة الآن';
+  static const syncSuccess = 'تمت المزامنة بنجاح.';
   static const openGoogleSheet = 'فتح Google Sheet';
   static const firebaseImmediateHint =
       'البيانات تُحفظ في Firebase فوراً. الجدول يُحدَّث حسب الفاصل أو عند الضغط على الآن.';

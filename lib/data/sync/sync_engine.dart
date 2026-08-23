@@ -5,6 +5,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/config/app_config.dart';
 import '../../data/local/app_database.dart';
@@ -434,7 +435,7 @@ class SyncEngine {
     if (await _firebase.ensureReady()) {
       return (reachable: true, authenticated: true);
     }
-    if (!await isOnline()) {
+    if (kIsWeb || !await isOnline()) {
       return (reachable: false, authenticated: false);
     }
     try {
@@ -463,7 +464,7 @@ class SyncEngine {
   }
 
   Future<void> _refreshServerBackupHealth() async {
-    if (!await isOnline()) return;
+    if (kIsWeb || !await isOnline()) return;
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '${_config.apiBaseUrl}/api/v1/backup/health',

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
 import '../../domain/services/backup_export_service.dart';
@@ -9,12 +10,14 @@ class BackupState extends Equatable {
   final SyncHealth? health;
   final bool busy;
   final String? message;
+  final bool success;
   final String? exportJson;
 
   const BackupState({
     this.health,
     this.busy = false,
     this.message,
+    this.success = false,
     this.exportJson,
   });
 
@@ -22,18 +25,20 @@ class BackupState extends Equatable {
     SyncHealth? health,
     bool? busy,
     String? message,
+    bool? success,
     String? exportJson,
   }) {
     return BackupState(
       health: health ?? this.health,
       busy: busy ?? this.busy,
       message: message,
+      success: success ?? false,
       exportJson: exportJson ?? this.exportJson,
     );
   }
 
   @override
-  List<Object?> get props => [health, busy, message, exportJson];
+  List<Object?> get props => [health, busy, message, success, exportJson];
 }
 
 class BackupCubit extends Cubit<BackupState> {
@@ -44,68 +49,63 @@ class BackupCubit extends Cubit<BackupState> {
   final SyncQueueRepository _queue;
   final BackupExportService _exporter;
 
+  void _emitIfOpen(BackupState next) {
+    if (!isClosed) emit(next);
+  }
+
   Future<void> refresh() async {
-    emit(state.copyWith(busy: true));
-    emit(state.copyWith(busy: false, health: await _engine.health()));
+    _emitIfOpen(state.copyWith(busy: true, message: null));
+    final health = await _engine.health();
+    _emitIfOpen(state.copyWith(busy: false, health: health, message: null));
   }
 
   Future<void> syncNow() async {
-    emit(state.copyWith(busy: true, message: null));
+    _emitIfOpen(state.copyWith(busy: true, message: null, success: false));
     await _engine.syncNow(force: true);
-    final health = await _engine.health();
-    emit(
-      state.copyWith(
-        busy: false,
-        health: health,
-        message: health.failed > 0 || health.backupFailed > 0
-            ? health.backupLastError ??
-                  health.lastError ??
-                  'اكتملت المحاولة مع أخطاء.'
-            : 'اكتملت المزامنة وتحديث Google Sheets.',
-      ),
-    );
+    if (isClosed) return;
+    _emitIfOpen(await _resultState());
   }
 
   Future<void> fullBackup() async {
-    emit(state.copyWith(busy: true, message: null));
+    _emitIfOpen(state.copyWith(busy: true, message: null, success: false));
     await _engine.syncNow(force: true);
-    final health = await _engine.health();
-    emit(
-      state.copyWith(
-        busy: false,
-        health: health,
-        message: health.backupFailed > 0
-            ? health.backupDiagnostic ?? 'تعذر تحديث Google Sheets.'
-            : 'تم تحديث ملف Google Sheets بكل الأقسام العربية.',
-      ),
-    );
+    if (isClosed) return;
+    _emitIfOpen(await _resultState());
   }
 
   Future<void> retryFailed() async {
-    emit(state.copyWith(busy: true, message: null));
+    _emitIfOpen(state.copyWith(busy: true, message: null, success: false));
     await _queue.retryFailed();
     await _engine.syncNow(force: true);
-    final health = await _engine.health();
-    emit(
+    if (isClosed) return;
+    _emitIfOpen(await _resultState());
+  }
+
+  Future<void> exportLocal() async {
+    _emitIfOpen(state.copyWith(busy: true, message: null, success: false));
+    final json = await _exporter.exportJson();
+    _emitIfOpen(
       state.copyWith(
         busy: false,
-        health: health,
-        message: health.failed > 0 || health.backupFailed > 0
-            ? 'اكتملت المحاولة مع أخطاء. راجع التفاصيل أدناه.'
-            : 'اكتملت إعادة المحاولة.',
+        exportJson: json,
+        success: true,
+        message: 'تم تجهيز النسخة الاحتياطية المحلية.',
       ),
     );
   }
 
-  Future<void> exportLocal() async {
-    emit(state.copyWith(busy: true));
-    final json = await _exporter.exportJson();
-    emit(
-      state.copyWith(
-        busy: false,
-        exportJson: json,
-        message: 'تم تجهيز النسخة الاحتياطية المحلية.',
-      ),
+  Future<BackupState> _resultState() async {
+    final health = await _engine.health();
+    final failed = health.failed > 0 || health.backupFailed > 0;
+    return state.copyWith(
+      busy: false,
+      health: health,
+      success: !failed,
+      message: failed
+          ? health.backupLastError ??
+                health.lastError ??
+                'اكتملت المحاولة مع أخطاء.'
+          : S.syncSuccess,
     );
   }
 }

@@ -222,20 +222,25 @@ class FirebaseSyncService {
   Future<int> hydrateLocal(AppDatabase db) async {
     if (!await ensureReady()) return 0;
     var written = 0;
-    try {
-      written += await _hydrateCustomers(db);
-      written += await _hydrateCategories(db);
-      written += await _hydrateProducts(db);
-      written += await _hydrateSales(db);
-      written += await _hydrateSaleItems(db);
-      written += await _hydrateCollections(db);
-      written += await _hydrateAccounts(db);
-      written += await _hydrateAccountTx(db);
-      written += await _hydrateInventory(db);
-      written += await _hydrateUsers(db);
-    } catch (error) {
-      debugPrint('Firebase hydrate failed: $error');
+    Future<int> section(String name, Future<int> Function() run) async {
+      try {
+        return await run();
+      } catch (error) {
+        debugPrint('Firebase hydrate $name failed: $error');
+        return 0;
+      }
     }
+
+    written += await section('customers', () => _hydrateCustomers(db));
+    written += await section('categories', () => _hydrateCategories(db));
+    written += await section('products', () => _hydrateProducts(db));
+    written += await section('sales', () => _hydrateSales(db));
+    written += await section('sale_items', () => _hydrateSaleItems(db));
+    written += await section('collections', () => _hydrateCollections(db));
+    written += await section('accounts', () => _hydrateAccounts(db));
+    written += await section('account_tx', () => _hydrateAccountTx(db));
+    written += await section('inventory', () => _hydrateInventory(db));
+    written += await section('users', () => _hydrateUsers(db));
     return written;
   }
 
@@ -333,6 +338,18 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
+      final sku = _text(data, const ['sku'], id);
+      await _removeUniqueClash(
+        findId: () async =>
+            (await (db.select(db.products)
+                  ..where((t) => t.sku.equals(sku)))
+                .getSingleOrNull())
+                ?.id,
+        keepId: id,
+        remove: (oldId) async {
+          await (db.delete(db.products)..where((t) => t.id.equals(oldId))).go();
+        },
+      );
       final now = DateTime.now().toUtc();
       await db
           .into(db.products)
@@ -340,7 +357,7 @@ class FirebaseSyncService {
             ProductsCompanion(
               id: Value(id),
               name: Value(_text(data, const ['name'], 'منتج')),
-              sku: Value(_text(data, const ['sku'], id)),
+              sku: Value(sku),
               categoryId: Value(_text(data, const ['category_id', 'categoryId'])),
               brand: Value(_text(data, const ['brand'])),
               description: Value(_text(data, const ['description'])),
@@ -366,6 +383,21 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
+      final saleNumber = _text(data, const ['sale_number', 'saleNumber'], id);
+      await _removeUniqueClash(
+        findId: () async =>
+            (await (db.select(db.sales)
+                  ..where((t) => t.saleNumber.equals(saleNumber)))
+                .getSingleOrNull())
+                ?.id,
+        keepId: id,
+        remove: (oldId) async {
+          await (db.delete(
+            db.saleItems,
+          )..where((t) => t.saleId.equals(oldId))).go();
+          await (db.delete(db.sales)..where((t) => t.id.equals(oldId))).go();
+        },
+      );
       final now = DateTime.now().toUtc();
       await db
           .into(db.sales)
@@ -373,7 +405,7 @@ class FirebaseSyncService {
             SalesCompanion(
               id: Value(id),
               customerId: Value(_text(data, const ['customer_id', 'customerId'])),
-              saleNumber: Value(_text(data, const ['sale_number', 'saleNumber'], id)),
+              saleNumber: Value(saleNumber),
               status: Value(_text(data, const ['status'], 'completed')),
               subtotal: Value(_text(data, const ['subtotal'], '0')),
               paidAmount: Value(_text(data, const ['paid_amount', 'paidAmount'], '0')),
@@ -453,13 +485,29 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
+      final customerId = _text(data, const ['customer_id', 'customerId']);
+      if (customerId.isNotEmpty) {
+        await _removeUniqueClash(
+          findId: () async =>
+              (await (db.select(db.customerAccounts)
+                    ..where((t) => t.customerId.equals(customerId)))
+                  .getSingleOrNull())
+                  ?.id,
+          keepId: id,
+          remove: (oldId) async {
+            await (db.delete(
+              db.customerAccounts,
+            )..where((t) => t.id.equals(oldId))).go();
+          },
+        );
+      }
       final now = DateTime.now().toUtc();
       await db
           .into(db.customerAccounts)
           .insertOnConflictUpdate(
             CustomerAccountsCompanion(
               id: Value(id),
-              customerId: Value(_text(data, const ['customer_id', 'customerId'])),
+              customerId: Value(customerId),
               cachedBalance: Value(
                 _text(data, const ['cached_balance', 'cachedBalance'], '0'),
               ),
@@ -539,18 +587,20 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId', 'erpUserId']);
       if (id.isEmpty) continue;
-      final existing = await (db.select(
+      final username = _text(data, const ['username'], id);
+      var existing = await (db.select(
         db.users,
       )..where((t) => t.id.equals(id))).getSingleOrNull();
+      existing ??= await (db.select(
+        db.users,
+      )..where((t) => t.username.equals(username))).getSingleOrNull();
       final now = DateTime.now().toUtc();
       await db
           .into(db.users)
           .insertOnConflictUpdate(
             UsersCompanion(
-              id: Value(id),
-              username: Value(
-                _text(data, const ['username'], existing?.username ?? id),
-              ),
+              id: Value(existing?.id ?? id),
+              username: Value(username),
               displayName: Value(
                 _text(data, const [
                   'display_name',
@@ -576,5 +626,15 @@ class FirebaseSyncService {
           );
     }
     return docs.length;
+  }
+
+  Future<void> _removeUniqueClash({
+    required Future<String?> Function() findId,
+    required String keepId,
+    required Future<void> Function(String oldId) remove,
+  }) async {
+    final found = await findId();
+    if (found == null || found == keepId) return;
+    await remove(found);
   }
 }
