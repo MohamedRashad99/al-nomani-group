@@ -1,19 +1,31 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/firebase/firebase_bootstrap.dart';
 import 'arabic_workbook_builder.dart';
+import 'firebase_sync_service.dart';
 
 class GoogleSheetsLiveSync {
-  GoogleSheetsLiveSync(this._workbook, this._config, this._dio);
+  GoogleSheetsLiveSync(this._workbook, this._config, Dio _);
 
   final ArabicWorkbookBuilder _workbook;
   final AppConfig _config;
-  final Dio _dio;
+  final Dio _plainDio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(minutes: 2),
+      followRedirects: true,
+      maxRedirects: 8,
+      validateStatus: (status) => status != null && status < 500,
+    ),
+  );
 
   static const _bridgeUrl = 'http://127.0.0.1:8765/sheets/write';
 
@@ -25,6 +37,7 @@ class GoogleSheetsLiveSync {
     final sections = await _workbook.build();
     final payload = {
       'spreadsheetId': spreadsheetId,
+      'token': _config.googleSheetsWriteToken,
       'sections': {
         for (final entry in sections.entries)
           entry.key: [
@@ -33,13 +46,40 @@ class GoogleSheetsLiveSync {
           ],
       },
     };
+    final errors = <String>[];
+    var queued = false;
     try {
-      await _writeDirect(spreadsheetId, payload['sections'] as Map<String, dynamic>);
+      await _queueFirestoreTabs(payload['sections'] as Map<String, dynamic>);
+      queued = true;
+    } catch (error) {
+      debugPrint('Sheets Firestore queue failed: $error');
+      errors.add('$error');
+    }
+
+    if (_config.googleSheetsWebappUrl.isNotEmpty) {
+      try {
+        await _writeWebapp(payload);
+        return (ok: true, message: 'تم تحديث Google Sheets مباشرة.');
+      } catch (error) {
+        debugPrint('Sheets webapp write failed: $error');
+        errors.add('$error');
+      }
+    }
+
+    try {
+      await _writeDirect(
+        spreadsheetId,
+        payload['sections'] as Map<String, dynamic>,
+      );
       return (ok: true, message: 'تم تحديث Google Sheets مباشرة.');
     } catch (directError) {
       debugPrint('Direct Sheets write failed: $directError');
+      errors.add('$directError');
+    }
+
+    if (!kIsWeb) {
       try {
-        await _dio.post<Map<String, dynamic>>(
+        await _plainDio.post<Map<String, dynamic>>(
           _bridgeUrl,
           data: payload,
           options: Options(
@@ -49,12 +89,101 @@ class GoogleSheetsLiveSync {
         );
         return (ok: true, message: 'تم تحديث Google Sheets مباشرة.');
       } catch (bridgeError) {
-        return (
-          ok: false,
-          message:
-              'تعذر تحديث Google Sheets. $directError',
-        );
+        debugPrint('Sheets bridge write failed: $bridgeError');
+        errors.add('$bridgeError');
       }
+    }
+
+    if (queued) {
+      return (
+        ok: true,
+        message: 'تم إرسال البيانات لتحديث Google Sheets.',
+      );
+    }
+    return (
+      ok: false,
+      message: 'تعذر تحديث Google Sheets. ${errors.join(' | ')}',
+    );
+  }
+
+  Future<void> _queueFirestoreTabs(Map<String, dynamic> sections) async {
+    if (!await FirebaseBootstrap.ensure()) {
+      throw StateError(
+        FirebaseBootstrap.lastError ?? 'Firebase غير جاهز لورقة Google.',
+      );
+    }
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (uid.isEmpty) {
+      throw StateError('لا يوجد مستخدم Firebase لكتابة الورقة.');
+    }
+    final tabs = FirebaseFirestore.instance
+        .collection('companies')
+        .doc(FirebaseSyncService.companyId)
+        .collection('sheet_tabs');
+    var batch = FirebaseFirestore.instance.batch();
+    var pending = 0;
+    for (final entry in sections.entries) {
+      final slug = _tabSlug(entry.key);
+      batch.set(tabs.doc(slug), {
+        'operationId': 'sheet-tab-$slug',
+        'operation': 'update',
+        'version': 1,
+        'deviceId': 'sheet-export',
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': uid,
+        'tab': entry.key,
+        'values': entry.value,
+      });
+      pending++;
+      if (pending >= 400) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) {
+      await batch.commit();
+    }
+  }
+
+  static String _tabSlug(String title) {
+    const slugs = {
+      'نظرة عامة': 'overview',
+      'التصنيفات': 'categories',
+      'المنتجات': 'products',
+      'العملاء': 'customers',
+      'المبالغ الآجلة': 'outstanding',
+      'حركات الآجل': 'account_transactions',
+      'المبيعات': 'sales',
+      'بنود المبيعات': 'sale_items',
+      'التحصيلات': 'collections',
+      'المخزون': 'inventory',
+      'المستخدمون': 'users',
+      'الإعدادات': 'settings',
+      'سجل العمليات': 'audit_logs',
+      'سجل المزامنة': 'sync_logs',
+      'الأدوار': 'roles',
+    };
+    return slugs[title] ?? 'tab-${title.hashCode.abs()}';
+  }
+
+  Future<void> _writeWebapp(Map<String, dynamic> payload) async {
+    final response = await _plainDio.post<dynamic>(
+      _config.googleSheetsWebappUrl,
+      data: jsonEncode(payload),
+      options: Options(
+        contentType: 'text/plain;charset=utf-8',
+        responseType: ResponseType.plain,
+        headers: const <String, dynamic>{},
+      ),
+    );
+    final body = response.data?.toString() ?? '';
+    if (body.contains('"ok":false') || body.contains('"ok": false')) {
+      throw StateError('رفضت خدمة Google Sheets الكتابة.');
+    }
+    final status = response.statusCode ?? 0;
+    if (status >= 400) {
+      throw StateError('تعذر الوصول لخدمة Google Sheets ($status).');
     }
   }
 
@@ -66,7 +195,7 @@ class GoogleSheetsLiveSync {
     final headers = {'Authorization': 'Bearer $accessToken'};
     final base =
         'https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId';
-    final meta = await _dio.get<Map<String, dynamic>>(
+    final meta = await _plainDio.get<Map<String, dynamic>>(
       base,
       options: Options(headers: headers),
     );
@@ -85,7 +214,7 @@ class GoogleSheetsLiveSync {
           },
     ];
     if (add.isNotEmpty) {
-      await _dio.post<Map<String, dynamic>>(
+      await _plainDio.post<Map<String, dynamic>>(
         '$base:batchUpdate',
         data: {'requests': add},
         options: Options(headers: headers),
@@ -93,12 +222,12 @@ class GoogleSheetsLiveSync {
     }
     for (final entry in sections.entries) {
       final range = "'${entry.key}'!A:ZZ";
-      await _dio.post<Map<String, dynamic>>(
+      await _plainDio.post<Map<String, dynamic>>(
         '$base/values/${Uri.encodeComponent(range)}:clear',
         data: const {},
         options: Options(headers: headers),
       );
-      await _dio.put<Map<String, dynamic>>(
+      await _plainDio.put<Map<String, dynamic>>(
         '$base/values/${Uri.encodeComponent(range)}',
         queryParameters: {'valueInputOption': 'RAW'},
         data: {'values': entry.value},
@@ -126,7 +255,7 @@ class GoogleSheetsLiveSync {
       RSAPrivateKey(privateKey),
       algorithm: JWTAlgorithm.RS256,
     );
-    final response = await _dio.post<Map<String, dynamic>>(
+    final response = await _plainDio.post<Map<String, dynamic>>(
       'https://oauth2.googleapis.com/token',
       data: {
         'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',

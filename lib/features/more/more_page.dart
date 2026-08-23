@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/utils/breakpoints.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 
@@ -45,35 +46,54 @@ class MorePage extends StatelessWidget {
 
     return AppScaffold(
       title: S.more,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 220,
-          mainAxisExtent: 132,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: modules.length,
-        itemBuilder: (context, index) {
-          final module = modules[index];
-          return Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => context.go(module.path),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Icon(module.icon, size: 30),
-                    Text(
-                      module.label,
-                      style: Theme.of(context).textTheme.titleMedium,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final phone = Breakpoints.isPhone(context);
+          final columns = constraints.maxWidth < 360
+              ? 1
+              : constraints.maxWidth < 640
+              ? 2
+              : constraints.maxWidth < 980
+              ? 3
+              : 4;
+          const gap = 12.0;
+          final width =
+              (constraints.maxWidth - 24 - (gap * (columns - 1))) / columns;
+          return SingleChildScrollView(
+            padding: EdgeInsets.all(phone ? 12 : 16),
+            child: Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final module in modules)
+                  SizedBox(
+                    width: width,
+                    child: Card(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => context.go(module.path),
+                        child: Padding(
+                          padding: EdgeInsets.all(phone ? 14 : 18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(module.icon, size: phone ? 26 : 30),
+                              SizedBox(height: phone ? 12 : 18),
+                              Text(
+                                module.label,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontSize: phone ? 15 : null),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
           );
         },

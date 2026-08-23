@@ -4,6 +4,8 @@
 **/google-service-account.json
 **/google_sheets_sa.json
 **/secrets/
+functions/service-account.json
+functions/node_modules/
 firebase-debug.log
 .firebase/
 .firebase-rules-analysis.md

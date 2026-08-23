@@ -68,7 +68,8 @@ service cloud.firestore {
         'roles',
         'transactions',
         'sessions',
-        'other'
+        'other',
+        'sheet_tabs'
       ];
     }
 

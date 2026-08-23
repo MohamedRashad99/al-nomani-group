@@ -393,7 +393,11 @@ class _AppDrawer extends StatelessWidget {
                   backgroundColor: Color(0xFFE7F3E6),
                   child: Icon(Icons.person, color: AppColors.darkGreen),
                 ),
-                title: Text(sessionName!),
+                title: Text(
+                  sessionName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: const Text('القائمة الجانبية'),
               ),
             const Divider(),

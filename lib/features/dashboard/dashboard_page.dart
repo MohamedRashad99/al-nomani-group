@@ -9,6 +9,7 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/arabic_format.dart';
+import '../../core/utils/breakpoints.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/dashboard_service.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -80,7 +81,16 @@ class _DashboardBody extends StatelessWidget {
     final session = context.watch<AuthCubit>().state.session;
     final permissions = session?.permissions ?? const <String>{};
     final width = MediaQuery.sizeOf(context).width;
-    final horizontalPadding = width >= 1200 ? 32.0 : 16.0;
+    final phone = Breakpoints.isPhone(context);
+    final horizontalPadding = phone
+        ? 12.0
+        : width >= 1200
+        ? 32.0
+        : 16.0;
+    final innerWidth = width - (horizontalPadding * 2);
+    final kpiColumns = phone
+        ? (innerWidth < 340 ? 1 : 2)
+        : (innerWidth / 285).floor().clamp(2, 4);
 
     return CustomScrollView(
       slivers: [
@@ -100,60 +110,57 @@ class _DashboardBody extends StatelessWidget {
         ),
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 285,
-              mainAxisExtent: 136,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            delegate: SliverChildListDelegate([
-              _KpiCard(
-                label: S.todaySales,
-                value: MoneyText(
-                  dashboard.todaySales,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                icon: Icons.trending_up_rounded,
-                color: AppColors.green,
-                helper:
-                    '${dashboard.todaySalesChangePercent >= 0 ? '+' : ''}${dashboard.todaySalesChangePercent.toStringAsFixed(0)}٪ عن أمس',
-              ),
-              _KpiCard(
-                label: S.outstandingDebt,
-                value: MoneyText(
-                  dashboard.outstandingDebt,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.orange,
-                helper:
-                    '${ArabicFormat.number(dashboard.customersWithDebt)} عميل',
-              ),
-              _KpiCard(
-                label: S.todayCollections,
-                value: MoneyText(
-                  dashboard.todayCollections,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                icon: Icons.payments_outlined,
-                color: const Color(0xFF1565C0),
-                helper: 'تحصيلات مسجلة اليوم',
-              ),
-              _KpiCard(
-                label: S.lowStock,
-                value: Text(
-                  ArabicFormat.number(
-                    dashboard.lowStock + dashboard.outOfStock,
+          sliver: SliverToBoxAdapter(
+            child: _KpiGrid(
+              columns: kpiColumns,
+              children: [
+                _KpiCard(
+                  label: S.todaySales,
+                  value: MoneyText(
+                    dashboard.todaySales,
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  icon: Icons.trending_up_rounded,
+                  color: AppColors.green,
+                  helper:
+                      '${dashboard.todaySalesChangePercent >= 0 ? '+' : ''}${dashboard.todaySalesChangePercent.toStringAsFixed(0)}٪ عن أمس',
                 ),
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.danger,
-                helper:
-                    '${ArabicFormat.number(dashboard.outOfStock)} منتج نافد',
-              ),
-            ]),
+                _KpiCard(
+                  label: S.outstandingDebt,
+                  value: MoneyText(
+                    dashboard.outstandingDebt,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppColors.orange,
+                  helper:
+                      '${ArabicFormat.number(dashboard.customersWithDebt)} عميل',
+                ),
+                _KpiCard(
+                  label: S.todayCollections,
+                  value: MoneyText(
+                    dashboard.todayCollections,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  icon: Icons.payments_outlined,
+                  color: const Color(0xFF1565C0),
+                  helper: 'تحصيلات مسجلة اليوم',
+                ),
+                _KpiCard(
+                  label: S.lowStock,
+                  value: Text(
+                    ArabicFormat.number(
+                      dashboard.lowStock + dashboard.outOfStock,
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  icon: Icons.warning_amber_rounded,
+                  color: AppColors.danger,
+                  helper:
+                      '${ArabicFormat.number(dashboard.outOfStock)} منتج نافد',
+                ),
+              ],
+            ),
           ),
         ),
         SliverPadding(
@@ -276,15 +283,68 @@ class _WelcomeHeader extends StatelessWidget {
         health.failed == 0 &&
         health.backupFailed == 0 &&
         health.backupConfigured != false;
+    final phone = Breakpoints.isPhone(context);
+    final statusChip = Tooltip(
+      message: health.backupLastError ?? health.statusAr,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .14),
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              healthy ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+              size: 16,
+              color: healthy ? const Color(0xFFB9F6CA) : Colors.orange[100],
+            ),
+            const SizedBox(width: 6),
+            Text(
+              healthy ? 'البيانات محمية' : health.statusAr,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$greeting، $name',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: phone ? 18 : null,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'إليك ملخص أداء مجموعة النعماني اليوم',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Colors.white70,
+            fontSize: phone ? 12 : null,
+          ),
+        ),
+      ],
+    );
     return Container(
-      padding: const EdgeInsets.all(22),
+      width: double.infinity,
+      padding: EdgeInsets.all(phone ? 14 : 22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [AppColors.darkGreen, Color(0xFF347B39)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(phone ? 18 : 24),
         boxShadow: [
           BoxShadow(
             color: AppColors.darkGreen.withValues(alpha: .18),
@@ -293,65 +353,55 @@ class _WelcomeHeader extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          const BrandMark(size: 58, showText: false),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
+      child: phone
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '$greeting، $name',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  children: [
+                    const BrandMark(size: 42, showText: false),
+                    const SizedBox(width: 10),
+                    Expanded(child: titleBlock),
+                  ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  'إليك ملخص أداء مجموعة النعماني اليوم',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                ),
+                const SizedBox(height: 10),
+                statusChip,
+              ],
+            )
+          : Row(
+              children: [
+                const BrandMark(size: 58, showText: false),
+                const SizedBox(width: 16),
+                Expanded(child: titleBlock),
+                const SizedBox(width: 10),
+                statusChip,
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Tooltip(
-            message: health.backupLastError ?? health.statusAr,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .14),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    healthy
-                        ? Icons.cloud_done_outlined
-                        : Icons.cloud_off_outlined,
-                    size: 18,
-                    color: healthy
-                        ? const Color(0xFFB9F6CA)
-                        : Colors.orange[100],
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    healthy ? 'البيانات محمية' : health.statusAr,
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    );
+  }
+}
+
+class _KpiGrid extends StatelessWidget {
+  const _KpiGrid({required this.columns, required this.children});
+
+  final int columns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 10.0;
+        final width =
+            (constraints.maxWidth - (gap * (columns - 1))) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children) SizedBox(width: width, child: child),
+          ],
+        );
+      },
     );
   }
 }
@@ -373,47 +423,51 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = Breakpoints.isPhone(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(phone ? 10 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: EdgeInsets.all(phone ? 6 : 8),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: .1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, size: 20, color: color),
+                  child: Icon(icon, size: phone ? 18 : 20, color: color),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     label,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontSize: phone ? 12 : null,
+                    ),
                   ),
                 ),
               ],
             ),
-            const Spacer(),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: value,
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FittedBox(fit: BoxFit.scaleDown, child: value),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 6),
             Text(
               helper,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.muted,
+                fontSize: phone ? 10 : null,
+              ),
             ),
           ],
         ),
@@ -504,14 +558,18 @@ class _TrendPanel extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (final point in snapshot.salesTrend)
-                  Text(
-                    ArabicFormat.day(point.date),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        ArabicFormat.day(point.date),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: AppColors.muted),
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -781,9 +839,13 @@ class _RecentActivity extends StatelessWidget {
                     title: Text(
                       snapshot.customerNames[sale.customerId] ??
                           sale.saleNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       '${sale.saleNumber} • ${ArabicFormat.dateTime(sale.soldAt)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     trailing: MoneyText(Money.parse(sale.subtotal)),
                     onTap: () => context.go('/sales/${sale.id}'),
@@ -801,9 +863,13 @@ class _RecentActivity extends StatelessWidget {
                     title: Text(
                       snapshot.customerNames[collection.customerId] ??
                           'تحصيل عميل',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       ArabicFormat.dateTime(collection.collectedAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     trailing: MoneyText(Money.parse(collection.amount)),
                   ),
@@ -828,34 +894,44 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = Breakpoints.isPhone(context);
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        if (subtitle != null)
+          Text(
+            subtitle!,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+          ),
+      ],
+    );
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(phone ? 12 : 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (subtitle != null)
-                        Text(
-                          subtitle!,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: AppColors.muted),
-                        ),
-                    ],
+            if (phone && action != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  heading,
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: action,
                   ),
-                ),
-                ?action,
-              ],
-            ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(child: heading),
+                  ?action,
+                ],
+              ),
             const SizedBox(height: 14),
             child,
           ],

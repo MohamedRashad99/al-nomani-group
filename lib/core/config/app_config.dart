@@ -10,6 +10,8 @@ class AppConfig {
   final SyncMode syncMode;
   final bool allowSeed;
   final String googleLiveSpreadsheetId;
+  final String googleSheetsWebappUrl;
+  final String googleSheetsWriteToken;
   final String appVersion;
   final int databaseVersion;
   final int syncProtocolVersion;
@@ -21,6 +23,8 @@ class AppConfig {
     required this.syncMode,
     required this.allowSeed,
     required this.googleLiveSpreadsheetId,
+    this.googleSheetsWebappUrl = '',
+    this.googleSheetsWriteToken = '',
     required this.appVersion,
     required this.databaseVersion,
     required this.syncProtocolVersion,
@@ -54,6 +58,10 @@ class AppConfig {
       allowSeed: allowSeed,
       googleLiveSpreadsheetId:
           json['google_live_spreadsheet_id'] as String? ?? '',
+      googleSheetsWebappUrl:
+          json['google_sheets_webapp_url'] as String? ?? '',
+      googleSheetsWriteToken:
+          json['google_sheets_write_token'] as String? ?? '',
       appVersion: json['app_version'] as String? ?? AppVersions.appVersion,
       databaseVersion:
           json['database_version'] as int? ?? AppVersions.databaseVersion,
