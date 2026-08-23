@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_config.dart';
+import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/breakpoints.dart';
@@ -143,6 +145,21 @@ class AppScaffold extends StatelessWidget {
                               ),
                             ),
                     ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                    child: Text(
+                      sl<AppConfig>().visibleBuildLabel,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: expanded ? .72 : .55),
+                        fontSize: expanded ? 11 : 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -430,6 +447,20 @@ class _AppDrawer extends StatelessWidget {
               leading: const Icon(Icons.logout),
               title: const Text(S.logout),
               onTap: () => context.read<AuthCubit>().logout(),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Text(
+                sl<AppConfig>().visibleBuildLabel,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.muted,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
             ),
           ],
         ),

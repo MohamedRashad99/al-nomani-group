@@ -123,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     ListTile(
                       title: const Text('إصدار التطبيق'),
-                      trailing: Text(config.appVersion),
+                      trailing: Text(config.visibleBuildLabel),
                     ),
                     ListTile(
                       title: const Text('إصدار قاعدة البيانات'),

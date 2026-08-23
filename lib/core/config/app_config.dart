@@ -13,6 +13,7 @@ class AppConfig {
   final String googleSheetsWebappUrl;
   final String googleSheetsWriteToken;
   final String appVersion;
+  final String buildLabel;
   final int databaseVersion;
   final int syncProtocolVersion;
 
@@ -26,9 +27,22 @@ class AppConfig {
     this.googleSheetsWebappUrl = '',
     this.googleSheetsWriteToken = '',
     required this.appVersion,
+    this.buildLabel = '',
     required this.databaseVersion,
     required this.syncProtocolVersion,
   });
+
+  /// Always-visible drawer stamp, e.g. `v1:230826:18:29:30` (Egypt time).
+  String get visibleBuildLabel =>
+      buildLabel.isNotEmpty ? buildLabel : egyptBuildLabel();
+
+  static String egyptBuildLabel([DateTime? now]) {
+    final egypt = (now ?? DateTime.now().toUtc()).toUtc().add(
+      const Duration(hours: 3),
+    );
+    String two(int value) => value.toString().padLeft(2, '0');
+    return 'v1:${two(egypt.day)}${two(egypt.month)}${two(egypt.year % 100)}:${two(egypt.hour)}:${two(egypt.minute)}:${two(egypt.second)}';
+  }
 
   bool get isDevelopment => environment != 'production';
 
@@ -63,6 +77,7 @@ class AppConfig {
       googleSheetsWriteToken:
           json['google_sheets_write_token'] as String? ?? '',
       appVersion: json['app_version'] as String? ?? AppVersions.appVersion,
+      buildLabel: json['build_label'] as String? ?? '',
       databaseVersion:
           json['database_version'] as int? ?? AppVersions.databaseVersion,
       syncProtocolVersion:
