@@ -1,7 +1,7 @@
 abstract final class S {
   static const appName = 'مجموعة النعماني';
   static const appSubtitle = 'نظام إدارة المنتجات الزراعية';
-  static const owner = 'أحمد نعمان الجعبيري';
+  static const owner = ' م / أحمد نعمان';
 
   static const login = 'تسجيل الدخول';
   static const username = 'اسم المستخدم';

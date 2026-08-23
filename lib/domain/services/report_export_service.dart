@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/utils/file_download.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/arabic_workbook_builder.dart';
 
 enum ReportFileType { csv, excel, pdf }
 
@@ -17,59 +19,20 @@ class ReportExportService {
   final AppDatabase _db;
 
   Future<void> exportSales(ReportFileType type) async {
-    final sales = await _db.select(_db.sales).get();
-    final customers = await _db.select(_db.customers).get();
-    final customerNames = {
-      for (final customer in customers) customer.id: customer.name,
-    };
-    final rows = <List<dynamic>>[
-      [
-        'رقم الفاتورة',
-        'العميل',
-        'الحالة',
-        'الإجمالي',
-        'المدفوع',
-        'المتبقي',
-        'التاريخ',
-      ],
-      for (final sale in sales)
-        [
-          sale.saleNumber,
-          customerNames[sale.customerId] ?? '',
-          sale.status,
-          sale.subtotal,
-          sale.paidAmount,
-          sale.remainingAmount,
-          sale.soldAt.toLocal().toIso8601String(),
-        ],
-    ];
+    final sections = await ArabicWorkbookBuilder(_db).build();
+    final sales = sections[SheetArabic.sales]!;
     final stamp = DateTime.now().toIso8601String().substring(0, 10);
     switch (type) {
       case ReportFileType.csv:
-        final csv = const ListToCsvConverter().convert(rows);
+        final csv = const ListToCsvConverter().convert(sales);
         await downloadBytes(
           Uint8List.fromList(utf8.encode('\uFEFF$csv')),
-          filename: 'sales-$stamp.csv',
+          filename: 'المبيعات-$stamp.csv',
           mimeType: 'text/csv;charset=utf-8',
         );
         return;
       case ReportFileType.excel:
-        final workbook = Excel.createExcel();
-        final sheet = workbook['المبيعات'];
-        for (final row in rows) {
-          sheet.appendRow([
-            for (final value in row) TextCellValue(value.toString()),
-          ]);
-        }
-        workbook.delete('Sheet1');
-        final bytes = workbook.encode();
-        if (bytes == null) throw StateError('تعذر إنشاء ملف Excel.');
-        await downloadBytes(
-          Uint8List.fromList(bytes),
-          filename: 'sales-$stamp.xlsx',
-          mimeType:
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        );
+        await exportAllArabicExcel();
         return;
       case ReportFileType.pdf:
         final fontData = await rootBundle.load(
@@ -85,27 +48,59 @@ class ReportExportService {
             build: (_) => [
               pw.Header(
                 level: 0,
-                child: pw.Text('تقرير مبيعات مجموعة النعماني'),
+                child: pw.Text('تقرير مجموعة النعماني — كل الأقسام'),
               ),
-              pw.TableHelper.fromTextArray(
-                headers: rows.first.map((value) => value.toString()).toList(),
-                data: rows
-                    .skip(1)
-                    .map((row) => row.map((value) => value.toString()).toList())
-                    .toList(),
-                headerStyle: pw.TextStyle(font: font),
-                cellStyle: pw.TextStyle(font: font, fontSize: 8),
-                cellAlignment: pw.Alignment.centerRight,
-              ),
+              for (final entry in sections.entries) ...[
+                pw.Text(entry.key, style: pw.TextStyle(font: font, fontSize: 14)),
+                pw.SizedBox(height: 6),
+                pw.TableHelper.fromTextArray(
+                  headers: entry.value.first
+                      .map((value) => value.toString())
+                      .toList(),
+                  data: entry.value
+                      .skip(1)
+                      .map(
+                        (row) => row.map((value) => value.toString()).toList(),
+                      )
+                      .toList(),
+                  headerStyle: pw.TextStyle(font: font),
+                  cellStyle: pw.TextStyle(font: font, fontSize: 8),
+                  cellAlignment: pw.Alignment.centerRight,
+                ),
+                pw.SizedBox(height: 16),
+              ],
             ],
           ),
         );
         await downloadBytes(
           await document.save(),
-          filename: 'sales-$stamp.pdf',
+          filename: 'التقارير-$stamp.pdf',
           mimeType: 'application/pdf',
         );
         return;
     }
+  }
+
+  Future<void> exportAllArabicExcel() async {
+    final workbook = Excel.createExcel();
+    final sections = await ArabicWorkbookBuilder(_db).build();
+    for (final entry in sections.entries) {
+      final sheet = workbook[entry.key];
+      for (final row in entry.value) {
+        sheet.appendRow([
+          for (final value in row) TextCellValue(value.toString()),
+        ]);
+      }
+    }
+    workbook.delete('Sheet1');
+    final bytes = workbook.encode();
+    if (bytes == null) throw StateError('تعذر إنشاء ملف Excel.');
+    final stamp = DateTime.now().toIso8601String().substring(0, 10);
+    await downloadBytes(
+      Uint8List.fromList(bytes),
+      filename: 'مجموعة-النعماني-$stamp.xlsx',
+      mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
   }
 }

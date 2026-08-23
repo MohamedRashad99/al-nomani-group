@@ -106,6 +106,20 @@ class AccountService {
         payload: payload,
         operationId: txId,
       );
+      await _queue.enqueue(
+        entityType: SyncEntityType.customerAccount,
+        entityId: account.id,
+        operation: SyncOperationType.update,
+        payload: {
+          'id': account.id,
+          'customer_id': customerId,
+          'cached_balance': next.toStorage(),
+          'version': account.version + 1,
+          'device_id': deviceId,
+          'updated_at': now.toIso8601String(),
+        },
+        operationId: 'account-${account.id}-${account.version + 1}',
+      );
     }
   }
 }

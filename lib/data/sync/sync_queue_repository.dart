@@ -84,6 +84,7 @@ class SyncQueueRepository {
     'auditLog' => 9,
     'setting' => 10,
     'user' => 11,
+    'role' => 12,
     _ => 99,
   };
 

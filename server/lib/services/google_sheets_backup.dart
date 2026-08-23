@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:googleapis/sheets/v4.dart';
 import 'package:googleapis_auth/auth_io.dart';
 
+import 'package:al_nomani_shared/al_nomani_shared.dart';
+
 import '../config/env.dart';
 import '../database/postgres_db.dart';
 import 'sheet_workbook.dart';
@@ -58,35 +60,7 @@ class GoogleSheetsBackup {
   final Env env;
   final PostgresDb db;
 
-  static const tabs = {
-    'product': 'Products',
-    'category': 'Categories',
-    'customer': 'Customers',
-    'sale': 'Sales',
-    'saleItem': 'Sale Items',
-    'customerAccount': 'Customer Accounts',
-    'customerAccountTransaction': 'Customer Account Transactions',
-    'collection': 'Collections',
-    'inventoryMovement': 'Inventory Movements',
-    'user': 'Users',
-    'auditLog': 'Audit Logs',
-    'setting': 'Settings',
-  };
-
-  static const fullBackupTables = {
-    'Products': 'products',
-    'Categories': 'product_categories',
-    'Customers': 'customers',
-    'Sales': 'sales',
-    'Sale Items': 'sale_items',
-    'Customer Accounts': 'customer_accounts',
-    'Customer Account Transactions': 'customer_account_transactions',
-    'Collections': 'collections',
-    'Inventory Movements': 'inventory_movements',
-    'Users': 'users',
-    'Audit Logs': 'audit_logs',
-    'Sync Logs': 'sync_logs',
-  };
+  static const tabs = SheetArabic.tabsByEntity;
 
   bool get isConfigured =>
       env.googleServiceAccountJson?.isNotEmpty == true &&
@@ -155,7 +129,7 @@ class GoogleSheetsBackup {
           jsonDecode(row[4] as String) as Map,
         );
         try {
-          final tab = tabs[entityType] ?? 'Sync Logs';
+          final tab = tabs[entityType] ?? SheetArabic.syncLogs;
           await _upsertByStableId(
             api: api,
             spreadsheetId: env.googleLiveSpreadsheetId,
@@ -171,7 +145,7 @@ class GoogleSheetsBackup {
               await _upsertByStableId(
                 api: api,
                 spreadsheetId: env.googleLiveSpreadsheetId,
-                tab: 'Sale Items',
+                tab: SheetArabic.saleItems,
                 entityId: itemId,
                 payload: item,
               );
@@ -182,7 +156,7 @@ class GoogleSheetsBackup {
             await _upsertByStableId(
               api: api,
               spreadsheetId: env.googleLiveSpreadsheetId,
-              tab: 'Products',
+              tab: SheetArabic.products,
               entityId: payload['product_id'] as String,
               payload: {
                 'id': payload['product_id'],
@@ -195,7 +169,7 @@ class GoogleSheetsBackup {
             await _upsertByStableId(
               api: api,
               spreadsheetId: env.googleLiveSpreadsheetId,
-              tab: 'Customer Accounts',
+              tab: SheetArabic.outstanding,
               entityId: payload['account_id'] as String,
               payload: {
                 'id': payload['account_id'],
@@ -207,7 +181,7 @@ class GoogleSheetsBackup {
           await _upsertByStableId(
             api: api,
             spreadsheetId: env.googleLiveSpreadsheetId,
-            tab: 'Sync Logs',
+            tab: SheetArabic.syncLogs,
             entityId: operationId,
             payload: {
               'id': operationId,
@@ -529,11 +503,10 @@ class GoogleSheetsBackup {
         .whereType<String>()
         .toSet();
     final needed = {
-      'Overview',
+      SheetArabic.overview,
       ...tabs.values,
-      ...fullBackupTables.keys,
       ...structuredSheets.map((sheet) => sheet.tab),
-      'Sync Logs',
+      SheetArabic.syncLogs,
     };
     final requests = [
       for (final tab in needed)
@@ -548,6 +521,25 @@ class GoogleSheetsBackup {
         spreadsheetId,
       );
     }
+    await _retireEnglishTabs(api, spreadsheetId);
+  }
+
+  Future<void> _retireEnglishTabs(SheetsApi api, String spreadsheetId) async {
+    final spreadsheet = await api.spreadsheets.get(spreadsheetId);
+    final sheets = spreadsheet.sheets ?? const <Sheet>[];
+    final remove = [
+      for (final sheet in sheets)
+        if (SheetArabic.retiredEnglishTabs.contains(sheet.properties?.title) &&
+            sheet.properties?.sheetId != null)
+          Request(
+            deleteSheet: DeleteSheetRequest(sheetId: sheet.properties!.sheetId),
+          ),
+    ];
+    if (remove.isEmpty || remove.length >= sheets.length) return;
+    await api.spreadsheets.batchUpdate(
+      BatchUpdateSpreadsheetRequest(requests: remove),
+      spreadsheetId,
+    );
   }
 
   Future<void> _writeOverview(SheetsApi api, String spreadsheetId) async {
@@ -565,27 +557,27 @@ class GoogleSheetsBackup {
     ''');
     final row = counts.first;
     final values = [
-      ['البيان', 'Item', 'العدد'],
-      ['وقت التصدير', 'exported_at', DateTime.now().toUtc().toIso8601String()],
-      ['التصنيفات', 'categories', row[0]],
-      ['المنتجات', 'products', row[1]],
-      ['العملاء', 'customers', row[2]],
-      ['المبيعات', 'sales', row[3]],
-      ['بنود المبيعات', 'sale_items', row[4]],
-      ['التحصيلات', 'collections', row[5]],
-      ['حركات الحساب', 'account_transactions', row[6]],
-      ['حركة المخزون', 'inventory_movements', row[7]],
-      ['المستخدمون', 'users', row[8]],
+      ['البيان', 'العدد'],
+      ['وقت التصدير', sheetCell(DateTime.now().toUtc())],
+      ['التصنيفات', row[0]],
+      ['المنتجات', row[1]],
+      ['العملاء', row[2]],
+      ['المبيعات', row[3]],
+      ['بنود المبيعات', row[4]],
+      ['التحصيلات', row[5]],
+      ['حركات الآجل', row[6]],
+      ['المخزون', row[7]],
+      ['المستخدمون', row[8]],
     ];
     await api.spreadsheets.values.clear(
       ClearValuesRequest(),
       spreadsheetId,
-      "'Overview'!A:ZZ",
+      "'${SheetArabic.overview}'!A:ZZ",
     );
     await api.spreadsheets.values.update(
       ValueRange(values: values),
       spreadsheetId,
-      "'Overview'!A1",
+      "'${SheetArabic.overview}'!A1",
       valueInputOption: 'RAW',
     );
   }
@@ -599,7 +591,7 @@ class GoogleSheetsBackup {
             updateSheetProperties: UpdateSheetPropertiesRequest(
               properties: SheetProperties(
                 sheetId: sheet.properties!.sheetId,
-                gridProperties: GridProperties(frozenRowCount: 2),
+                gridProperties: GridProperties(frozenRowCount: 1),
               ),
               fields: 'gridProperties.frozenRowCount',
             ),

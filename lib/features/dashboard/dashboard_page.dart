@@ -460,8 +460,8 @@ class _QuickActions extends StatelessWidget {
             for (final action in actions)
               FilledButton.tonalIcon(
                 onPressed: () => context.go(action.path),
-                icon: Icon(action.icon, size: 19),
-                label: Text(action.label),
+                icon: Icon(action.icon, size: 19,color: AppColors.card),
+                label: Text(action.label, style: const TextStyle(color: AppColors.card)),
               ),
           ],
         ),

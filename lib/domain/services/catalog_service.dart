@@ -269,11 +269,12 @@ class CatalogService {
           );
 
       if (existing == null) {
+        final accountId = newId();
         await _db
             .into(_db.customerAccounts)
             .insert(
               CustomerAccountsCompanion.insert(
-                id: newId(),
+                id: accountId,
                 customerId: customerId,
                 cachedBalance: Money.zero().toStorage(),
                 deviceId: Value(deviceId),
@@ -281,6 +282,19 @@ class CatalogService {
                 updatedAt: now,
               ),
             );
+        await _queue.enqueue(
+          entityType: SyncEntityType.customerAccount,
+          entityId: accountId,
+          operation: SyncOperationType.create,
+          payload: {
+            'id': accountId,
+            'customer_id': customerId,
+            'cached_balance': Money.zero().toStorage(),
+            'version': 1,
+            'device_id': deviceId,
+          },
+          operationId: 'account-create-$accountId',
+        );
       }
 
       final payload = {

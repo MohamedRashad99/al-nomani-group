@@ -1,3 +1,5 @@
+import 'package:al_nomani_shared/al_nomani_shared.dart';
+
 class SheetColumn {
   const SheetColumn(this.headerAr, this.headerEn);
 
@@ -17,12 +19,7 @@ class StructuredSheet {
   final List<SheetColumn> columns;
 }
 
-Object? sheetCell(Object? value) {
-  if (value == null) return '';
-  if (value is DateTime) return value.toUtc().toIso8601String();
-  if (value is bool) return value ? 'نعم' : 'لا';
-  return value;
-}
+Object? sheetCell(Object? value) => SheetArabic.cell(value);
 
 List<List<Object?>> buildSheetValues({
   required List<SheetColumn> columns,
@@ -30,7 +27,6 @@ List<List<Object?>> buildSheetValues({
 }) {
   return [
     [for (final column in columns) column.headerAr],
-    [for (final column in columns) column.headerEn],
     for (final row in rows)
       [
         for (var index = 0; index < columns.length; index++)
@@ -41,7 +37,7 @@ List<List<Object?>> buildSheetValues({
 
 const structuredSheets = <StructuredSheet>[
   StructuredSheet(
-    tab: 'Categories',
+    tab: SheetArabic.categories,
     sql: '''
       SELECT id, name, description,
              CASE WHEN is_active THEN 'نعم' ELSE 'لا' END,
@@ -60,7 +56,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Products',
+    tab: SheetArabic.products,
     sql: '''
       SELECT p.id, p.name, p.sku, c.name, p.brand, p.purchase_price, p.selling_price,
              p.current_stock, p.minimum_stock, p.unit, p.custom_unit_label,
@@ -89,7 +85,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Customers',
+    tab: SheetArabic.customers,
     sql: '''
       SELECT cu.id, cu.name, cu.phone, cu.address, cu.area, cu.notes,
              COALESCE(a.cached_balance, 0),
@@ -114,7 +110,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Customer Accounts',
+    tab: SheetArabic.outstanding,
     sql: '''
       SELECT a.id, c.name, a.cached_balance, a.created_at, a.updated_at
       FROM customer_accounts a
@@ -130,7 +126,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Sales',
+    tab: SheetArabic.sales,
     sql: '''
       SELECT s.sale_number, c.name, s.status, s.subtotal, s.paid_amount, s.remaining_amount,
              CASE
@@ -161,7 +157,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Sale Items',
+    tab: SheetArabic.saleItems,
     sql: '''
       SELECT s.sale_number, p.name, p.sku, si.quantity, si.unit, si.unit_price, si.line_total, si.created_at
       FROM sale_items si
@@ -181,7 +177,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Collections',
+    tab: SheetArabic.collections,
     sql: '''
       SELECT c.name, col.amount, col.payment_method, col.collected_at, col.notes,
              u.display_name, col.status
@@ -202,7 +198,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Customer Account Transactions',
+    tab: SheetArabic.accountTransactions,
     sql: '''
       SELECT t.created_at, c.name, t.type, t.amount, t.running_balance,
              t.reference_type, t.reference_id, t.notes
@@ -222,7 +218,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Inventory Movements',
+    tab: SheetArabic.inventory,
     sql: '''
       SELECT m.created_at, p.name, p.sku, m.type, m.quantity, m.unit,
              m.previous_stock, m.new_stock, m.reference_type, m.notes
@@ -244,7 +240,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Users',
+    tab: SheetArabic.users,
     sql: '''
       SELECT u.username, u.display_name, r.display_name_ar,
              CASE WHEN u.is_active THEN 'نعم' ELSE 'لا' END, u.created_at
@@ -262,7 +258,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Settings',
+    tab: SheetArabic.settings,
     sql: '''
       SELECT key, value, updated_at
       FROM settings
@@ -275,7 +271,7 @@ const structuredSheets = <StructuredSheet>[
     ],
   ),
   StructuredSheet(
-    tab: 'Audit Logs',
+    tab: SheetArabic.auditLogs,
     sql: '''
       SELECT created_at, action, entity_type, entity_id, user_id
       FROM audit_logs

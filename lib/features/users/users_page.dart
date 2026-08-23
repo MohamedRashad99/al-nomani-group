@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_engine.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -145,6 +146,7 @@ class UsersPage extends StatelessWidget {
                                 roleId: role,
                                 isActive: active,
                               );
+                              await sl<SyncEngine>().maybeSyncAfterLocalWrite();
                               if (ctx.mounted) Navigator.pop(ctx);
                             } catch (e) {
                               if (ctx.mounted) {

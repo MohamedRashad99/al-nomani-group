@@ -66,12 +66,12 @@ class ReportsPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'تصدير تقرير المبيعات',
+                        'تصدير كل الأقسام بالعربية',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'نزّل ملفاً حقيقياً إلى جهازك للاحتفاظ به أو مشاركته.',
+                        'Excel يشمل المبيعات والمخزون والعملاء والآجل والمنتجات والتحصيلات. CSV للمبيعات فقط.',
                       ),
                       const SizedBox(height: 16),
                       Wrap(

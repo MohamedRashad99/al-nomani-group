@@ -1,0 +1,149 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: companies/{companyId}
+// Document ID: al_nomani
+// Fields:
+//   - name: string (required, 1-119) - company display name
+//   - updatedAt: timestamp (required)
+//
+// Collection: companies/{companyId}/{section}/{docId}
+// section is one of:
+//   sales, inventory, customers, products, categories, accounts,
+//   account_transactions, collections, users, settings, audit_logs,
+//   sale_items, roles, transactions, sessions, other
+// Extra identity fields on every write:
+//   erpUserId, erpUsername, erpDisplayName, erpRole
+// Document ID: local entity id
+// Fields:
+//   - operationId: string (required)
+//   - operation: string (required) - create, update, cancel, delete
+//   - version: number > 0 (required; int or float)
+//   - deviceId: string (required)
+//   - updatedAt: timestamp (required)
+//   - updatedBy: string (required, immutable to caller uid)
+//   - entityType, entityId: string (optional metadata)
+//   - plus flattened business payload (sale_number, items, …)
+//
+// Collection: companies/{companyId}/records/{recordId}
+// Legacy flat sync dump. Read for signed-in users; no new writes.
+//
+// Collection: companies/{companyId}/files/{fileId}
+//   name, contentType, size, updatedAt, updatedBy
+//
+// Prototype: any signed-in user may sync the single company workspace.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isCompany(companyId) {
+      return companyId == 'al_nomani';
+    }
+
+    function isNumber(value) {
+      return value is int || value is float;
+    }
+
+    function isKnownSection(section) {
+      return section in [
+        'sales',
+        'inventory',
+        'customers',
+        'products',
+        'categories',
+        'accounts',
+        'account_transactions',
+        'collections',
+        'users',
+        'settings',
+        'audit_logs',
+        'sale_items',
+        'roles',
+        'transactions',
+        'sessions',
+        'other'
+      ];
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasOnly(['name', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() < 120
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSectionDoc(data) {
+      return data.keys().hasAll([
+          'operationId', 'operation', 'version',
+          'deviceId', 'updatedAt', 'updatedBy'
+        ])
+        && data.operationId is string
+        && data.operationId.size() > 0
+        && data.operationId.size() < 128
+        && data.operation is string
+        && data.operation.size() > 0
+        && data.operation.size() < 32
+        && isNumber(data.version)
+        && data.version > 0
+        && data.deviceId is string
+        && data.updatedAt is timestamp
+        && data.updatedBy is string
+        && data.updatedBy == request.auth.uid;
+    }
+
+    function isValidFileMeta(data) {
+      return data.keys().hasAll(['name', 'contentType', 'size', 'updatedAt', 'updatedBy'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() < 240
+        && data.contentType is string
+        && isNumber(data.size)
+        && data.size >= 0
+        && data.size < 10485760
+        && data.updatedAt is timestamp
+        && data.updatedBy == request.auth.uid;
+    }
+
+    match /companies/{companyId} {
+      allow read: if isSignedIn() && isCompany(companyId);
+      allow create, update: if isSignedIn()
+        && isCompany(companyId)
+        && isValidCompany(request.resource.data);
+      allow delete: if false;
+
+      match /{section}/{docId} {
+        allow read: if isSignedIn()
+          && isCompany(companyId)
+          && (isKnownSection(section) || section == 'records' || section == 'files');
+
+        allow create: if isSignedIn()
+          && isCompany(companyId)
+          && isKnownSection(section)
+          && isValidSectionDoc(request.resource.data);
+
+        allow update: if isSignedIn()
+          && isCompany(companyId)
+          && isKnownSection(section)
+          && isValidSectionDoc(request.resource.data);
+
+        allow delete: if false;
+      }
+
+      match /files/{fileId} {
+        allow read: if isSignedIn() && isCompany(companyId);
+        allow create, update: if isSignedIn()
+          && isCompany(companyId)
+          && isValidFileMeta(request.resource.data);
+        allow delete: if isSignedIn() && isCompany(companyId);
+      }
+    }
+  }
+}

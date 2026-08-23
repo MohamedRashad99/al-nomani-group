@@ -166,6 +166,9 @@ class AuthService {
       }),
     );
     await _metadata.set('last_user_id', session.userId);
+    await _metadata.set('last_username', session.username);
+    await _metadata.set('last_display_name', session.displayName);
+    await _metadata.set('last_role', session.roleName);
   }
 
   Future<void> _cacheRemoteUser(

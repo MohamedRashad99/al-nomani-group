@@ -9,6 +9,9 @@ import 'package:drift/drift.dart';
 import '../../core/config/app_config.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
+import 'firebase_actor.dart';
+import 'firebase_sync_service.dart';
+import 'google_sheets_live_sync.dart';
 import 'sync_baseline_service.dart';
 import 'sync_queue_repository.dart';
 
@@ -60,6 +63,8 @@ class SyncEngine {
     required SyncBaselineService baseline,
     required AppConfig config,
     required Dio dio,
+    FirebaseSyncService? firebase,
+    GoogleSheetsLiveSync? sheets,
     Connectivity? connectivity,
   }) : _db = db,
        _metadata = metadata,
@@ -67,6 +72,8 @@ class SyncEngine {
        _baseline = baseline,
        _config = config,
        _dio = dio,
+       _firebase = firebase ?? FirebaseSyncService(),
+       _sheets = sheets,
        _connectivity = connectivity ?? Connectivity();
 
   final AppDatabase _db;
@@ -75,9 +82,12 @@ class SyncEngine {
   final SyncBaselineService _baseline;
   final AppConfig _config;
   final Dio _dio;
+  final FirebaseSyncService _firebase;
+  final GoogleSheetsLiveSync? _sheets;
   final Connectivity _connectivity;
 
   bool _running = false;
+  bool _rerunRequested = false;
 
   Future<bool> isOnline() async {
     try {
@@ -110,7 +120,10 @@ class SyncEngine {
   }
 
   Future<void> maybeSyncAfterLocalWrite() async {
-    if (await mode() == SyncMode.nearRealtime) {
+    // Firebase is the live store: always push after a local write.
+    // Scheduled mode only affects the old localhost fallback.
+    if (await _firebase.ensureReady() ||
+        await mode() == SyncMode.nearRealtime) {
       unawaited(syncNow(force: true));
     }
   }
@@ -128,11 +141,15 @@ class SyncEngine {
   }
 
   Future<void> syncNow({required bool force}) async {
-    if (_running) return;
+    if (_running) {
+      _rerunRequested = true;
+      return;
+    }
     final online = await isOnline();
     if (!online) return;
 
     _running = true;
+    _rerunRequested = false;
     final logId = newId();
     final started = DateTime.now().toUtc();
     var accepted = 0;
@@ -154,7 +171,19 @@ class SyncEngine {
           );
 
       if (items.isEmpty) {
-        await _refreshServerBackupHealth();
+        if (await _firebase.ensureReady()) {
+          final fb = await _firebase.health();
+          await _storeBackupStatus({
+            'configured': fb.ok,
+            'failed': fb.ok ? 0 : 1,
+            'pending': 0,
+            'diagnostic': fb.ok
+                ? 'Firebase جاهز • ${fb.records} سجل'
+                : fb.error,
+          });
+        } else {
+          await _refreshServerBackupHealth();
+        }
         await _finishLog(logId, 'success', 0, 0, 0, null);
         await _markSuccess();
         return;
@@ -165,6 +194,23 @@ class SyncEngine {
         await _queue.markProcessing(item.id);
       }
       try {
+        if (await _firebase.ensureReady()) {
+          final results = await _firebase.pushItems(
+            items,
+            deviceId,
+            actor: await _actor(),
+          );
+          for (final item in items) {
+            await _queue.markSynced(item.id);
+            accepted++;
+          }
+          await _storeBackupStatus({
+            'configured': true,
+            'failed': 0,
+            'pending': 0,
+            'diagnostic': 'Firebase Firestore • ${results.length} سجل',
+          });
+        } else {
         final response = await _dio.post<Map<String, dynamic>>(
           '${_config.apiBaseUrl}/api/v1/sync/push',
           data: {
@@ -222,6 +268,7 @@ class SyncEngine {
             failed++;
           }
         }
+        }
       } on DioException catch (error) {
         final authExpired =
             error.response?.statusCode == 401 ||
@@ -238,13 +285,13 @@ class SyncEngine {
           }
         }
         await _metadata.set(SyncConfigKeys.lastSyncError, message);
-      } catch (_) {
+      } catch (error) {
         for (final item in items) {
           await _queue.markPending(item.id);
         }
         await _metadata.set(
           SyncConfigKeys.lastSyncError,
-          'تعذر تنفيذ العملية. بقيت البيانات محفوظة محلياً، وسيتم استكمال المزامنة لاحقاً.',
+          'تعذر تنفيذ العملية. بقيت البيانات محفوظة محلياً، وسيتم استكمال المزامنة لاحقاً. $error',
         );
       }
 
@@ -272,6 +319,10 @@ class SyncEngine {
       );
     } finally {
       _running = false;
+      if (_rerunRequested) {
+        _rerunRequested = false;
+        unawaited(syncNow(force: true));
+      }
     }
   }
 
@@ -380,6 +431,9 @@ class SyncEngine {
   }
 
   Future<({bool reachable, bool authenticated})> _probeServer() async {
+    if (await _firebase.ensureReady()) {
+      return (reachable: true, authenticated: true);
+    }
     if (!await isOnline()) {
       return (reachable: false, authenticated: false);
     }
@@ -452,6 +506,56 @@ class SyncEngine {
     }
   }
 
+  Future<void> recordAuthenticatedSession({
+    required String userId,
+    required String username,
+    required String displayName,
+    required String roleId,
+  }) async {
+    if (!await _firebase.ensureReady()) return;
+    await _metadata.set('last_user_id', userId);
+    await _metadata.set('last_username', username);
+    await _metadata.set('last_display_name', displayName);
+    await _metadata.set('last_role', roleId);
+    await _firebase.recordAuthenticatedSession(
+      actor: FirebaseActor(
+        userId: userId,
+        username: username,
+        displayName: displayName,
+        roleId: roleId,
+      ),
+      deviceId: await _metadata.deviceId(),
+      sessionId: newId(),
+    );
+    unawaited(syncNow(force: true));
+  }
+
+  Future<void> _pushGoogleSheet() async {
+    final sheets = _sheets;
+    if (sheets == null) return;
+    final result = await sheets.pushAll();
+    await _storeBackupStatus({
+      'configured': result.ok,
+      'failed': result.ok ? 0 : 1,
+      'pending': 0,
+      'diagnostic': result.message,
+      'spreadsheet_url':
+          'https://docs.google.com/spreadsheets/d/${_config.googleLiveSpreadsheetId}/edit',
+    });
+    if (!result.ok) {
+      await _metadata.set(SyncConfigKeys.lastSyncError, result.message);
+    }
+  }
+
+  Future<FirebaseActor> _actor() async {
+    return FirebaseActor(
+      userId: await _metadata.get('last_user_id') ?? '',
+      username: await _metadata.get('last_username') ?? '',
+      displayName: await _metadata.get('last_display_name') ?? '',
+      roleId: await _metadata.get('last_role') ?? '',
+    );
+  }
+
   Future<void> _markSuccess() async {
     final now = DateTime.now().toUtc();
     await _metadata.set(
@@ -460,6 +564,7 @@ class SyncEngine {
     );
     await _metadata.set(SyncConfigKeys.lastSyncError, '');
     await _scheduleNext(now);
+    await _pushGoogleSheet();
   }
 
   Future<void> _scheduleNext(DateTime from) async {

@@ -2,7 +2,11 @@
 .env
 .env.local
 **/google-service-account.json
+**/google_sheets_sa.json
 **/secrets/
+firebase-debug.log
+.firebase/
+.firebase-rules-analysis.md
 
 # Miscellaneous
 *.class

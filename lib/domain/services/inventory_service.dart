@@ -152,6 +152,22 @@ class InventoryService {
         payload: movement,
         operationId: movementId,
       );
+      await _queue.enqueue(
+        entityType: SyncEntityType.product,
+        entityId: productId,
+        operation: SyncOperationType.update,
+        payload: {
+          'id': productId,
+          'name': product.name,
+          'sku': product.sku,
+          'current_stock': next.toStorage(),
+          'minimum_stock': product.minimumStock,
+          'unit': product.unit,
+          'version': product.version + 1,
+          'device_id': deviceId,
+        },
+        operationId: 'product-stock-$productId-${product.version + 1}',
+      );
     }
   }
 

@@ -71,12 +71,12 @@ class _BackupView extends StatelessWidget {
                 ),
                 _tile(S.internetStatus, h.online ? S.online : S.offline),
                 _tile(
-                  'الخادم المركزي',
+                  'التخزين السحابي Firebase',
                   !h.serverReachable
-                      ? 'غير متاح'
+                      ? 'غير متصل — راجع مفاتيح المشروع'
                       : h.serverAuthenticated
-                      ? 'متصل والجلسة صالحة'
-                      : 'متصل لكن جلسة الدخول منتهية',
+                      ? 'متصل • مجموعات: مبيعات، مخزون، عملاء، منتجات'
+                      : 'متصل لكن الجلسة غير جاهزة',
                   color: h.serverReachable && h.serverAuthenticated
                       ? AppColors.green
                       : AppColors.danger,

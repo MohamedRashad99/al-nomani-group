@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "777620371715",
+    "project_id": "al-nomani-groub",
+    "storage_bucket": "al-nomani-groub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:777620371715:android:8113690275436e7ba15136",
+        "android_client_info": {
+          "package_name": "com.example.al_nomani_group"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1CG6QqY3wC4z8OorQlaRrhfNIyYL6lUc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

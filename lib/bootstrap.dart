@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import 'core/config/app_config.dart';
 import 'core/di/injector.dart';
+import 'core/firebase/firebase_bootstrap.dart';
 import 'data/local/app_database.dart';
 import 'data/local/metadata_store.dart';
 import 'data/sync/sync_engine.dart';
@@ -30,6 +31,7 @@ Future<void> bootstrap({AppDatabase? database}) async {
   await meta.set('database_version', '${AppVersions.databaseVersion}');
   await meta.set('sync_protocol_version', '${AppVersions.syncProtocolVersion}');
   await sl<SeedService>().seedIfEmpty();
+  await FirebaseBootstrap.ensure();
   await sl<AuthCubit>().restore();
   unawaited(sl<SyncEngine>().maybeRunScheduled());
 }

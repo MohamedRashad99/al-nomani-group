@@ -58,8 +58,10 @@ class BackupCubit extends Cubit<BackupState> {
         busy: false,
         health: health,
         message: health.failed > 0 || health.backupFailed > 0
-            ? 'اكتملت المحاولة مع أخطاء. راجع التفاصيل أدناه.'
-            : 'اكتملت المزامنة والنسخ الاحتياطي.',
+            ? health.backupLastError ??
+                  health.lastError ??
+                  'اكتملت المحاولة مع أخطاء.'
+            : 'اكتملت المزامنة وتحديث Google Sheets.',
       ),
     );
   }
@@ -67,32 +69,14 @@ class BackupCubit extends Cubit<BackupState> {
   Future<void> fullBackup() async {
     emit(state.copyWith(busy: true, message: null));
     await _engine.syncNow(force: true);
-    final afterSync = await _engine.health();
-    if (!afterSync.serverReachable || !afterSync.serverAuthenticated) {
-      emit(
-        state.copyWith(
-          busy: false,
-          health: afterSync,
-          message: !afterSync.serverReachable
-              ? 'الخادم غير متاح. شغّل الخادم ثم أعد المحاولة لتحديث Google Sheets.'
-              : 'سجّل الدخول أثناء الاتصال ثم أعد محاولة تحديث الملف.',
-        ),
-      );
-      return;
-    }
-    await _engine.requestFullBackup();
     final health = await _engine.health();
     emit(
       state.copyWith(
         busy: false,
         health: health,
-        message: health.backupConfigured == false
-            ? 'تعذر الوصول إلى Google Sheets. أضف Service Account على الخادم وشارك الملف معه كمحرر.'
-            : (health.lastError != null && health.lastError!.isNotEmpty)
-            ? health.lastError
-            : health.backupFailed > 0
-            ? 'فشلت كتابة البيانات إلى Google Sheets. راجع التشخيص أدناه.'
-            : 'تم تحديث ملف Google Sheets بكل البيانات.',
+        message: health.backupFailed > 0
+            ? health.backupDiagnostic ?? 'تعذر تحديث Google Sheets.'
+            : 'تم تحديث ملف Google Sheets بكل الأقسام العربية.',
       ),
     );
   }
@@ -101,7 +85,6 @@ class BackupCubit extends Cubit<BackupState> {
     emit(state.copyWith(busy: true, message: null));
     await _queue.retryFailed();
     await _engine.syncNow(force: true);
-    await _engine.retryServerBackup();
     final health = await _engine.health();
     emit(
       state.copyWith(

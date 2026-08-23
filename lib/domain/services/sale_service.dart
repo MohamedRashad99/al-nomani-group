@@ -119,6 +119,17 @@ class SaleService {
           'unit_price': line.unitPrice.toStorage(),
           'line_total': line.lineTotal.toStorage(),
         });
+        await _queue.enqueue(
+          entityType: SyncEntityType.saleItem,
+          entityId: itemId,
+          operation: SyncOperationType.create,
+          payload: {
+            ...itemPayloads.last,
+            'created_by': session.userId,
+            'version': 1,
+          },
+          operationId: itemId,
+        );
         await _inventory.applyInsideTransaction(
           session: session,
           productId: line.productId,

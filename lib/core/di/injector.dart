@@ -5,6 +5,8 @@ import '../../data/local/app_database.dart';
 import '../../data/local/metadata_store.dart';
 import '../../data/remote/auth_interceptor.dart';
 import '../../data/remote/auth_token_store.dart';
+import '../../data/sync/arabic_workbook_builder.dart';
+import '../../data/sync/google_sheets_live_sync.dart';
 import '../../data/sync/sync_baseline_service.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
@@ -61,7 +63,7 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(() => MetadataStore(sl()));
   sl.registerLazySingleton(() => SyncQueueRepository(sl()));
   sl.registerLazySingleton(() => SyncBaselineService(sl(), sl(), sl()));
-  sl.registerLazySingleton(() => AuditService(sl()));
+  sl.registerLazySingleton(() => AuditService(sl(), sl()));
   sl.registerLazySingleton(() => ConflictResolutionService(sl(), sl(), sl()));
   sl.registerLazySingleton(() => AccountService(sl(), sl()));
   sl.registerLazySingleton(
@@ -113,6 +115,8 @@ Future<void> configureDependencies({
       tokens: sl(),
     ),
   );
+  sl.registerLazySingleton(() => ArabicWorkbookBuilder(sl()));
+  sl.registerLazySingleton(() => GoogleSheetsLiveSync(sl(), sl(), sl()));
   sl.registerLazySingleton(
     () => SyncEngine(
       db: sl(),
@@ -121,6 +125,7 @@ Future<void> configureDependencies({
       baseline: sl(),
       config: sl(),
       dio: sl(),
+      sheets: sl(),
     ),
   );
   sl.registerLazySingleton(
@@ -134,6 +139,6 @@ Future<void> configureDependencies({
     ),
   );
   sl.registerLazySingleton(AppBusyCubit.new);
-  sl.registerLazySingleton(() => AuthCubit(sl()));
+  sl.registerLazySingleton(() => AuthCubit(sl(), sl()));
   sl.registerFactory(() => BackupCubit(sl(), sl(), sl()));
 }

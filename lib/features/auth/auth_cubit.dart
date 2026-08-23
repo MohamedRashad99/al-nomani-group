@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/errors/app_exception.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../data/sync/sync_engine.dart';
 import '../../domain/services/auth_service.dart';
 import '../../domain/session.dart';
 
@@ -33,13 +36,17 @@ class AuthState extends Equatable {
 }
 
 class AuthCubit extends Cubit<AuthState> {
-  AuthCubit(this._auth) : super(const AuthState());
+  AuthCubit(this._auth, this._sync) : super(const AuthState());
   final AuthService _auth;
+  final SyncEngine _sync;
 
   Future<void> restore() async {
     emit(state.copyWith(loading: true));
     final session = await _auth.restore();
     emit(AuthState(session: session));
+    if (session != null) {
+      unawaited(_recordSession(session));
+    }
   }
 
   Future<void> login(String username, String password) async {
@@ -47,11 +54,21 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final session = await _auth.login(username, password);
       emit(AuthState(session: session));
+      unawaited(_recordSession(session));
     } on AppException catch (e) {
       emit(state.copyWith(loading: false, error: e.messageAr));
     } catch (_) {
       emit(state.copyWith(loading: false, error: S.loginFailed));
     }
+  }
+
+  Future<void> _recordSession(AppSession session) {
+    return _sync.recordAuthenticatedSession(
+      userId: session.userId,
+      username: session.username,
+      displayName: session.displayName,
+      roleId: session.roleName,
+    );
   }
 
   Future<void> logout() async {

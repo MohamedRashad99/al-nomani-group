@@ -35,6 +35,11 @@ dependencies:
   path: ^1.9.1
   collection: ^1.19.1
   meta: ^1.16.0
+  firebase_core: ^4.13.0
+  firebase_auth: ^6.5.7
+  cloud_firestore: ^6.8.0
+  firebase_storage: ^13.4.6
+  dart_jsonwebtoken: ^3.2.0
 
 dev_dependencies:
   flutter_test:
