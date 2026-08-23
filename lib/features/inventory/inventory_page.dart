@@ -12,6 +12,7 @@ import '../../domain/services/inventory_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/quantity_sheet.dart';
 
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
@@ -97,69 +98,32 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> _move(Product product, String type) async {
-    final qty = TextEditingController(text: '1.000');
-    await showDialog<void>(
+    final stock = Quantity.parse(product.currentStock);
+    final quantity = await showQuantitySheet(
       context: context,
-      builder: (ctx) {
-        var saving = false;
-        String? error;
-        return StatefulBuilder(
-          builder: (ctx, setS) => AlertDialog(
-            title: Text(type == 'stock_in' ? S.stockIn : S.stockOut),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: qty,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(labelText: S.quantity),
-                ),
-                if (error != null)
-                  Text(error!, style: const TextStyle(color: Colors.red)),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: saving ? null : () => Navigator.pop(ctx),
-                child: const Text(S.cancel),
-              ),
-              FilledButton(
-                onPressed: saving
-                    ? null
-                    : () async {
-                        setS(() {
-                          saving = true;
-                          error = null;
-                        });
-                        try {
-                          await sl<AppBusyCubit>().guard(() async {
-                            await sl<InventoryService>().adjust(
-                              session: context.read<AuthCubit>().state.session!,
-                              productId: product.id,
-                              quantity: Quantity.parse(qty.text),
-                              type: type,
-                            );
-                            await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-                          });
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            setS(() {
-                              saving = false;
-                              error = e.toString();
-                            });
-                          }
-                        }
-                      },
-                child: const Text(S.confirm),
-              ),
-            ],
-          ),
-        );
-      },
+      title: type == 'stock_in' ? S.stockIn : S.stockOut,
+      helperText: '${S.currentStock}: ${product.currentStock}',
+      max: type == 'stock_out'
+          ? (stock.isPositive ? stock : Quantity.zero())
+          : null,
     );
+    if (quantity == null || !mounted) return;
+    try {
+      await sl<AppBusyCubit>().guard(() async {
+        await sl<InventoryService>().adjust(
+          session: context.read<AuthCubit>().state.session!,
+          productId: product.id,
+          quantity: quantity,
+          type: type,
+        );
+        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   Future<void> _showMovements(Product product) async {

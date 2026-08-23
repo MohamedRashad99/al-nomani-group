@@ -46,6 +46,10 @@ class AppConfig {
 
   bool get isDevelopment => environment != 'production';
 
+  String get googleSheetUrl => googleLiveSpreadsheetId.isEmpty
+      ? ''
+      : 'https://docs.google.com/spreadsheets/d/$googleLiveSpreadsheetId/edit';
+
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     final environment = json['environment'] as String? ?? 'development';
     final apiBaseUrl =

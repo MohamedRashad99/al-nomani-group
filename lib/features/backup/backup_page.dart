@@ -13,6 +13,7 @@ import '../../core/utils/file_download.dart';
 import '../../data/local/app_database.dart';
 import '../../domain/services/conflict_resolution_service.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/google_sheet_link_button.dart';
 import '../auth/auth_cubit.dart';
 import 'backup_cubit.dart';
 
@@ -285,10 +286,7 @@ class _SheetExportCard extends StatelessWidget {
             ),
             if (spreadsheetUrl.isNotEmpty) ...[
               const SizedBox(height: 8),
-              SelectableText(
-                spreadsheetUrl,
-                style: const TextStyle(color: AppColors.green),
-              ),
+              GoogleSheetLinkButton(url: spreadsheetUrl),
             ],
             const SizedBox(height: 12),
             FilledButton.icon(

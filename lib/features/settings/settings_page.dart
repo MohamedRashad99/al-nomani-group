@@ -11,6 +11,7 @@ import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/google_sheet_link_button.dart';
 import '../../shared/widgets/searchable_select.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -29,12 +30,19 @@ class _SettingsPageState extends State<SettingsPage> {
     _future = _load();
   }
 
+  bool _syncingNow = false;
+
   Future<_SyncSettings> _load() async {
     final engine = sl<SyncEngine>();
     return _SyncSettings(
-      intervalDays: await engine.intervalDays(),
+      intervalDays: _normalizeInterval(await engine.intervalDays()),
       mode: await engine.mode(),
     );
+  }
+
+  int _normalizeInterval(int days) {
+    if (days == 1 || days == 2 || days == 5) return days;
+    return days <= 2 ? 2 : 5;
   }
 
   @override
@@ -99,15 +107,31 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: settings.intervalDays,
                         options: const [
                           SearchableOption(value: 1, label: 'كل يوم'),
-                          SearchableOption(value: 3, label: 'كل ٣ أيام'),
+                          SearchableOption(value: 2, label: 'كل يومين'),
                           SearchableOption(value: 5, label: 'كل ٥ أيام'),
-                          SearchableOption(value: 7, label: 'كل ٧ أيام'),
                         ],
                         onChanged: (value) {
                           if (value != null) {
                             _save(mode: settings.mode, days: value);
                           }
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(S.firebaseImmediateHint),
+                      const SizedBox(height: 12),
+                      GoogleSheetLinkButton(url: config.googleSheetUrl),
+                      const SizedBox(height: 8),
+                      FilledButton.tonal(
+                        onPressed: _syncingNow ? null : _syncNow,
+                        child: _syncingNow
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(S.syncNow),
                       ),
                       if (!canUpdate) ...[
                         const SizedBox(height: 10),
@@ -209,6 +233,24 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات.')));
+    }
+  }
+
+  Future<void> _syncNow() async {
+    setState(() => _syncingNow = true);
+    try {
+      await sl<SyncEngine>().syncNow(force: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('اكتملت المزامنة.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _syncingNow = false);
     }
   }
 }

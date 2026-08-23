@@ -10,6 +10,7 @@ import '../../data/sync/sync_engine.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -120,12 +121,10 @@ class _ProductsPageState extends State<ProductsPage> {
     final name = TextEditingController(text: product?.name ?? '');
     final sku = TextEditingController(text: product?.sku ?? '');
     final brand = TextEditingController(text: product?.brand ?? '');
-    final purchase = TextEditingController(
-      text: product?.purchasePrice ?? '0.000',
-    );
-    final sell = TextEditingController(text: product?.sellingPrice ?? '0.000');
-    final stock = TextEditingController(text: product?.currentStock ?? '0.000');
-    final min = TextEditingController(text: product?.minimumStock ?? '0.000');
+    final purchase = TextEditingController(text: product?.purchasePrice ?? '');
+    final sell = TextEditingController(text: product?.sellingPrice ?? '');
+    final stock = TextEditingController(text: product?.currentStock ?? '');
+    final min = TextEditingController(text: product?.minimumStock ?? '');
     var unit = product?.unit ?? 'kg';
     var categoryId = product?.categoryId;
     final customUnit = TextEditingController(
@@ -162,34 +161,22 @@ class _ProductsPageState extends State<ProductsPage> {
                     controller: brand,
                     decoration: const InputDecoration(labelText: S.brand),
                   ),
-                  TextField(
+                  AmountField(
                     controller: purchase,
-                    decoration: const InputDecoration(
-                      labelText: S.purchasePrice,
-                    ),
-                    keyboardType: TextInputType.number,
+                    label: S.purchasePrice,
                   ),
-                  TextField(
+                  AmountField(
                     controller: sell,
-                    decoration: const InputDecoration(
-                      labelText: S.sellingPrice,
-                    ),
-                    keyboardType: TextInputType.number,
+                    label: S.sellingPrice,
                   ),
                   if (product == null)
-                    TextField(
+                    AmountField(
                       controller: stock,
-                      decoration: const InputDecoration(
-                        labelText: S.currentStock,
-                      ),
-                      keyboardType: TextInputType.number,
+                      label: S.currentStock,
                     ),
-                  TextField(
+                  AmountField(
                     controller: min,
-                    decoration: const InputDecoration(
-                      labelText: S.minimumStock,
-                    ),
-                    keyboardType: TextInputType.number,
+                    label: S.minimumStock,
                   ),
                   SearchableSelectField<String?>(
                     label: S.category,
@@ -245,10 +232,18 @@ class _ProductsPageState extends State<ProductsPage> {
                                   sku: sku.text,
                                   categoryId: categoryId,
                                   brand: brand.text,
-                                  purchasePrice: Money.parse(purchase.text),
-                                  sellingPrice: Money.parse(sell.text),
-                                  currentStock: Quantity.parse(stock.text),
-                                  minimumStock: Quantity.parse(min.text),
+                                  purchasePrice: Money.parse(
+                                    purchase.text.isEmpty ? '0' : purchase.text,
+                                  ),
+                                  sellingPrice: Money.parse(
+                                    sell.text.isEmpty ? '0' : sell.text,
+                                  ),
+                                  currentStock: Quantity.parse(
+                                    stock.text.isEmpty ? '0' : stock.text,
+                                  ),
+                                  minimumStock: Quantity.parse(
+                                    min.text.isEmpty ? '0' : min.text,
+                                  ),
                                   unit: unit,
                                   customUnitLabel:
                                       unit == ProductUnit.custom.code

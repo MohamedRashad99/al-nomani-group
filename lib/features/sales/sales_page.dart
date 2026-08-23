@@ -15,9 +15,11 @@ import '../../domain/services/catalog_service.dart';
 import '../../domain/services/sale_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/quantity_sheet.dart';
 import '../../shared/widgets/searchable_select.dart';
 
 enum _SalePeriod { all, today, week, month }
@@ -460,7 +462,7 @@ class NewSalePage extends StatefulWidget {
 class _NewSalePageState extends State<NewSalePage> {
   Customer? _customer;
   String? _customCustomerName;
-  final _paid = TextEditingController(text: '0.000');
+  final _paid = TextEditingController();
   final _lines = <SaleLineDraft>[];
   final _products = <String, Product>{};
   bool _saving = false;
@@ -486,7 +488,11 @@ class _NewSalePageState extends State<NewSalePage> {
   void _setPayMode(_PayMode mode) {
     setState(() {
       _payMode = mode;
-      _paid.text = mode == _PayMode.cash ? _total.toStorage() : '0.000';
+      if (mode == _PayMode.cash) {
+        _paid.text = _total.toStorage();
+      } else {
+        _paid.clear();
+      }
     });
   }
 
@@ -505,6 +511,7 @@ class _NewSalePageState extends State<NewSalePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text(S.newSale),
         actions: const [
@@ -518,7 +525,7 @@ class _NewSalePageState extends State<NewSalePage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final content = ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
               children: [
                 _Section(
                   title: 'العميل',
@@ -589,13 +596,20 @@ class _NewSalePageState extends State<NewSalePage> {
                             for (final product in products) {
                               if (product.id == id) selected = product;
                             }
-                            if (selected == null) return;
-                            final quantity = await _quantityDialog(
-                              selected,
-                              Quantity.parse('1'),
+                            final picked = selected;
+                            if (picked == null) return;
+                            final reserved = _lines
+                                .where((line) => line.productId == picked.id)
+                                .fold(
+                                  Quantity.zero(),
+                                  (sum, line) => sum + line.quantity,
+                                );
+                            final quantity = await _askQuantity(
+                              picked,
+                              reserved: reserved,
                             );
                             if (quantity == null) return;
-                            _addProduct(selected, quantity);
+                            _addProduct(picked, quantity);
                           },
                         ),
                       );
@@ -651,17 +665,11 @@ class _NewSalePageState extends State<NewSalePage> {
                           'يمكنك إدخال دفعة نقدية الآن. المتبقي يُحسب تلقائياً ويُسجَّل آجلاً.',
                         ),
                         const SizedBox(height: 10),
-                        TextField(
+                        AmountField(
                           controller: _paid,
+                          label: S.paidAmount,
+                          prefixIcon: const Icon(Icons.payments_outlined),
                           onChanged: (_) => setState(() {}),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: S.paidAmount,
-                            hintText: '0.000',
-                            prefixIcon: Icon(Icons.payments_outlined),
-                          ),
                         ),
                       ],
                       const SizedBox(height: 12),
@@ -676,7 +684,6 @@ class _NewSalePageState extends State<NewSalePage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 100),
               ],
             );
             if (constraints.maxWidth < 900) return content;
@@ -735,16 +742,17 @@ class _NewSalePageState extends State<NewSalePage> {
   Future<void> _editLine(int index) async {
     final product = _products[_lines[index].productId];
     if (product == null) return;
-    final quantity = await _quantityDialog(product, _lines[index].quantity);
-    if (quantity == null) return;
-    final others = _lines
+    final reserved = _lines
         .asMap()
         .entries
         .where(
-          (entry) => entry.key != index && entry.value.productId == product.id,
+          (entry) =>
+              entry.key != index && entry.value.productId == product.id,
         )
         .fold(Quantity.zero(), (sum, entry) => sum + entry.value.quantity);
-    if (others + quantity > Quantity.parse(product.currentStock)) {
+    final quantity = await _askQuantity(product, reserved: reserved);
+    if (quantity == null) return;
+    if (reserved + quantity > Quantity.parse(product.currentStock)) {
       _message(S.insufficientStock);
       return;
     }
@@ -759,43 +767,18 @@ class _NewSalePageState extends State<NewSalePage> {
     });
   }
 
-  Future<Quantity?> _quantityDialog(Product product, Quantity initial) async {
-    final controller = TextEditingController(text: initial.toStorage());
-    final value = await showDialog<String>(
+  Future<Quantity?> _askQuantity(
+    Product product, {
+    required Quantity reserved,
+  }) async {
+    final stock = Quantity.parse(product.currentStock);
+    final available = stock - reserved;
+    return showQuantitySheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(product.name),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: S.quantity,
-            helperText: 'المتوفر ${product.currentStock}',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(S.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text(S.confirm),
-          ),
-        ],
-      ),
+      title: product.name,
+      helperText: 'المتوفر ${product.currentStock}',
+      max: available.isPositive ? available : Quantity.zero(),
     );
-    controller.dispose();
-    if (value == null) return null;
-    try {
-      final quantity = Quantity.parse(value);
-      if (!quantity.isPositive) throw const FormatException();
-      return quantity;
-    } catch (_) {
-      _message(S.invalidQty);
-      return null;
-    }
   }
 
   Future<void> _confirm() async {

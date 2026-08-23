@@ -113,6 +113,9 @@ abstract final class S {
   static const transfer = 'تحويل';
 
   static const syncNow = 'مزامنة الآن';
+  static const openGoogleSheet = 'فتح Google Sheet';
+  static const firebaseImmediateHint =
+      'البيانات تُحفظ في Firebase فوراً. الجدول يُحدَّث حسب الفاصل أو عند الضغط على الآن.';
   static const fullBackupNow = 'تحديث Google Sheets بكل البيانات';
   static const exportLocalBackup = 'تصدير نسخة احتياطية';
   static const retryFailed = 'إعادة محاولة العمليات الفاشلة';
