@@ -34,16 +34,20 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - name: Build preview web
         run: |
-          flutter build web --release --no-wasm-dry-run --base-href /al-nomani-group/
+          flutter build web --release --no-wasm-dry-run --base-href /al-nomani-group/docs/
           cp web/version.json build/web/version.json
           cp web/sqlite3.wasm build/web/sqlite3.wasm
           cp web/drift_worker.js build/web/drift_worker.js
+          mkdir -p public/docs
+          cp -R build/web/. public/docs/
+          cp index.html public/index.html
+          touch public/.nojekyll public/docs/.nojekyll
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: public
       - name: Deploy to GitHub Pages
         id: pages
         uses: actions/deploy-pages@v4
