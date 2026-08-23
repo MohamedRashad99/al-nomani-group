@@ -70,14 +70,53 @@ class _DashboardData {
   final SyncHealth health;
 }
 
-class _DashboardBody extends StatelessWidget {
+class _DashboardBody extends StatefulWidget {
   const _DashboardBody({required this.data});
 
   final _DashboardData data;
 
   @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+class _DashboardBodyState extends State<_DashboardBody>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..forward();
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  Widget _reveal({required int order, required Widget child}) {
+    final start = (order * 0.07).clamp(0.0, 0.62);
+    final end = (start + 0.38).clamp(0.0, 1.0);
+    final animation = CurvedAnimation(
+      parent: _motion,
+      curve: Interval(start, end, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.08),
+          end: Offset.zero,
+        ).animate(animation),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final dashboard = data.snapshot;
+    final dashboard = widget.data.snapshot;
     final session = context.watch<AuthCubit>().state.session;
     final permissions = session?.permissions ?? const <String>{};
     final width = MediaQuery.sizeOf(context).width;
@@ -102,9 +141,12 @@ class _DashboardBody extends StatelessWidget {
             12,
           ),
           sliver: SliverToBoxAdapter(
-            child: _WelcomeHeader(
-              name: session?.displayName ?? '',
-              health: data.health,
+            child: _reveal(
+              order: 0,
+              child: _WelcomeHeader(
+                name: session?.displayName ?? '',
+                health: widget.data.health,
+              ),
             ),
           ),
         ),
@@ -114,7 +156,9 @@ class _DashboardBody extends StatelessWidget {
             child: _KpiGrid(
               columns: kpiColumns,
               children: [
-                _KpiCard(
+                _reveal(
+                  order: 1,
+                  child: _KpiCard(
                   label: S.todaySales,
                   value: MoneyText(
                     dashboard.todaySales,
@@ -124,8 +168,11 @@ class _DashboardBody extends StatelessWidget {
                   color: AppColors.green,
                   helper:
                       '${dashboard.todaySalesChangePercent >= 0 ? '+' : ''}${dashboard.todaySalesChangePercent.toStringAsFixed(0)}٪ عن أمس',
+                  ),
                 ),
-                _KpiCard(
+                _reveal(
+                  order: 2,
+                  child: _KpiCard(
                   label: S.outstandingDebt,
                   value: MoneyText(
                     dashboard.outstandingDebt,
@@ -135,8 +182,11 @@ class _DashboardBody extends StatelessWidget {
                   color: AppColors.orange,
                   helper:
                       '${ArabicFormat.number(dashboard.customersWithDebt)} عميل',
+                  ),
                 ),
-                _KpiCard(
+                _reveal(
+                  order: 3,
+                  child: _KpiCard(
                   label: S.todayCollections,
                   value: MoneyText(
                     dashboard.todayCollections,
@@ -145,8 +195,11 @@ class _DashboardBody extends StatelessWidget {
                   icon: Icons.payments_outlined,
                   color: const Color(0xFF1565C0),
                   helper: 'تحصيلات مسجلة اليوم',
+                  ),
                 ),
-                _KpiCard(
+                _reveal(
+                  order: 4,
+                  child: _KpiCard(
                   label: S.lowStock,
                   value: Text(
                     ArabicFormat.number(
@@ -158,6 +211,7 @@ class _DashboardBody extends StatelessWidget {
                   color: AppColors.danger,
                   helper:
                       '${ArabicFormat.number(dashboard.outOfStock)} منتج نافد',
+                  ),
                 ),
               ],
             ),
@@ -171,35 +225,9 @@ class _DashboardBody extends StatelessWidget {
             0,
           ),
           sliver: SliverToBoxAdapter(
-            child: _QuickActions(permissions: permissions),
-          ),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            22,
-            horizontalPadding,
-            0,
-          ),
-          sliver: SliverToBoxAdapter(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final trend = _TrendPanel(snapshot: dashboard);
-                final debt = _DebtPanel(snapshot: dashboard);
-                if (constraints.maxWidth < 850) {
-                  return Column(
-                    children: [trend, const SizedBox(height: 12), debt],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 2, child: trend),
-                    const SizedBox(width: 12),
-                    Expanded(child: debt),
-                  ],
-                );
-              },
+            child: _reveal(
+              order: 5,
+              child: _QuickActions(permissions: permissions),
             ),
           ),
         ),
@@ -211,41 +239,76 @@ class _DashboardBody extends StatelessWidget {
             0,
           ),
           sliver: SliverToBoxAdapter(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final low = _LowStockPanel(snapshot: dashboard);
-                final top = _RankingPanel(
-                  title: S.topProducts,
-                  items: dashboard.topProducts,
-                  icon: Icons.emoji_events_outlined,
-                );
-                final customers = _RankingPanel(
-                  title: S.topCustomers,
-                  items: dashboard.topCustomers,
-                  icon: Icons.groups_outlined,
-                );
-                if (constraints.maxWidth < 1050) {
-                  return Column(
+            child: _reveal(
+              order: 6,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final trend = _TrendPanel(snapshot: dashboard);
+                  final debt = _DebtPanel(snapshot: dashboard);
+                  if (constraints.maxWidth < 850) {
+                    return Column(
+                      children: [trend, const SizedBox(height: 12), debt],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      low,
-                      const SizedBox(height: 12),
-                      top,
-                      const SizedBox(height: 12),
-                      customers,
+                      Expanded(flex: 2, child: trend),
+                      const SizedBox(width: 12),
+                      Expanded(child: debt),
                     ],
                   );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: low),
-                    const SizedBox(width: 12),
-                    Expanded(child: top),
-                    const SizedBox(width: 12),
-                    Expanded(child: customers),
-                  ],
-                );
-              },
+                },
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            22,
+            horizontalPadding,
+            0,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: _reveal(
+              order: 7,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final low = _LowStockPanel(snapshot: dashboard);
+                  final top = _RankingPanel(
+                    title: S.topProducts,
+                    items: dashboard.topProducts,
+                    icon: Icons.emoji_events_outlined,
+                  );
+                  final customers = _RankingPanel(
+                    title: S.topCustomers,
+                    items: dashboard.topCustomers,
+                    icon: Icons.groups_outlined,
+                  );
+                  if (constraints.maxWidth < 1050) {
+                    return Column(
+                      children: [
+                        low,
+                        const SizedBox(height: 12),
+                        top,
+                        const SizedBox(height: 12),
+                        customers,
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: low),
+                      const SizedBox(width: 12),
+                      Expanded(child: top),
+                      const SizedBox(width: 12),
+                      Expanded(child: customers),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -257,7 +320,10 @@ class _DashboardBody extends StatelessWidget {
             28,
           ),
           sliver: SliverToBoxAdapter(
-            child: _RecentActivity(snapshot: dashboard),
+            child: _reveal(
+              order: 8,
+              child: _RecentActivity(snapshot: dashboard),
+            ),
           ),
         ),
       ],
@@ -265,11 +331,28 @@ class _DashboardBody extends StatelessWidget {
   }
 }
 
-class _WelcomeHeader extends StatelessWidget {
+class _WelcomeHeader extends StatefulWidget {
   const _WelcomeHeader({required this.name, required this.health});
 
   final String name;
   final SyncHealth health;
+
+  @override
+  State<_WelcomeHeader> createState() => _WelcomeHeaderState();
+}
+
+class _WelcomeHeaderState extends State<_WelcomeHeader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmer = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 5),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -279,6 +362,8 @@ class _WelcomeHeader extends StatelessWidget {
         : hour < 18
         ? 'مساء الخير'
         : 'أهلاً بك';
+    final health = widget.health;
+    final name = widget.name;
     final healthy =
         health.failed == 0 &&
         health.backupFailed == 0 &&
@@ -335,24 +420,35 @@ class _WelcomeHeader extends StatelessWidget {
         ),
       ],
     );
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(phone ? 14 : 22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.darkGreen, Color(0xFF347B39)],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        borderRadius: BorderRadius.circular(phone ? 18 : 24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.darkGreen.withValues(alpha: .18),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+    return AnimatedBuilder(
+      animation: _shimmer,
+      builder: (context, child) {
+        final shift = _shimmer.value;
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(phone ? 14 : 22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: const [
+                AppColors.darkGreen,
+                Color(0xFF3F8F45),
+                Color(0xFF2E6B33),
+              ],
+              begin: Alignment(-1 + shift * 2, -1),
+              end: Alignment(1 - shift * 2, 1),
+            ),
+            borderRadius: BorderRadius.circular(phone ? 18 : 24),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.darkGreen.withValues(alpha: .18 + shift * .08),
+                blurRadius: 20 + shift * 10,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
+          child: child,
+        );
+      },
       child: phone
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,

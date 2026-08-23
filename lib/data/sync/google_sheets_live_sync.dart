@@ -47,14 +47,6 @@ class GoogleSheetsLiveSync {
       },
     };
     final errors = <String>[];
-    var queued = false;
-    try {
-      await _queueFirestoreTabs(payload['sections'] as Map<String, dynamic>);
-      queued = true;
-    } catch (error) {
-      debugPrint('Sheets Firestore queue failed: $error');
-      errors.add('$error');
-    }
 
     if (_config.googleSheetsWebappUrl.isNotEmpty) {
       try {
@@ -67,17 +59,25 @@ class GoogleSheetsLiveSync {
     }
 
     try {
-      await _writeDirect(
-        spreadsheetId,
-        payload['sections'] as Map<String, dynamic>,
-      );
-      return (ok: true, message: 'تم تحديث Google Sheets مباشرة.');
-    } catch (directError) {
-      debugPrint('Direct Sheets write failed: $directError');
-      errors.add('$directError');
+      await _queueFirestoreTabs(payload['sections'] as Map<String, dynamic>);
+      return (ok: true, message: 'تم إرسال البيانات لتحديث Google Sheets.');
+    } catch (error) {
+      debugPrint('Sheets Firestore queue failed: $error');
+      errors.add('$error');
     }
 
     if (!kIsWeb) {
+      try {
+        await _writeDirect(
+          spreadsheetId,
+          payload['sections'] as Map<String, dynamic>,
+        );
+        return (ok: true, message: 'تم تحديث Google Sheets مباشرة.');
+      } catch (directError) {
+        debugPrint('Direct Sheets write failed: $directError');
+        errors.add('$directError');
+      }
+
       try {
         await _plainDio.post<Map<String, dynamic>>(
           _bridgeUrl,
@@ -94,15 +94,9 @@ class GoogleSheetsLiveSync {
       }
     }
 
-    if (queued) {
-      return (
-        ok: true,
-        message: 'تم إرسال البيانات لتحديث Google Sheets.',
-      );
-    }
     return (
       ok: false,
-      message: 'تعذر تحديث Google Sheets. ${errors.join(' | ')}',
+      message: 'تعذر تحديث Google Sheets. أعد المحاولة بعد اتصال الإنترنت.',
     );
   }
 
@@ -132,7 +126,7 @@ class GoogleSheetsLiveSync {
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedBy': uid,
         'tab': entry.key,
-        'values': entry.value,
+        'valuesJson': jsonEncode(entry.value),
       });
       pending++;
       if (pending >= 400) {

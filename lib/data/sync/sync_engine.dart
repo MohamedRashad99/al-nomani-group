@@ -538,12 +538,15 @@ class SyncEngine {
       'configured': result.ok,
       'failed': result.ok ? 0 : 1,
       'pending': 0,
+      'error': result.ok ? '' : result.message,
       'diagnostic': result.message,
       'spreadsheet_url':
           'https://docs.google.com/spreadsheets/d/${_config.googleLiveSpreadsheetId}/edit',
     });
     if (!result.ok) {
       await _metadata.set(SyncConfigKeys.lastSyncError, result.message);
+    } else {
+      await _metadata.set(SyncConfigKeys.lastSyncError, '');
     }
   }
 

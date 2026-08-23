@@ -361,12 +361,26 @@ async function buildFromCollections(idToken) {
   };
 }
 
+function tabValues(tab) {
+  if (typeof tab.valuesJson === 'string' && tab.valuesJson.trim()) {
+    try {
+      const parsed = JSON.parse(tab.valuesJson);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+  if (Array.isArray(tab.values)) return tab.values;
+  return null;
+}
+
 async function loadSections(idToken) {
   const tabs = await listDocuments(idToken, 'sheet_tabs');
   const sections = {};
   for (const tab of tabs) {
-    if (tab.tab && Array.isArray(tab.values)) {
-      sections[tab.tab] = tab.values;
+    const values = tabValues(tab);
+    if (tab.tab && values) {
+      sections[tab.tab] = values;
     }
   }
   if (Object.keys(sections).length) {
