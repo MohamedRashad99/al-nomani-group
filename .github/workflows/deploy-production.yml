@@ -1,0 +1,58 @@
+name: Production deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: production
+      url: ${{ steps.pages.outputs.page_url }}
+    env:
+      PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.0
+      - run: sudo apt-get update -qq && sudo apt-get install -y libsqlite3-dev
+      - run: dart pub get --directory packages/shared
+      - run: flutter pub get
+      - name: Web SQLite assets
+        run: bash tool/prepare_web_db.sh
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build production web
+        run: |
+          test -n "$PRODUCTION_API_BASE_URL"
+          cp assets/config/app_config.production.json assets/config/app_config.json
+          jq --arg url "$PRODUCTION_API_BASE_URL" '.api_base_url = $url' assets/config/app_config.json > /tmp/app_config.json
+          mv /tmp/app_config.json assets/config/app_config.json
+          flutter build web --release --no-wasm-dry-run --base-href /al-nomani-group/
+          cp web/version.json build/web/version.json
+          cp web/sqlite3.wasm build/web/sqlite3.wasm
+          cp web/drift_worker.js build/web/drift_worker.js
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      - name: Deploy to GitHub Pages
+        id: pages
+        uses: actions/deploy-pages@v4
+      - name: Build backend image
+        if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        run: docker build -f server/Dockerfile -t al-nomani-server:${{ github.sha }} .

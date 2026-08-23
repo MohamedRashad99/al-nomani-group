@@ -1,3 +1,9 @@
+# Secrets
+.env
+.env.local
+**/google-service-account.json
+**/secrets/
+
 # Miscellaneous
 *.class
 *.log

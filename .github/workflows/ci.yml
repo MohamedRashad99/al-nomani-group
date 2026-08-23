@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: al_nomani_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d al_nomani_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Native test dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y libsqlite3-dev
+      - name: Shared package
+        working-directory: packages/shared
+        run: |
+          dart pub get
+          dart analyze
+          dart test
+      - name: Flutter packages
+        run: flutter pub get
+      - name: Web SQLite assets
+        run: bash tool/prepare_web_db.sh
+      - name: Generate Drift
+        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Format
+        run: dart format lib packages/shared/lib server/lib test
+      - name: Analyze Flutter
+        run: flutter analyze
+      - name: Test Flutter
+        run: flutter test
+      - name: Server
+        working-directory: server
+        run: |
+          dart pub get
+          dart analyze
+          dart test --concurrency=1
+      - name: Build Flutter Web
+        run: flutter build web --release --no-wasm-dry-run --source-maps --dart-define=ENVIRONMENT=ci
