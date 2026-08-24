@@ -8,6 +8,12 @@ abstract final class S {
   static const password = 'كلمة المرور';
   static const loginAction = 'دخول';
   static const logout = 'تسجيل الخروج';
+  static const addToHomeScreen = 'تثبيت على الشاشة الرئيسية';
+  static const alreadyOnHomeScreen = 'التطبيق مثبت على الشاشة الرئيسية.';
+  static const iosAddToHome =
+      'على آيفون: اضغط مشاركة ثم «إضافة إلى الشاشة الرئيسية».';
+  static const installUnavailable =
+      'افتح الموقع في Chrome واختر «إضافة إلى الشاشة الرئيسية» من قائمة المتصفح.';
   static const offlineLoginHint = 'يمكنك الدخول دون إنترنت بعد أول تسجيل ناجح.';
 
   static const dashboard = 'لوحة التحكم';

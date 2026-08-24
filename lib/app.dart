@@ -56,7 +56,7 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.rtl(),
         locale: const Locale('ar'),
-        supportedLocales: const [Locale('ar')],
+        supportedLocales: const [Locale('ar'), Locale('en')],
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,

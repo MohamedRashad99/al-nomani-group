@@ -11,6 +11,7 @@ import '../../domain/services/catalog_service.dart';
 import '../../domain/services/collection_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -107,14 +108,9 @@ class CollectionsPage extends StatelessWidget {
                       if (value.isNotEmpty) customerId = null;
                     }),
                   ),
-                  TextField(
+                  AmountField(
                     controller: amount,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: S.collectionAmount,
-                    ),
+                    label: S.collectionAmount,
                   ),
                   SearchableSelectField<String>(
                     label: S.paymentMethod,

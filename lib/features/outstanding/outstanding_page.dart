@@ -9,6 +9,7 @@ import '../../domain/services/catalog_service.dart';
 import '../../domain/services/outstanding_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -167,25 +168,15 @@ class OutstandingPage extends StatelessWidget {
                         setS(() => mode = value ?? _OutstandingMode.add),
                   ),
                   if (mode != _OutstandingMode.cash)
-                    TextField(
+                    AmountField(
                       controller: amount,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: mode == _OutstandingMode.setExact
-                            ? S.outstandingSet
-                            : S.outstandingAdd,
-                      ),
+                      label: mode == _OutstandingMode.setExact
+                          ? S.outstandingSet
+                          : S.outstandingAdd,
                     ),
-                  TextField(
+                  AmountField(
                     controller: cash,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: S.outstandingCashAmount,
-                    ),
+                    label: S.outstandingCashAmount,
                   ),
                   TextField(
                     controller: notes,

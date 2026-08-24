@@ -1,11 +1,11 @@
 /// Fixed-scale money. Never uses IEEE floating point.
 ///
-/// Scale is 3 (thousandths) so Omani rial baisa and similar currencies stay exact.
-/// Storage: decimal string (`"12.500"`) or integer minor units (`12500`).
+/// Scale is 3 (thousandths) so stored amounts stay exact across devices.
+/// Display currency is Egyptian pound. Storage: decimal string (`"12.500"`).
 class Money implements Comparable<Money> {
   static const int scale = 3;
-  static const String currencyCode = 'OMR';
-  static const String currencySymbol = 'ر.ع.';
+  static const String currencyCode = 'EGP';
+  static const String currencySymbol = 'ج.م.';
 
   final BigInt minorUnits;
 

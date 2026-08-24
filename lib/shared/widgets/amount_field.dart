@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Decimal entry that starts empty so the user types immediately.
+/// Uses an English locale so the phone keypad shows 0-9, not Arabic-Indic digits.
 class AmountField extends StatefulWidget {
   const AmountField({
     super.key,
@@ -30,6 +32,10 @@ class AmountField extends StatefulWidget {
 }
 
 class _AmountFieldState extends State<AmountField> {
+  static final _englishDigits = FilteringTextInputFormatter.allow(
+    RegExp(r'[0-9.]'),
+  );
+
   void _selectAll() {
     final text = widget.controller.text;
     widget.controller.selection = TextSelection(
@@ -40,20 +46,25 @@ class _AmountFieldState extends State<AmountField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: widget.controller,
-      autofocus: widget.autofocus,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      textInputAction: widget.textInputAction,
-      onChanged: widget.onChanged,
-      onSubmitted: widget.onSubmitted,
-      onTap: _selectAll,
-      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      decoration: InputDecoration(
-        labelText: widget.label,
-        hintText: widget.hintText,
-        helperText: widget.helperText,
-        prefixIcon: widget.prefixIcon,
+    return Localizations.override(
+      context: context,
+      locale: const Locale('en'),
+      child: TextField(
+        controller: widget.controller,
+        autofocus: widget.autofocus,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textInputAction: widget.textInputAction,
+        inputFormatters: [_englishDigits],
+        onChanged: widget.onChanged,
+        onSubmitted: widget.onSubmitted,
+        onTap: _selectAll,
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        decoration: InputDecoration(
+          labelText: widget.label,
+          hintText: widget.hintText,
+          helperText: widget.helperText,
+          prefixIcon: widget.prefixIcon,
+        ),
       ),
     );
   }

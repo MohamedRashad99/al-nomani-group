@@ -1,7 +1,9 @@
 {
     "name": "مجموعة النعماني",
     "short_name": "النعماني",
-    "start_url": ".",
+    "id": "/al-nomani-group/docs/",
+    "start_url": "/al-nomani-group/docs/",
+    "scope": "/al-nomani-group/docs/",
     "display": "standalone",
     "background_color": "#1B5E20",
     "theme_color": "#2E7D32",
