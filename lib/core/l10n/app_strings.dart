@@ -1,19 +1,13 @@
 abstract final class S {
   static const appName = 'مجموعة النعماني';
   static const appSubtitle = 'نظام إدارة المنتجات الزراعية';
-  static const owner = ' م / أحمد نعمان';
+  static const owner = 'م / أحمد نعمان الجعبيري';
 
   static const login = 'تسجيل الدخول';
   static const username = 'اسم المستخدم';
   static const password = 'كلمة المرور';
   static const loginAction = 'دخول';
   static const logout = 'تسجيل الخروج';
-  static const addToHomeScreen = 'تثبيت على الشاشة الرئيسية';
-  static const alreadyOnHomeScreen = 'التطبيق مثبت على الشاشة الرئيسية.';
-  static const iosAddToHome =
-      'على آيفون: اضغط مشاركة ثم «إضافة إلى الشاشة الرئيسية».';
-  static const installUnavailable =
-      'افتح الموقع في Chrome واختر «إضافة إلى الشاشة الرئيسية» من قائمة المتصفح.';
   static const offlineLoginHint = 'يمكنك الدخول دون إنترنت بعد أول تسجيل ناجح.';
 
   static const dashboard = 'لوحة التحكم';

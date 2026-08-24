@@ -144,9 +144,9 @@ class AuthService {
         : await _permissionsFor(user.roleId);
     final refreshed = AppSession(
       userId: session.userId,
-      username: session.username,
-      displayName: session.displayName,
-      roleName: session.roleName,
+      username: user?.username ?? session.username,
+      displayName: user?.displayName ?? session.displayName,
+      roleName: user?.roleId ?? session.roleName,
       permissions: permissions.isEmpty ? session.permissions : permissions,
       expiresAt: session.expiresAt,
       isOfflineVerified: session.isOfflineVerified,

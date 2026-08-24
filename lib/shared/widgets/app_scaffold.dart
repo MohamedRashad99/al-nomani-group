@@ -8,7 +8,6 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/breakpoints.dart';
-import '../../core/utils/pwa_install.dart';
 import '../../features/auth/auth_cubit.dart';
 import 'brand.dart';
 
@@ -154,7 +153,9 @@ class AppScaffold extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: expanded ? .72 : .55),
+                        color: Colors.white.withValues(
+                          alpha: expanded ? .72 : .55,
+                        ),
                         fontSize: expanded ? 11 : 9,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.2,
@@ -330,19 +331,6 @@ class _NavItem {
   String get shortLabel => shortLabelOverride ?? label;
 }
 
-Future<void> _installToHome(BuildContext context) async {
-  final messenger = ScaffoldMessenger.of(context);
-  Navigator.pop(context);
-  final result = await promptPwaInstall();
-  final message = switch (result) {
-    PwaInstallResult.installed ||
-    PwaInstallResult.alreadyInstalled => S.alreadyOnHomeScreen,
-    PwaInstallResult.iosInstructions => S.iosAddToHome,
-    PwaInstallResult.unavailable => S.installUnavailable,
-  };
-  messenger.showSnackBar(SnackBar(content: Text(message)));
-}
-
 class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.item,
@@ -457,11 +445,6 @@ class _AppDrawer extends StatelessWidget {
               ),
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.add_to_home_screen_outlined),
-              title: const Text(S.addToHomeScreen),
-              onTap: () => _installToHome(context),
-            ),
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text(S.logout),

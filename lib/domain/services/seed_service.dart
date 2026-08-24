@@ -15,7 +15,8 @@ class SeedService {
   final AppConfig _config;
 
   static const demoAdminUsername = 'admin';
-  static const demoAdminPassword = 'ChangeMe!Admin1';
+  static const demoAdminPassword = '54321';
+  static const demoAdminDisplayName = 'م / أحمد نعمان الجعبيري';
 
   Future<void> seedIfEmpty() async {
     if (!_config.allowSeed) return;
@@ -24,6 +25,31 @@ class SeedService {
     await _seed();
     await _metadata.set('seed_applied', 'demo');
     await _metadata.set('seed_warning', 'بيانات تجريبية للتطوير فقط');
+  }
+
+  /// Keeps the demo admin name/password current on existing local databases.
+  Future<void> ensureDemoAdminIdentity() async {
+    final existing = await (_db.select(
+      _db.users,
+    )..where((t) => t.username.equals(demoAdminUsername))).getSingleOrNull();
+    if (existing == null) return;
+    var passwordMatches = false;
+    try {
+      passwordMatches = BCrypt.checkpw(
+        demoAdminPassword,
+        existing.passwordHash,
+      );
+    } catch (_) {}
+    if (existing.displayName == demoAdminDisplayName && passwordMatches) {
+      return;
+    }
+    await (_db.update(_db.users)..where((t) => t.id.equals(existing.id))).write(
+      UsersCompanion(
+        displayName: Value(demoAdminDisplayName),
+        passwordHash: Value(BCrypt.hashpw(demoAdminPassword, BCrypt.gensalt())),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
   }
 
   Future<void> _seed() async {
@@ -75,7 +101,7 @@ class SeedService {
           UsersCompanion.insert(
             id: adminId,
             username: demoAdminUsername,
-            displayName: 'م/ أحمد نعمان الجعبيري',
+            displayName: demoAdminDisplayName,
             passwordHash: BCrypt.hashpw(demoAdminPassword, BCrypt.gensalt()),
             roleId: AppRole.admin,
             createdAt: now,

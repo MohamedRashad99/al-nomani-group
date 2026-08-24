@@ -25,7 +25,7 @@ cd .. && flutter pub get && dart run build_runner build --delete-conflicting-out
 flutter run -d chrome
 ```
 
-Demo login (seed only, empty database): `admin` / `ChangeMe!Admin1`
+Demo login (seed only, empty database): `admin` / `54321`
 
 ## Secrets (GitHub → Settings → Secrets)
 
