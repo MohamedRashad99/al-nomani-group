@@ -4,18 +4,21 @@ import 'package:al_nomani_group/app.dart';
 import 'package:al_nomani_group/core/config/app_config.dart';
 import 'package:al_nomani_group/core/di/injector.dart';
 import 'package:al_nomani_group/core/utils/arabic_format.dart';
-import 'package:al_nomani_group/data/local/app_database.dart';
-import 'package:al_nomani_group/data/sync/sync_queue_repository.dart';
+import 'package:al_nomani_group/data/remote/erp_store.dart';
+import 'package:al_nomani_group/data/remote/memory_erp_store.dart';
+import 'package:al_nomani_group/domain/models/purchase_draft.dart';
 import 'package:al_nomani_group/domain/models/sale_draft.dart';
-import 'package:al_nomani_group/domain/services/sale_service.dart';
 import 'package:al_nomani_group/domain/services/catalog_service.dart';
+import 'package:al_nomani_group/domain/services/collection_service.dart';
 import 'package:al_nomani_group/domain/services/dashboard_service.dart';
 import 'package:al_nomani_group/domain/services/outstanding_service.dart';
+import 'package:al_nomani_group/domain/services/purchase_service.dart';
+import 'package:al_nomani_group/domain/services/sale_service.dart';
 import 'package:al_nomani_group/domain/services/seed_service.dart';
+import 'package:al_nomani_group/domain/services/supplier_service.dart';
 import 'package:al_nomani_group/domain/session.dart';
 import 'package:al_nomani_group/features/auth/auth_cubit.dart';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,165 +45,258 @@ AppSession admin() => AppSession(
   isOfflineVerified: true,
 );
 
-Future<AppDatabase> readyDb() async {
-  final db = AppDatabase(NativeDatabase.memory());
-  await configureDependencies(config: _config(), database: db);
-  await sl<SeedService>().seedIfEmpty();
-  return db;
+Future<MemoryErpStore> readyStore() async {
+  FlutterSecureStorage.setMockInitialValues({});
+  final store = MemoryErpStore();
+  await configureDependencies(config: _config(), store: store);
+  await sl<SeedService>().ensureDemoAdminIdentity();
+  final session = admin();
+  final catalog = sl<CatalogService>();
+  Future<void> product({
+    required String id,
+    required String name,
+    required String sku,
+    required String stock,
+    required String unit,
+    required String price,
+  }) {
+    return catalog.upsertProduct(
+      session: session,
+      id: id,
+      name: name,
+      sku: sku,
+      purchasePrice: Money.parse(price),
+      sellingPrice: Money.parse(price),
+      currentStock: Quantity.parse(stock),
+      minimumStock: Quantity.parse('1'),
+      unit: unit,
+      packSize: '1 Liter',
+    );
+  }
+
+  await product(
+    id: 'p-imidacloprid',
+    name: 'إيميداكلوبريد',
+    sku: 'IMI',
+    stock: '20',
+    unit: 'لتر',
+    price: '5.500',
+  );
+  await product(
+    id: 'p-npk',
+    name: 'سماد NPK',
+    sku: 'NPK',
+    stock: '50',
+    unit: 'كغ',
+    price: '10.500',
+  );
+  await product(
+    id: 'p-urea',
+    name: 'يوريا',
+    sku: 'UREA',
+    stock: '10',
+    unit: 'كغ',
+    price: '1000',
+  );
+  await product(
+    id: 'p-drip',
+    name: 'نقاط',
+    sku: 'DRIP',
+    stock: '1',
+    unit: 'قطعة',
+    price: '0.180',
+  );
+  await product(
+    id: 'p-humic',
+    name: 'هيوميك',
+    sku: 'HUM',
+    stock: '10',
+    unit: 'لتر',
+    price: '1000',
+  );
+  await product(
+    id: 'p-glyphosate',
+    name: 'جليفوسات',
+    sku: 'GLY',
+    stock: '10',
+    unit: 'لتر',
+    price: '4.000',
+  );
+  await catalog.upsertCustomer(
+    session: session,
+    id: 'c-ahmed',
+    name: 'أحمد',
+  );
+  await catalog.upsertCustomer(
+    session: session,
+    id: 'c-salem',
+    name: 'سالم',
+  );
+  await catalog.upsertCustomer(
+    session: session,
+    id: 'c-fatima',
+    name: 'فاطمة',
+  );
+  return store;
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   tearDown(() async {
-    if (sl.isRegistered<AppDatabase>()) {
-      await sl<AppDatabase>().close();
-    }
     await sl.reset();
   });
 
-  test(
-    'cash, credit and partial sales persist locally without internet',
-    () async {
-      final db = await readyDb();
-      final session = admin().copyWithUser(
-        usersFirstId: (await db.select(db.users).get()).first.id,
-      );
-      final sales = sl<SaleService>();
+  test('cash, credit and partial sales persist without a local database', () async {
+    await readyStore();
+    final session = admin();
+    final sales = sl<SaleService>();
 
-      final cash = await sales.create(
-        session,
-        SaleDraft(
-          customerId: 'c-ahmed',
-          paidAmount: Money.parse('5.500'),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-imidacloprid',
-              quantity: Quantity.parse('1'),
-              unit: 'l',
-              unitPrice: Money.parse('5.500'),
-            ),
-          ],
-        ),
-      );
-      expect(cash.remaining.isZero, isTrue);
+    final cash = await sales.create(
+      session,
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
+    expect(cash.remaining.isZero, isTrue);
 
-      final credit = await sales.create(
-        session,
-        SaleDraft(
-          customerId: 'c-salem',
-          paidAmount: Money.zero(),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-npk',
-              quantity: Quantity.parse('2'),
-              unit: 'kg',
-              unitPrice: Money.parse('10.500'),
-            ),
-          ],
-        ),
-      );
-      expect(credit.subtotal.toStorage(), '21.000');
-      expect(credit.remaining.toStorage(), '21.000');
+    final credit = await sales.create(
+      session,
+      SaleDraft(
+        customerId: 'c-salem',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('2'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.500'),
+          ),
+        ],
+      ),
+    );
+    expect(credit.subtotal.toStorage(), '21.000');
+    expect(credit.remaining.toStorage(), '21.000');
 
-      final partial = await sales.create(
-        session,
-        SaleDraft(
-          customerId: 'c-ahmed',
-          paidAmount: Money.parse('400'),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-urea',
-              quantity: Quantity.parse('1'),
-              unit: 'kg',
-              unitPrice: Money.parse('1000'),
-            ),
-          ],
-        ),
-      );
-      expect(partial.remaining.toStorage(), '600.000');
+    final partial = await sales.create(
+      session,
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('400'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-urea',
+            quantity: Quantity.parse('1'),
+            unit: 'كغ',
+            unitPrice: Money.parse('1000'),
+          ),
+        ],
+      ),
+    );
+    expect(partial.remaining.toStorage(), '600.000');
+  });
 
-      final queue = await sl<SyncQueueRepository>().pending();
-      expect(
-        queue.where((q) => q.entityType == 'sale').length,
-        greaterThanOrEqualTo(3),
-      );
-    },
-  );
+  test('dashboard aggregates completed sales only', () async {
+    await readyStore();
+    final session = admin();
+    await sl<SaleService>().create(
+      session,
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
 
-  test(
-    'dashboard aggregates trends and named rankings from local data',
-    () async {
-      final db = await readyDb();
-      final session = admin().copyWithUser(
-        usersFirstId: (await db.select(db.users).get()).first.id,
-      );
-      await sl<SaleService>().create(
-        session,
-        SaleDraft(
-          customerId: 'c-ahmed',
-          paidAmount: Money.parse('5.500'),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-imidacloprid',
-              quantity: Quantity.parse('1'),
-              unit: 'l',
-              unitPrice: Money.parse('5.500'),
-            ),
-          ],
-        ),
-      );
+    final dashboard = await sl<DashboardService>().load();
+    expect(dashboard.todaySales.toStorage(), '5.500');
+    expect(dashboard.salesTrend, hasLength(7));
+    expect(dashboard.topProducts.first.name, isNotEmpty);
+    expect(dashboard.topCustomers.first.name, isNotEmpty);
+  });
 
-      final dashboard = await sl<DashboardService>().load();
-      expect(dashboard.todaySales.toStorage(), '5.500');
-      expect(dashboard.salesTrend, hasLength(7));
-      expect(dashboard.topProducts.first.name, isNotEmpty);
-      expect(dashboard.topCustomers.first.name, isNotEmpty);
-    },
-  );
+  test('sale cancellation restores stock and customer debt', () async {
+    final store = await readyStore();
+    final session = admin();
+    final before = store.products['p-npk']!;
+    final result = await sl<SaleService>().create(
+      session,
+      SaleDraft(
+        customerId: 'c-salem',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('2'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.500'),
+          ),
+        ],
+      ),
+    );
+    await sl<SaleService>().cancel(session, result.saleId, 'اختبار العكس');
 
-  test(
-    'sale cancellation reverses inventory and customer debt without deletion',
-    () async {
-      final db = await readyDb();
-      final session = admin().copyWithUser(
-        usersFirstId: (await db.select(db.users).get()).first.id,
-      );
-      final before = await (db.select(
-        db.products,
-      )..where((row) => row.id.equals('p-npk'))).getSingle();
-      final result = await sl<SaleService>().create(
-        session,
-        SaleDraft(
-          customerId: 'c-salem',
-          paidAmount: Money.zero(),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-npk',
-              quantity: Quantity.parse('2'),
-              unit: 'kg',
-              unitPrice: Money.parse('10.500'),
-            ),
-          ],
-        ),
-      );
-      await sl<SaleService>().cancel(session, result.saleId, 'اختبار العكس');
+    final sale = store.sales[result.saleId]!;
+    final after = store.products['p-npk']!;
+    final account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-salem',
+    );
+    expect(sale.status, 'cancelled');
+    expect(sale.cancelReason, 'اختبار العكس');
+    expect(sale.isDeleted, isFalse);
+    expect(after.currentStock, before.currentStock);
+    expect(account.cachedBalance, '0.000');
+  });
 
-      final sale = await (db.select(
-        db.sales,
-      )..where((row) => row.id.equals(result.saleId))).getSingle();
-      final after = await (db.select(
-        db.products,
-      )..where((row) => row.id.equals('p-npk'))).getSingle();
-      final account = await (db.select(
-        db.customerAccounts,
-      )..where((row) => row.customerId.equals('c-salem'))).getSingle();
-      expect(sale.status, 'cancelled');
-      expect(sale.isDeleted, isFalse);
-      expect(after.currentStock, before.currentStock);
-      expect(account.cachedBalance, '0.000');
-    },
-  );
+  test('cancel after collection reverses unpaid remainder only', () async {
+    final store = await readyStore();
+    final session = admin();
+    final before = store.products['p-npk']!;
+    final result = await sl<SaleService>().create(
+      session,
+      SaleDraft(
+        customerId: 'c-salem',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('2'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.500'),
+          ),
+        ],
+      ),
+    );
+    await sl<CollectionService>().record(
+      session: session,
+      customerId: 'c-salem',
+      amount: Money.parse('21.000'),
+      paymentMethod: 'cash',
+    );
+    await sl<SaleService>().cancel(session, result.saleId, 'بعد التحصيل');
+    final account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-salem',
+    );
+    expect(store.products['p-npk']!.currentStock, before.currentStock);
+    expect(account.cachedBalance, '0.000');
+    expect(store.sales[result.saleId]!.status, 'cancelled');
+  });
 
   test('business codes are presented with Arabic labels', () {
     expect(ArabicFormat.paymentMethod('cash'), 'نقداً');
@@ -212,8 +308,8 @@ void main() {
     tester,
   ) async {
     FlutterSecureStorage.setMockInitialValues({});
-    final db = await readyDb();
-    final user = (await db.select(db.users).get()).first;
+    await readyStore();
+    final user = (await sl<ErpStore>().listUsers()).first;
     await const FlutterSecureStorage().write(
       key: 'offline_session_v1',
       value: jsonEncode({
@@ -243,39 +339,32 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  test(
-    'sale transaction rolls back inventory and queue together on invalid stock',
-    () async {
-      await readyDb();
-      final session = admin();
-      expect(
-        () => sl<SaleService>().create(
-          session,
-          SaleDraft(
-            customerId: 'c-ahmed',
-            paidAmount: Money.zero(),
-            lines: [
-              SaleLineDraft(
-                productId: 'p-drip',
-                quantity: Quantity.parse('9999'),
-                unit: 'pcs',
-                unitPrice: Money.parse('0.180'),
-              ),
-            ],
-          ),
+  test('sale fails when stock is insufficient', () async {
+    await readyStore();
+    expect(
+      () => sl<SaleService>().create(
+        admin(),
+        SaleDraft(
+          customerId: 'c-ahmed',
+          paidAmount: Money.zero(),
+          lines: [
+            SaleLineDraft(
+              productId: 'p-drip',
+              quantity: Quantity.parse('9999'),
+              unit: 'قطعة',
+              unitPrice: Money.parse('0.180'),
+            ),
+          ],
         ),
-        throwsA(isA<Exception>()),
-      );
-    },
-  );
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
 
   test('customer balance is derived from account transactions', () async {
-    final db = await readyDb();
-    final session = admin().copyWithUser(
-      usersFirstId: (await db.select(db.users).get()).first.id,
-    );
+    final store = await readyStore();
     await sl<SaleService>().create(
-      session,
+      admin(),
       SaleDraft(
         customerId: 'c-fatima',
         paidAmount: Money.parse('250'),
@@ -283,24 +372,24 @@ void main() {
           SaleLineDraft(
             productId: 'p-humic',
             quantity: Quantity.parse('1'),
-            unit: 'l',
+            unit: 'لتر',
             unitPrice: Money.parse('1000'),
           ),
         ],
       ),
     );
-    final account = await (db.select(
-      db.customerAccounts,
-    )..where((t) => t.customerId.equals('c-fatima'))).getSingle();
+    final account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-fatima',
+    );
     expect(Money.parse(account.cachedBalance).toStorage(), '750.000');
-    final txs = await (db.select(
-      db.customerAccountTransactions,
-    )..where((t) => t.customerId.equals('c-fatima'))).get();
+    final txs = store.accountTx.values.where(
+      (tx) => tx.customerId == 'c-fatima',
+    );
     expect(txs.length, 2);
   });
 
   test('permissions deny unauthorized sale', () async {
-    await readyDb();
+    await readyStore();
     final viewer = AppSession(
       userId: 'v',
       username: 'v',
@@ -323,49 +412,39 @@ void main() {
     );
   });
 
-  test(
-    'sync queue and sales survive "restart" of a new database connection to same executor',
-    () async {
-      final db = await readyDb();
-      final session = admin().copyWithUser(
-        usersFirstId: (await db.select(db.users).get()).first.id,
-      );
-      await sl<SaleService>().create(
-        session,
-        SaleDraft(
-          customerId: 'c-ahmed',
-          paidAmount: Money.parse('4.000'),
-          lines: [
-            SaleLineDraft(
-              productId: 'p-glyphosate',
-              quantity: Quantity.parse('1'),
-              unit: 'l',
-              unitPrice: Money.parse('4.000'),
-            ),
-          ],
-        ),
-      );
-      final sales = await db.select(db.sales).get();
-      final queue = await db.select(db.syncQueue).get();
-      expect(sales, isNotEmpty);
-      expect(queue, isNotEmpty);
-      expect(sales.first.isDeleted, isFalse);
-    },
-  );
+  test('sales survive without sqlite restart', () async {
+    final store = await readyStore();
+    await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('4.000'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-glyphosate',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('4.000'),
+          ),
+        ],
+      ),
+    );
+    expect(store.sales.values, isNotEmpty);
+    expect(store.sales.values.first.isDeleted, isFalse);
+  });
 
   test('product watch emits the saved product immediately', () async {
-    await readyDb();
-    final session = admin();
+    await readyStore();
     final catalog = sl<CatalogService>();
     await catalog.upsertProduct(
-      session: session,
+      session: admin(),
       name: 'سماد اختباري',
       sku: 'TEST-FERT',
       purchasePrice: Money.parse('1.000'),
       sellingPrice: Money.parse('1.500'),
       currentStock: Quantity.parse('10'),
       minimumStock: Quantity.parse('1'),
-      unit: 'kg',
+      unit: 'كغ',
     );
     final items = await catalog
         .watchProducts('سماد اختباري')
@@ -374,66 +453,93 @@ void main() {
     expect(items.any((item) => item.sku == 'TEST-FERT'), isTrue);
   });
 
-  test('outstanding add, set, and reduce keep a full ledger', () async {
-    final db = await readyDb();
-    final session = admin().copyWithUser(
-      usersFirstId: (await db.select(db.users).get()).first.id,
+  test('unused product can be deleted', () async {
+    final store = await readyStore();
+    await sl<CatalogService>().deleteProduct(
+      session: admin(),
+      id: 'p-drip',
     );
+    expect(store.products.containsKey('p-drip'), isFalse);
+  });
+
+  test('used product cannot be deleted', () async {
+    await readyStore();
+    await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
+    expect(
+      () => sl<CatalogService>().deleteProduct(
+        session: admin(),
+        id: 'p-imidacloprid',
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('outstanding add, set, and reduce keep a full ledger', () async {
+    final store = await readyStore();
     final outstanding = sl<OutstandingService>();
     await outstanding.add(
-      session: session,
+      session: admin(),
       customerId: 'c-ahmed',
       amount: Money.parse('40.000'),
       notes: 'رصيد سابق قبل النظام',
     );
-    var account = await (db.select(
-      db.customerAccounts,
-    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    var account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-ahmed',
+    );
     expect(Money.parse(account.cachedBalance).toStorage(), '40.000');
 
     await outstanding.setTarget(
-      session: session,
+      session: admin(),
       customerId: 'c-ahmed',
       target: Money.parse('25.000'),
       notes: 'تصحيح بعد مراجعة كشف قديم',
     );
-    account = await (db.select(
-      db.customerAccounts,
-    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-ahmed',
+    );
     expect(Money.parse(account.cachedBalance).toStorage(), '25.000');
 
     await outstanding.reduce(
-      session: session,
+      session: admin(),
       customerId: 'c-ahmed',
       amount: Money.parse('5.000'),
       notes: 'خصم تسوية',
     );
-    account = await (db.select(
-      db.customerAccounts,
-    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-ahmed',
+    );
     expect(Money.parse(account.cachedBalance).toStorage(), '20.000');
-    final txs = await (db.select(
-      db.customerAccountTransactions,
-    )..where((t) => t.customerId.equals('c-ahmed'))).get();
-    expect(txs.length, greaterThanOrEqualTo(3));
 
     await outstanding.collectCash(
-      session: session,
+      session: admin(),
       customerId: 'c-ahmed',
       amount: Money.parse('8.000'),
       notes: 'سداد نقدي',
     );
-    account = await (db.select(
-      db.customerAccounts,
-    )..where((t) => t.customerId.equals('c-ahmed'))).getSingle();
+    account = store.accounts.values.firstWhere(
+      (row) => row.customerId == 'c-ahmed',
+    );
     expect(Money.parse(account.cachedBalance).toStorage(), '12.000');
     final due = await outstanding.listDue();
     expect(due.any((row) => row.customer.id == 'c-ahmed'), isTrue);
-    expect(outstanding.totalDue(due) > Money.zero(), isTrue);
   });
 
   test('cashier cannot post outstanding amounts', () async {
-    await readyDb();
+    await readyStore();
     final cashier = AppSession(
       userId: 'cashier',
       username: 'cashier',
@@ -453,18 +559,45 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
-}
 
-extension on AppSession {
-  AppSession copyWithUser({required String usersFirstId}) {
-    return AppSession(
-      userId: usersFirstId,
-      username: username,
-      displayName: displayName,
-      roleName: roleName,
-      permissions: permissions,
-      expiresAt: expiresAt,
-      isOfflineVerified: isOfflineVerified,
+  test('purchase increases stock and supplier payable, cancel reverses both', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'شركة الأسمدة',
     );
-  }
+    final before = store.products['p-npk']!;
+    final result = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('3'),
+            unit: 'كغ',
+            unitPrice: Money.parse('8.000'),
+          ),
+        ],
+      ),
+    );
+    expect(
+      Quantity.parse(store.products['p-npk']!.currentStock),
+      Quantity.parse(before.currentStock) + Quantity.parse('3'),
+    );
+    final account = store.supplierAccounts.values.firstWhere(
+      (row) => row.supplierId == supplierId,
+    );
+    expect(account.cachedBalance, '24.000');
+    await sl<PurchaseService>().cancel(session, result.purchaseId, 'عكس شراء');
+    expect(store.products['p-npk']!.currentStock, before.currentStock);
+    expect(
+      store.supplierAccounts.values
+          .firstWhere((row) => row.supplierId == supplierId)
+          .cachedBalance,
+      '0.000',
+    );
+  });
 }

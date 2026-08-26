@@ -4,20 +4,20 @@ import '../../core/errors/app_exception.dart';
 import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
 
-class AccountService {
-  AccountService(this._store);
+class SupplierAccountService {
+  SupplierAccountService(this._store);
   final ErpStore _store;
 
-  Future<CustomerAccount> requireAccount(String customerId) async {
-    final account = await _store.getAccountByCustomer(customerId);
+  Future<SupplierAccount> requireAccount(String supplierId) async {
+    final account = await _store.getAccountBySupplier(supplierId);
     if (account == null) {
-      throw const ValidationException('حساب العميل غير موجود.');
+      throw const ValidationException('حساب المورد غير موجود.');
     }
     return account;
   }
 
   Future<void> post({
-    required String customerId,
+    required String supplierId,
     required String type,
     required Money amount,
     required String createdBy,
@@ -27,27 +27,25 @@ class AccountService {
     String? notes,
     bool allowNegative = false,
   }) async {
-    final account = await requireAccount(customerId);
+    final account = await requireAccount(supplierId);
     final current = Money.parse(account.cachedBalance);
     final signed = switch (type) {
-      'sale' => amount,
+      'purchase' => amount,
       'payment' => -amount,
-      'sale_cancel' => -amount,
+      'purchase_cancel' => -amount,
       'payment_cancel' => amount,
-      'opening_balance' => amount,
       'manual_debit' => amount,
       'manual_credit' => -amount,
-      _ => throw ValidationException('نوع حركة الحساب غير معروف: $type'),
+      _ => throw ValidationException('نوع حركة حساب المورد غير معروف: $type'),
     };
     if (!allowNegative && current + signed < Money.zero()) {
       throw const ValidationException(
-        'لا يمكن أن يصبح رصيد العميل سالباً من هذه الحركة.',
+        'لا يمكن أن يصبح رصيد المورد سالباً من هذه الحركة.',
       );
     }
     final next = current + signed;
     final now = DateTime.now().toUtc();
-    final txId = newId();
-    await _store.putAccount(
+    await _store.putSupplierAccount(
       account.copyWith(
         cachedBalance: next.toStorage(),
         version: account.version + 1,
@@ -55,11 +53,11 @@ class AccountService {
         deviceId: deviceId,
       ),
     );
-    await _store.putAccountTx(
-      CustomerAccountTransaction(
-        id: txId,
+    await _store.putSupplierTx(
+      SupplierAccountTransaction(
+        id: newId(),
         accountId: account.id,
-        customerId: customerId,
+        supplierId: supplierId,
         type: type,
         amount: signed.toStorage(),
         runningBalance: next.toStorage(),

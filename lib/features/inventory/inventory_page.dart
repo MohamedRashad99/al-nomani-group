@@ -1,12 +1,11 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/inventory_service.dart';
 import '../../features/app/app_busy_cubit.dart';
@@ -127,16 +126,10 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> _showMovements(Product product) async {
-    final db = sl<AppDatabase>();
     await showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => StreamBuilder<List<InventoryMovement>>(
-        stream:
-            (db.select(db.inventoryMovements)
-                  ..where((t) => t.productId.equals(product.id))
-                  ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-                  ..limit(50))
-                .watch(),
+        stream: sl<InventoryService>().watchMovements(productId: product.id),
         builder: (context, snapshot) {
           final rows = snapshot.data ?? const <InventoryMovement>[];
           if (!snapshot.hasData) {

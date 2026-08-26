@@ -253,6 +253,13 @@ class AppScaffold extends StatelessWidget {
         Icons.people_outline,
         Icons.people_rounded,
       ),
+    if (permissions.contains(AppPermission.suppliersView))
+      const _NavItem(
+        '/suppliers',
+        S.suppliers,
+        Icons.local_shipping_outlined,
+        Icons.local_shipping_rounded,
+      ),
     if (permissions.contains(AppPermission.outstandingView))
       const _NavItem(
         '/outstanding',

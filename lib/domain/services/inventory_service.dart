@@ -1,27 +1,23 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart';
 
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
-import '../../data/sync/sync_queue_repository.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
 
 class InventoryService {
   InventoryService({
-    required AppDatabase db,
-    required MetadataStore metadata,
-    required SyncQueueRepository queue,
+    required ErpStore store,
+    required DeviceIdStore devices,
     required AuditService audit,
-  }) : _db = db,
-       _metadata = metadata,
-       _queue = queue,
+  }) : _store = store,
+       _devices = devices,
        _audit = audit;
 
-  final AppDatabase _db;
-  final MetadataStore _metadata;
-  final SyncQueueRepository _queue;
+  final ErpStore _store;
+  final DeviceIdStore _devices;
   final AuditService _audit;
 
   Future<void> adjust({
@@ -37,29 +33,27 @@ class InventoryService {
     if (!session.can(AppPermission.inventoryAdjust) &&
         !session.can(AppPermission.inventoryCreate) &&
         type != 'sale' &&
-        type != 'sale_cancel') {
+        type != 'sale_cancel' &&
+        type != 'purchase' &&
+        type != 'purchase_cancel') {
       throw const PermissionException();
     }
     if (quantity.isZero) {
       throw const ValidationException('الكمية غير صالحة.');
     }
-
-    await _db.transaction(() async {
-      await applyInsideTransaction(
-        session: session,
-        productId: productId,
-        quantity: quantity,
-        type: type,
-        notes: notes,
-        referenceType: referenceType,
-        referenceId: referenceId,
-        allowNegative: allowNegative,
-      );
-    });
+    await apply(
+      session: session,
+      productId: productId,
+      quantity: quantity,
+      type: type,
+      notes: notes,
+      referenceType: referenceType,
+      referenceId: referenceId,
+      allowNegative: allowNegative,
+    );
   }
 
-  /// Must be called from an existing Drift transaction.
-  Future<void> applyInsideTransaction({
+  Future<void> apply({
     required AppSession session,
     required String productId,
     required Quantity quantity,
@@ -68,107 +62,56 @@ class InventoryService {
     String? referenceType,
     String? referenceId,
     bool allowNegative = false,
-    bool enqueue = true,
   }) async {
-    final product = await (_db.select(
-      _db.products,
-    )..where((t) => t.id.equals(productId))).getSingleOrNull();
+    final product = await _store.getProduct(productId);
     if (product == null || product.isDeleted) {
       throw const ValidationException('المنتج غير موجود.');
     }
-
     final previous = Quantity.parse(product.currentStock);
     final signed = _signedQuantity(type, quantity);
     final next = previous + signed;
     if (next.isNegative && !allowNegative) {
       throw const ValidationException('المخزون غير كافٍ.');
     }
-
     final now = DateTime.now().toUtc();
     final movementId = newId();
-    final deviceId = await _metadata.deviceId();
-
-    await (_db.update(
-      _db.products,
-    )..where((t) => t.id.equals(productId))).write(
-      ProductsCompanion(
-        currentStock: Value(next.toStorage()),
-        version: Value(product.version + 1),
-        updatedAt: Value(now),
-        deviceId: Value(deviceId),
+    final deviceId = await _devices.deviceId();
+    await _store.putProduct(
+      product.copyWith(
+        currentStock: next.toStorage(),
+        version: product.version + 1,
+        updatedAt: now,
+        deviceId: deviceId,
       ),
     );
-
-    final movement = {
-      'id': movementId,
-      'product_id': productId,
-      'type': type,
-      'quantity': quantity.toStorage(),
-      'unit': product.unit,
-      'previous_stock': previous.toStorage(),
-      'new_stock': next.toStorage(),
-      'reference_type': referenceType,
-      'reference_id': referenceId,
-      'notes': notes,
-      'created_by': session.userId,
-      'device_id': deviceId,
-      'created_at': now.toIso8601String(),
-    };
-
-    await _db
-        .into(_db.inventoryMovements)
-        .insert(
-          InventoryMovementsCompanion.insert(
-            id: movementId,
-            productId: productId,
-            type: type,
-            quantity: quantity.toStorage(),
-            unit: product.unit,
-            previousStock: previous.toStorage(),
-            newStock: next.toStorage(),
-            referenceType: Value(referenceType),
-            referenceId: Value(referenceId),
-            notes: Value(notes),
-            createdBy: session.userId,
-            deviceId: deviceId,
-            createdAt: now,
-          ),
-        );
-
+    final movement = InventoryMovement(
+      id: movementId,
+      productId: productId,
+      type: type,
+      quantity: quantity.toStorage(),
+      unit: product.unit,
+      previousStock: previous.toStorage(),
+      newStock: next.toStorage(),
+      referenceType: referenceType,
+      referenceId: referenceId,
+      notes: notes,
+      createdBy: session.userId,
+      deviceId: deviceId,
+      createdAt: now,
+    );
+    await _store.putMovement(movement);
     await _audit.write(
       userId: session.userId,
       deviceId: deviceId,
       action: 'inventory.$type',
       entityType: 'inventory_movement',
       entityId: movementId,
-      newValue: movement,
+      newValue: movement.toMap(),
     );
+  }
 
-    if (enqueue) {
-      await _queue.enqueue(
-        entityType: SyncEntityType.inventoryMovement,
-        entityId: movementId,
-        operation: SyncOperationType.create,
-        payload: movement,
-        operationId: movementId,
-      );
-      await _queue.enqueue(
-        entityType: SyncEntityType.product,
-        entityId: productId,
-        operation: SyncOperationType.update,
-        payload: {
-          'id': productId,
-          'name': product.name,
-          'sku': product.sku,
-          'current_stock': next.toStorage(),
-          'minimum_stock': product.minimumStock,
-          'unit': product.unit,
-          'version': product.version + 1,
-          'device_id': deviceId,
-        },
-        operationId: 'product-stock-$productId-${product.version + 1}',
-      );
-    }
+  Stream<List<InventoryMovement>> watchMovements({String? productId}) {
+    return _store.watchMovements(productId: productId);
   }
 
   Quantity _signedQuantity(String type, Quantity quantity) {
@@ -178,10 +121,12 @@ class InventoryService {
       case 'manual_increase':
       case 'return':
       case 'sale_cancel':
+      case 'purchase':
         return abs;
       case 'sale':
       case 'stock_out':
       case 'manual_decrease':
+      case 'purchase_cancel':
         return -abs;
       case 'adjustment':
         return quantity;

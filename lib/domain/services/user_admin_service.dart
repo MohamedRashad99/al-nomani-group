@@ -1,43 +1,36 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
-import '../../data/sync/sync_queue_repository.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
 
 class UserAdminService {
   UserAdminService({
-    required AppDatabase db,
-    required MetadataStore metadata,
-    required SyncQueueRepository queue,
+    required ErpStore store,
+    required DeviceIdStore devices,
     required AuditService audit,
     required Dio dio,
     required AppConfig config,
-  }) : _db = db,
-       _metadata = metadata,
-       _queue = queue,
+  }) : _store = store,
+       _devices = devices,
        _audit = audit,
        _dio = dio,
        _config = config;
 
-  final AppDatabase _db;
-  final MetadataStore _metadata;
-  final SyncQueueRepository _queue;
+  final ErpStore _store;
+  final DeviceIdStore _devices;
   final AuditService _audit;
   final Dio _dio;
   final AppConfig _config;
 
-  Future<List<User>> list() =>
-      (_db.select(_db.users)..where((t) => t.isDeleted.equals(false))).get();
-
-  Stream<List<User>> watch() =>
-      (_db.select(_db.users)..where((t) => t.isDeleted.equals(false))).watch();
+  Future<List<AppUser>> list() => _store.listUsers();
+  Stream<List<AppUser>> watch() => _store.watchUsers();
 
   Future<String> upsert({
     required AppSession session,
@@ -55,74 +48,39 @@ class UserAdminService {
     if (!creating && !session.can(AppPermission.usersUpdate)) {
       throw const PermissionException();
     }
-    if (creating && (password == null || password.length < 8)) {
-      throw const ValidationException('كلمة المرور يجب ألا تقل عن 8 أحرف.');
+    if (creating && (password == null || password.length < 5)) {
+      throw const ValidationException('كلمة المرور يجب ألا تقل عن 5 أحرف.');
     }
-
-    final userId = await _db.transaction(() async {
-      final now = DateTime.now().toUtc();
-      final deviceId = await _metadata.deviceId();
-      final userId = id ?? newId();
-      final existing = id == null
-          ? null
-          : await (_db.select(
-              _db.users,
-            )..where((t) => t.id.equals(id))).getSingleOrNull();
-      final hash = password == null || password.isEmpty
-          ? existing?.passwordHash
-          : BCrypt.hashpw(password, BCrypt.gensalt());
-      if (hash == null) {
-        throw const ValidationException('كلمة المرور مطلوبة.');
-      }
-
-      await _db
-          .into(_db.users)
-          .insertOnConflictUpdate(
-            UsersCompanion(
-              id: Value(userId),
-              username: Value(username.trim()),
-              displayName: Value(displayName.trim()),
-              passwordHash: Value(hash),
-              roleId: Value(roleId),
-              isActive: Value(isActive),
-              version: Value((existing?.version ?? 0) + 1),
-              deviceId: Value(deviceId),
-              createdAt: Value(existing?.createdAt ?? now),
-              updatedAt: Value(now),
-              isDeleted: const Value(false),
-            ),
-          );
-
-      final payload = {
-        'id': userId,
-        'username': username.trim(),
-        'display_name': displayName.trim(),
-        'role_id': roleId,
-        'is_active': isActive,
-        'version': (existing?.version ?? 0) + 1,
-      };
-      await _audit.write(
-        userId: session.userId,
-        deviceId: deviceId,
-        action: creating ? 'user.create' : 'user.update',
-        entityType: 'user',
-        entityId: userId,
-        oldValue: existing == null
-            ? null
-            : {'username': existing.username, 'role_id': existing.roleId},
-        newValue: payload,
-      );
-      await _queue.enqueue(
-        entityType: SyncEntityType.user,
-        entityId: userId,
-        operation: creating
-            ? SyncOperationType.create
-            : SyncOperationType.update,
-        payload: payload,
-        operationId: newId(),
-      );
-      return userId;
-    });
+    final now = DateTime.now().toUtc();
+    final deviceId = await _devices.deviceId();
+    final userId = id ?? newId();
+    final existing = id == null ? null : await _store.getUser(id);
+    final hash = password == null || password.isEmpty
+        ? existing?.passwordHash
+        : BCrypt.hashpw(password, BCrypt.gensalt());
+    if (hash == null) {
+      throw const ValidationException('كلمة المرور مطلوبة.');
+    }
+    final user = AppUser(
+      id: userId,
+      username: username.trim(),
+      displayName: displayName.trim(),
+      passwordHash: hash,
+      roleId: roleId,
+      isActive: isActive,
+      version: (existing?.version ?? 0) + 1,
+      deviceId: deviceId,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    );
+    await _store.putUser(user);
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: creating ? 'user.create' : 'user.update',
+      entityType: 'user',
+      entityId: userId,
+    );
     try {
       await _dio.post<Map<String, dynamic>>(
         '${_config.apiBaseUrl}/api/v1/users',
@@ -135,10 +93,7 @@ class UserAdminService {
           'is_active': isActive,
         },
       );
-    } catch (_) {
-      // The local account remains usable offline. Its metadata stays queued;
-      // an administrator can set its server password when online.
-    }
+    } catch (_) {}
     return userId;
   }
 
@@ -146,18 +101,14 @@ class UserAdminService {
     if (!session.can(AppPermission.usersDisable)) {
       throw const PermissionException();
     }
+    final user = await _store.getUser(userId);
+    if (user == null) return;
     await upsert(
       session: session,
-      id: userId,
-      username: (await (_db.select(
-        _db.users,
-      )..where((t) => t.id.equals(userId))).getSingle()).username,
-      displayName: (await (_db.select(
-        _db.users,
-      )..where((t) => t.id.equals(userId))).getSingle()).displayName,
-      roleId: (await (_db.select(
-        _db.users,
-      )..where((t) => t.id.equals(userId))).getSingle()).roleId,
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      roleId: user.roleId,
       isActive: false,
     );
   }

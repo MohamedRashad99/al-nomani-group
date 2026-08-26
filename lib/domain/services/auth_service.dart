@@ -3,34 +3,34 @@ import 'dart:convert';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
 import '../../data/remote/auth_token_store.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 import '../session.dart';
 
 class AuthService {
   AuthService({
-    required AppDatabase db,
-    required MetadataStore metadata,
+    required ErpStore store,
+    required DeviceIdStore devices,
     required AppConfig config,
     required Dio dio,
     required AuthTokenStore tokens,
     FlutterSecureStorage? storage,
-  }) : _db = db,
-       _metadata = metadata,
+  }) : _store = store,
+       _devices = devices,
        _config = config,
        _dio = dio,
        _tokens = tokens,
        _storage = storage ?? const FlutterSecureStorage();
 
-  final AppDatabase _db;
-  final MetadataStore _metadata;
+  final ErpStore _store;
+  final DeviceIdStore _devices;
   final AppConfig _config;
   final Dio _dio;
   final AuthTokenStore _tokens;
@@ -41,15 +41,14 @@ class AuthService {
 
   Future<AppSession> login(String username, String password) async {
     final normalizedUsername = username.trim();
-    final local = await (_db.select(
-      _db.users,
-    )..where((t) => t.username.equals(normalizedUsername))).getSingleOrNull();
+    final local = await _store.getUserByUsername(normalizedUsername);
 
     if (local != null) {
       if (!local.isActive || local.isDeleted) {
         throw const AppException('هذا الحساب معطّل.', code: 'user_disabled');
       }
-      if (!BCrypt.checkpw(password, local.passwordHash)) {
+      if (local.passwordHash.isEmpty ||
+          !BCrypt.checkpw(password, local.passwordHash)) {
         throw const AppException(
           'اسم المستخدم أو كلمة المرور غير صحيحة.',
           code: 'login_failed',
@@ -78,7 +77,7 @@ class AuthService {
         throw const FormatException('missing tokens');
       }
       await _tokens.save(accessToken: access, refreshToken: refresh);
-      await _cacheRemoteUser(data, password, existingLocal: local);
+      await _cacheRemoteUser(data, password, existing: local);
       authenticatedOnline = true;
     } catch (_) {
       if (local == null) {
@@ -89,20 +88,17 @@ class AuthService {
       }
     }
 
-    final user = await (_db.select(
-      _db.users,
-    )..where((t) => t.username.equals(normalizedUsername))).getSingle();
-    if (!user.isActive || user.isDeleted) {
+    final user = await _store.getUserByUsername(normalizedUsername);
+    if (user == null || !user.isActive || user.isDeleted) {
       throw const AppException('هذا الحساب معطّل.', code: 'user_disabled');
     }
 
-    final permissions = await _permissionsFor(user.roleId);
     final session = AppSession(
       userId: user.id,
       username: user.username,
       displayName: user.displayName,
       roleName: user.roleId,
-      permissions: permissions,
+      permissions: {...?RolePermissions.matrix[user.roleId]},
       expiresAt: DateTime.now().add(const Duration(days: offlineSessionDays)),
       isOfflineVerified: !authenticatedOnline,
     );
@@ -129,25 +125,20 @@ class AuthService {
       await _storage.delete(key: _sessionKey);
       return null;
     }
-    final user = await (_db.select(
-      _db.users,
-    )..where((t) => t.id.equals(session.userId))).getSingleOrNull();
+    final user = await _store.getUser(session.userId) ??
+        await _store.getUserByUsername(session.username);
     if (user != null && (!user.isActive || user.isDeleted)) {
       await _storage.delete(key: _sessionKey);
       return null;
     }
-    if (user == null) {
-      await _ensureLocalUser(session);
-    }
-    final permissions = user == null
-        ? session.permissions
-        : await _permissionsFor(user.roleId);
     final refreshed = AppSession(
       userId: session.userId,
       username: user?.username ?? session.username,
       displayName: user?.displayName ?? session.displayName,
       roleName: user?.roleId ?? session.roleName,
-      permissions: permissions.isEmpty ? session.permissions : permissions,
+      permissions: user == null
+          ? session.permissions
+          : {...?RolePermissions.matrix[user.roleId]},
       expiresAt: session.expiresAt,
       isOfflineVerified: session.isOfflineVerified,
     );
@@ -157,16 +148,6 @@ class AuthService {
 
   Future<void> logout() async {
     await Future.wait([_storage.delete(key: _sessionKey), _tokens.clear()]);
-  }
-
-  Future<Set<String>> _permissionsFor(String roleId) async {
-    final rows = await (_db.select(
-      _db.rolePermissionLinks,
-    )..where((t) => t.roleId.equals(roleId))).get();
-    if (rows.isNotEmpty) {
-      return rows.map((r) => r.permissionId).toSet();
-    }
-    return {...?RolePermissions.matrix[roleId]};
   }
 
   Future<void> _persistSession(AppSession session) async {
@@ -181,58 +162,32 @@ class AuthService {
         'expires_at': session.expiresAt.toIso8601String(),
       }),
     );
-    await _metadata.set('last_user_id', session.userId);
-    await _metadata.set('last_username', session.username);
-    await _metadata.set('last_display_name', session.displayName);
-    await _metadata.set('last_role', session.roleName);
-  }
-
-  Future<void> _ensureLocalUser(AppSession session) async {
-    final now = DateTime.now().toUtc();
-    await _db
-        .into(_db.users)
-        .insertOnConflictUpdate(
-          UsersCompanion(
-            id: Value(session.userId),
-            username: Value(session.username),
-            displayName: Value(session.displayName),
-            passwordHash: Value(BCrypt.hashpw(newId(), BCrypt.gensalt())),
-            roleId: Value(session.roleName),
-            isActive: const Value(true),
-            createdAt: Value(now),
-            updatedAt: Value(now),
-            deviceId: Value(await _metadata.deviceId()),
-          ),
-        );
+    await _devices.setPref('last_user_id', session.userId);
   }
 
   Future<void> _cacheRemoteUser(
     Map<String, dynamic> data,
     String password, {
-    User? existingLocal,
+    AppUser? existing,
   }) async {
     final now = DateTime.now().toUtc();
-    final deviceId = await _metadata.deviceId();
+    final deviceId = await _devices.deviceId();
     final user = data['user'] as Map<String, dynamic>? ?? data;
     final serverId = user['id'] as String? ?? newId();
-    final id = existingLocal?.id ?? serverId;
-    await _metadata.set('server_user_id', serverId);
-    await _db
-        .into(_db.users)
-        .insertOnConflictUpdate(
-          UsersCompanion(
-            id: Value(id),
-            username: Value(user['username'] as String),
-            displayName: Value(
-              user['display_name'] as String? ?? user['username'] as String,
-            ),
-            passwordHash: Value(BCrypt.hashpw(password, BCrypt.gensalt())),
-            roleId: Value(user['role'] as String? ?? AppRole.cashier),
-            isActive: Value(user['is_active'] as bool? ?? true),
-            createdAt: Value(existingLocal?.createdAt ?? now),
-            updatedAt: Value(now),
-            deviceId: Value(deviceId),
-          ),
-        );
+    final id = existing?.id ?? serverId;
+    await _store.putUser(
+      AppUser(
+        id: id,
+        username: user['username'] as String,
+        displayName:
+            user['display_name'] as String? ?? user['username'] as String,
+        passwordHash: BCrypt.hashpw(password, BCrypt.gensalt()),
+        roleId: user['role'] as String? ?? AppRole.cashier,
+        isActive: user['is_active'] as bool? ?? true,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        deviceId: deviceId,
+      ),
+    );
   }
 }

@@ -5,10 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/config/app_config.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
 import '../../data/sync/sync_engine.dart';
-import '../../data/sync/sync_queue_repository.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/google_sheet_link_button.dart';
@@ -182,52 +179,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _save({required SyncMode mode, required int days}) async {
-    final db = sl<AppDatabase>();
-    final now = DateTime.now().toUtc();
-    await db.transaction(() async {
-      await db
-          .into(db.settings)
-          .insertOnConflictUpdate(
-            SettingsCompanion.insert(
-              key: SyncConfigKeys.syncMode,
-              value: mode.name,
-              updatedAt: now,
-            ),
-          );
-      await db
-          .into(db.settings)
-          .insertOnConflictUpdate(
-            SettingsCompanion.insert(
-              key: SyncConfigKeys.syncIntervalDays,
-              value: '$days',
-              updatedAt: now,
-            ),
-          );
-      for (final entry in {
-        SyncConfigKeys.syncMode: mode.name,
-        SyncConfigKeys.syncIntervalDays: '$days',
-      }.entries) {
-        await sl<SyncQueueRepository>().enqueue(
-          entityType: SyncEntityType.setting,
-          entityId: entry.key,
-          operation: SyncOperationType.update,
-          payload: {
-            'id': entry.key,
-            'key': entry.key,
-            'value': entry.value,
-            'updated_at': now.toIso8601String(),
-          },
-          operationId: newId(),
-        );
-      }
-    });
-    await sl<MetadataStore>().set(
-      SyncConfigKeys.nextScheduledSyncAt,
-      now.add(Duration(days: days)).toIso8601String(),
-    );
-    if (mode == SyncMode.nearRealtime) {
-      await sl<SyncEngine>().syncNow(force: true);
-    }
+    await sl<SyncEngine>().saveSyncSettings(mode: mode, days: days);
     if (mounted) {
       setState(() => _future = _load());
       ScaffoldMessenger.of(

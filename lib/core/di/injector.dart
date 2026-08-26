@@ -2,14 +2,14 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
 import '../../data/remote/auth_interceptor.dart';
 import '../../data/remote/auth_token_store.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
+import '../../data/remote/firestore_erp_store.dart';
 import '../../data/sync/arabic_workbook_builder.dart';
 import '../../data/sync/firebase_sync_service.dart';
 import '../../data/sync/google_sheets_live_sync.dart';
-import '../../data/sync/sync_baseline_service.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_queue_repository.dart';
 import '../../domain/services/account_service.dart';
@@ -20,12 +20,15 @@ import '../../domain/services/catalog_service.dart';
 import '../../domain/services/collection_service.dart';
 import '../../domain/services/conflict_resolution_service.dart';
 import '../../domain/services/dashboard_service.dart';
+import '../../domain/services/import_service.dart';
 import '../../domain/services/inventory_service.dart';
+import '../../domain/services/outstanding_service.dart';
+import '../../domain/services/purchase_service.dart';
 import '../../domain/services/report_export_service.dart';
 import '../../domain/services/sale_service.dart';
 import '../../domain/services/seed_service.dart';
-import '../../domain/services/import_service.dart';
-import '../../domain/services/outstanding_service.dart';
+import '../../domain/services/supplier_account_service.dart';
+import '../../domain/services/supplier_service.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -36,20 +39,21 @@ final sl = GetIt.instance;
 
 Future<void> configureDependencies({
   required AppConfig config,
-  AppDatabase? database,
+  ErpStore? store,
 }) async {
   if (sl.isRegistered<AppConfig>()) {
     await sl.reset();
   }
 
   sl.registerSingleton<AppConfig>(config);
-  sl.registerSingleton<AppDatabase>(database ?? AppDatabase());
+  sl.registerSingleton<ErpStore>(store ?? FirestoreErpStore());
   sl.registerLazySingleton(
     () => const FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
       webOptions: WebOptions(),
     ),
   );
+  sl.registerLazySingleton(() => DeviceIdStore(sl()));
   sl.registerLazySingleton(() => AuthTokenStore(sl()));
   sl.registerLazySingleton<Dio>(() {
     final options = BaseOptions(
@@ -68,20 +72,20 @@ Future<void> configureDependencies({
     );
     return client;
   });
-  sl.registerLazySingleton(() => MetadataStore(sl()));
-  sl.registerLazySingleton(() => SyncQueueRepository(sl()));
-  sl.registerLazySingleton(() => SyncBaselineService(sl(), sl(), sl()));
-  sl.registerLazySingleton(() => AuditService(sl(), sl()));
-  sl.registerLazySingleton(() => ConflictResolutionService(sl(), sl(), sl()));
-  sl.registerLazySingleton(() => AccountService(sl(), sl()));
+  sl.registerLazySingleton(() => AuditService(sl()));
+  sl.registerLazySingleton(() => ConflictResolutionService());
+  sl.registerLazySingleton(() => AccountService(sl()));
+  sl.registerLazySingleton(() => SupplierAccountService(sl()));
   sl.registerLazySingleton(
-    () => InventoryService(db: sl(), metadata: sl(), queue: sl(), audit: sl()),
+    () => InventoryService(store: sl(), devices: sl(), audit: sl()),
+  );
+  sl.registerLazySingleton(
+    () => CatalogService(store: sl(), devices: sl(), audit: sl()),
   );
   sl.registerLazySingleton(
     () => SaleService(
-      db: sl(),
-      metadata: sl(),
-      queue: sl(),
+      store: sl(),
+      devices: sl(),
       audit: sl(),
       inventory: sl(),
       accounts: sl(),
@@ -89,66 +93,77 @@ Future<void> configureDependencies({
   );
   sl.registerLazySingleton(
     () => CollectionService(
-      db: sl(),
-      metadata: sl(),
-      queue: sl(),
+      store: sl(),
+      devices: sl(),
       audit: sl(),
       accounts: sl(),
     ),
   );
-  sl.registerLazySingleton(
-    () => CatalogService(db: sl(), metadata: sl(), queue: sl(), audit: sl()),
-  );
-  sl.registerLazySingleton(() => ImportService(sl(), sl(), sl()));
+  sl.registerLazySingleton(() => ImportService(sl(), sl()));
   sl.registerLazySingleton(() => DashboardService(sl()));
   sl.registerLazySingleton(() => BackupExportService(sl()));
+  sl.registerLazySingleton(() => ArabicWorkbookBuilder(sl()));
   sl.registerLazySingleton(() => ReportExportService(sl()));
   sl.registerLazySingleton(
     () => UserAdminService(
-      db: sl(),
-      metadata: sl(),
-      queue: sl(),
+      store: sl(),
+      devices: sl(),
       audit: sl(),
       dio: sl(),
       config: sl(),
     ),
   );
-  sl.registerLazySingleton(() => SeedService(sl(), sl(), sl()));
+  sl.registerLazySingleton(() => SeedService(sl(), sl()));
   sl.registerLazySingleton(
     () => AuthService(
-      db: sl(),
-      metadata: sl(),
+      store: sl(),
+      devices: sl(),
       config: sl(),
       dio: sl(),
       tokens: sl(),
       storage: sl(),
     ),
   );
-  sl.registerLazySingleton(() => ArabicWorkbookBuilder(sl()));
   sl.registerLazySingleton(() => GoogleSheetsLiveSync(sl(), sl(), sl()));
   sl.registerLazySingleton(FirebaseSyncService.new);
   sl.registerLazySingleton(
     () => SyncEngine(
-      db: sl(),
-      metadata: sl(),
-      queue: sl(),
-      baseline: sl(),
+      store: sl(),
+      devices: sl(),
       config: sl(),
-      dio: sl(),
       firebase: sl(),
       sheets: sl(),
     ),
   );
   sl.registerLazySingleton(
     () => OutstandingService(
-      db: sl(),
-      metadata: sl(),
+      store: sl(),
+      devices: sl(),
       accounts: sl(),
       audit: sl(),
       sync: sl(),
       collections: sl(),
     ),
   );
+  sl.registerLazySingleton(
+    () => PurchaseService(
+      store: sl(),
+      devices: sl(),
+      audit: sl(),
+      inventory: sl(),
+      accounts: sl(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => SupplierService(
+      store: sl(),
+      devices: sl(),
+      audit: sl(),
+      accounts: sl(),
+      sync: sl(),
+    ),
+  );
+  sl.registerLazySingleton(SyncQueueRepository.new);
   sl.registerLazySingleton(AppBusyCubit.new);
   sl.registerLazySingleton(() => AuthCubit(sl(), sl()));
   sl.registerFactory(() => BackupCubit(sl(), sl(), sl()));

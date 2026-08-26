@@ -1,7 +1,7 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart';
 
-import '../../data/local/app_database.dart';
+import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 
 class DashboardRank {
   const DashboardRank({
@@ -71,26 +71,14 @@ class DashboardSnapshot {
 }
 
 class DashboardService {
-  DashboardService(this._db);
-  final AppDatabase _db;
+  DashboardService(this._store);
+  final ErpStore _store;
 
-  Stream<DashboardSnapshot> watch() {
-    return _db
-        .customSelect(
-          'SELECT 1',
-          readsFrom: {
-            _db.sales,
-            _db.saleItems,
-            _db.collections,
-            _db.products,
-            _db.customers,
-            _db.customerAccounts,
-            _db.customerAccountTransactions,
-            _db.inventoryMovements,
-          },
-        )
-        .watch()
-        .asyncMap((_) => load());
+  Stream<DashboardSnapshot> watch() async* {
+    yield await load();
+    await for (final _ in _store.watchChanges()) {
+      yield await load();
+    }
   }
 
   Future<DashboardSnapshot> load() async {
@@ -102,22 +90,20 @@ class DashboardService {
     final startMonth = DateTime.utc(now.year, now.month, 1);
     final startYesterday = startToday.subtract(const Duration(days: 1));
 
-    final sales =
-        await (_db.select(_db.sales)..where(
-              (t) => t.isDeleted.equals(false) & t.status.equals('completed'),
-            ))
-            .get();
-    final collections =
-        await (_db.select(_db.collections)..where(
-              (t) => t.isDeleted.equals(false) & t.status.equals('completed'),
-            ))
-            .get();
-    final products = await (_db.select(
-      _db.products,
-    )..where((t) => t.isDeleted.equals(false))).get();
-    final accounts = await _db.select(_db.customerAccounts).get();
-    final saleItems = await _db.select(_db.saleItems).get();
-    final customers = await _db.select(_db.customers).get();
+    final allSales = await _store.listSales();
+    final sales = [
+      for (final sale in allSales)
+        if (!sale.isDeleted && sale.status == 'completed') sale,
+    ];
+    final completedIds = {for (final sale in sales) sale.id};
+    final collections = [
+      for (final row in await _store.listCollections())
+        if (!row.isDeleted && row.status == 'completed') row,
+    ];
+    final products = await _store.listProducts();
+    final accounts = await _store.listAccounts();
+    final saleItems = await _store.listSaleItems();
+    final customers = await _store.listCustomers();
 
     Money sumSales(DateTime from) => sales
         .where((s) => s.soldAt.isAfter(from) || s.soldAt.isAtSameMomentAs(from))
@@ -150,19 +136,15 @@ class DashboardService {
       }
     }
 
-    final recentSales = [...sales]
-      ..sort((a, b) => b.soldAt.compareTo(a.soldAt));
+    final recentSales = [...sales]..sort((a, b) => b.soldAt.compareTo(a.soldAt));
     final recentCols = [...collections]
       ..sort((a, b) => b.collectedAt.compareTo(a.collectedAt));
-    final movements =
-        await (_db.select(_db.inventoryMovements)
-              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-              ..limit(8))
-            .get();
+    final movements = await _store.listMovements();
 
     final productById = {for (final product in products) product.id: product};
     final productTotals = <String, Money>{};
     for (final item in saleItems) {
+      if (!completedIds.contains(item.saleId)) continue;
       productTotals.update(
         item.productId,
         (value) => value + Money.parse(item.lineTotal),
@@ -182,9 +164,7 @@ class DashboardService {
             .toList()
           ..sort((a, b) => b.amount.compareTo(a.amount));
 
-    final customerById = {
-      for (final customer in customers) customer.id: customer,
-    };
+    final customerById = {for (final customer in customers) customer.id: customer};
     final customerTotals = <String, Money>{};
     for (final sale in sales) {
       customerTotals.update(
@@ -256,7 +236,7 @@ class DashboardService {
       outOfStock: out,
       recentSales: recentSales.take(6).toList(),
       recentCollections: recentCols.take(6).toList(),
-      recentMovements: movements,
+      recentMovements: movements.take(8).toList(),
       topProducts: topProducts.take(5).toList(),
       topCustomers: topCustomers.take(5).toList(),
       lowStockProducts: lowStockProducts.take(6).toList(),

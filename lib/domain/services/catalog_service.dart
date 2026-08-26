@@ -1,88 +1,71 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart';
 
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
-import '../../data/sync/sync_queue_repository.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
 
 class CatalogService {
   CatalogService({
-    required AppDatabase db,
-    required MetadataStore metadata,
-    required SyncQueueRepository queue,
+    required ErpStore store,
+    required DeviceIdStore devices,
     required AuditService audit,
-  }) : _db = db,
-       _metadata = metadata,
-       _queue = queue,
+  }) : _store = store,
+       _devices = devices,
        _audit = audit;
 
-  final AppDatabase _db;
-  final MetadataStore _metadata;
-  final SyncQueueRepository _queue;
+  final ErpStore _store;
+  final DeviceIdStore _devices;
   final AuditService _audit;
 
-  Future<List<Product>> searchProducts(String query) {
-    return _productsQuery(query).get();
+  Future<List<Product>> searchProducts(String query) async {
+    return _filterProducts(await _store.listProducts(), query);
   }
 
   Stream<List<Product>> watchProducts(String query) {
-    return _productsQuery(query).watch();
+    return _store.watchProducts().map((items) => _filterProducts(items, query));
   }
 
-  SimpleSelectStatement<$ProductsTable, Product> _productsQuery(String query) {
+  List<Product> _filterProducts(List<Product> items, String query) {
     final q = query.trim();
-    final select = _db.select(_db.products)
-      ..where((t) => t.isDeleted.equals(false));
-    if (q.isNotEmpty) {
-      select.where(
-        (t) => t.name.like('%$q%') | t.sku.like('%$q%') | t.brand.like('%$q%'),
-      );
-    }
-    select.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return select;
+    if (q.isEmpty) return items;
+    return [
+      for (final item in items)
+        if (item.name.contains(q) ||
+            item.sku.contains(q) ||
+            (item.brand ?? '').contains(q))
+          item,
+    ];
   }
 
-  Future<List<Customer>> searchCustomers(String query) {
-    return _customersQuery(query).get();
+  Future<List<Customer>> searchCustomers(String query) async {
+    return _filterCustomers(await _store.listCustomers(), query);
   }
 
   Stream<List<Customer>> watchCustomers(String query) {
-    return _customersQuery(query).watch();
+    return _store.watchCustomers().map(
+      (items) => _filterCustomers(items, query),
+    );
   }
 
-  SimpleSelectStatement<$CustomersTable, Customer> _customersQuery(
-    String query,
-  ) {
+  List<Customer> _filterCustomers(List<Customer> items, String query) {
     final q = query.trim();
-    final select = _db.select(_db.customers)
-      ..where((t) => t.isDeleted.equals(false));
-    if (q.isNotEmpty) {
-      select.where(
-        (t) => t.name.like('%$q%') | t.phone.like('%$q%') | t.area.like('%$q%'),
-      );
-    }
-    select.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return select;
+    if (q.isEmpty) return items;
+    return [
+      for (final item in items)
+        if (item.name.contains(q) ||
+            (item.phone ?? '').contains(q) ||
+            (item.area ?? '').contains(q))
+          item,
+    ];
   }
 
-  Future<List<ProductCategory>> listCategories() {
-    return _categoriesQuery().get();
-  }
+  Future<List<ProductCategory>> listCategories() async => CatalogCategories.all;
 
-  Stream<List<ProductCategory>> watchCategories() {
-    return _categoriesQuery().watch();
-  }
-
-  SimpleSelectStatement<$ProductCategoriesTable, ProductCategory>
-  _categoriesQuery() {
-    final select = _db.select(_db.productCategories)
-      ..where((t) => t.isDeleted.equals(false));
-    select.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return select;
-  }
+  Stream<List<ProductCategory>> watchCategories() =>
+      Stream.value(CatalogCategories.all);
 
   Future<String> upsertProduct({
     required AppSession session,
@@ -92,6 +75,7 @@ class CatalogService {
     String? categoryId,
     String? brand,
     String? description,
+    String? packSize,
     required Money purchasePrice,
     required Money sellingPrice,
     required Quantity currentStock,
@@ -100,7 +84,8 @@ class CatalogService {
     String? customUnitLabel,
     bool isActive = true,
   }) async {
-    final isCreate = id == null;
+    final existing = id == null ? null : await _store.getProduct(id);
+    final isCreate = existing == null;
     if (isCreate && !session.can(AppPermission.productsCreate)) {
       throw const PermissionException();
     }
@@ -110,84 +95,66 @@ class CatalogService {
     if (name.trim().isEmpty || sku.trim().isEmpty) {
       throw const ValidationException('اسم المنتج والرمز مطلوبان.');
     }
+    if (unit.trim().isEmpty) {
+      throw const ValidationException('الوحدة مطلوبة.');
+    }
+    final now = DateTime.now().toUtc();
+    final deviceId = await _devices.deviceId();
+    final productId = id ?? newId();
+    final product = Product(
+      id: productId,
+      name: name.trim(),
+      sku: sku.trim(),
+      categoryId: categoryId,
+      brand: brand,
+      description: description,
+      packSize: packSize?.trim().isEmpty == true ? null : packSize?.trim(),
+      purchasePrice: purchasePrice.toStorage(),
+      sellingPrice: sellingPrice.toStorage(),
+      currentStock: existing?.currentStock ?? currentStock.toStorage(),
+      minimumStock: minimumStock.toStorage(),
+      unit: unit.trim(),
+      customUnitLabel: customUnitLabel,
+      isActive: isActive,
+      version: (existing?.version ?? 0) + 1,
+      deviceId: deviceId,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    );
+    await _store.putProduct(product);
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: isCreate ? 'product.create' : 'product.update',
+      entityType: 'product',
+      entityId: productId,
+      newValue: product.toMap(),
+    );
+    return productId;
+  }
 
-    return _db.transaction(() async {
-      final now = DateTime.now().toUtc();
-      final deviceId = await _metadata.deviceId();
-      final productId = id ?? newId();
-      final existing = id == null
-          ? null
-          : await (_db.select(
-              _db.products,
-            )..where((t) => t.id.equals(id))).getSingleOrNull();
-
-      final companion = ProductsCompanion(
-        id: Value(productId),
-        name: Value(name.trim()),
-        sku: Value(sku.trim()),
-        categoryId: Value(categoryId),
-        brand: Value(brand),
-        description: Value(description),
-        purchasePrice: Value(purchasePrice.toStorage()),
-        sellingPrice: Value(sellingPrice.toStorage()),
-        currentStock: Value(existing?.currentStock ?? currentStock.toStorage()),
-        minimumStock: Value(minimumStock.toStorage()),
-        unit: Value(unit),
-        customUnitLabel: Value(customUnitLabel),
-        isActive: Value(isActive),
-        version: Value((existing?.version ?? 0) + 1),
-        deviceId: Value(deviceId),
-        createdAt: Value(existing?.createdAt ?? now),
-        updatedAt: Value(now),
-        isDeleted: const Value(false),
+  Future<void> deleteProduct({
+    required AppSession session,
+    required String id,
+  }) async {
+    if (!session.can(AppPermission.productsDelete)) {
+      throw const PermissionException();
+    }
+    final saleItems = await _store.listSaleItems(productId: id);
+    final purchaseItems = await _store.listPurchaseItems(productId: id);
+    if (saleItems.isNotEmpty || purchaseItems.isNotEmpty) {
+      throw const ValidationException(
+        'لا يمكن حذف المنتج لأنه مستخدم في فواتير بيع أو شراء.',
       );
-
-      await _db.into(_db.products).insertOnConflictUpdate(companion);
-
-      final payload = {
-        'id': productId,
-        'name': name.trim(),
-        'sku': sku.trim(),
-        'category_id': categoryId,
-        'brand': brand,
-        'description': description,
-        'purchase_price': purchasePrice.toStorage(),
-        'selling_price': sellingPrice.toStorage(),
-        'current_stock': existing?.currentStock ?? currentStock.toStorage(),
-        'minimum_stock': minimumStock.toStorage(),
-        'unit': unit,
-        'custom_unit_label': customUnitLabel,
-        'is_active': isActive,
-        'version': (existing?.version ?? 0) + 1,
-        'device_id': deviceId,
-      };
-
-      await _audit.write(
-        userId: session.userId,
-        deviceId: deviceId,
-        action: isCreate ? 'product.create' : 'product.update',
-        entityType: 'product',
-        entityId: productId,
-        oldValue: existing == null
-            ? null
-            : {
-                'name': existing.name,
-                'selling_price': existing.sellingPrice,
-                'sku': existing.sku,
-              },
-        newValue: payload,
-      );
-      await _queue.enqueue(
-        entityType: SyncEntityType.product,
-        entityId: productId,
-        operation: isCreate
-            ? SyncOperationType.create
-            : SyncOperationType.update,
-        payload: payload,
-        operationId: newId(),
-      );
-      return productId;
-    });
+    }
+    await _store.deleteProduct(id);
+    await _audit.write(
+      userId: session.userId,
+      deviceId: await _devices.deviceId(),
+      action: 'product.delete',
+      entityType: 'product',
+      entityId: id,
+    );
   }
 
   Future<String> findOrCreateCustomer({
@@ -200,7 +167,7 @@ class CatalogService {
     if (trimmed.isEmpty) {
       throw const ValidationException('اسم العميل مطلوب.');
     }
-    final existing = await _customersQuery(trimmed).get();
+    final existing = await searchCustomers(trimmed);
     for (final customer in existing) {
       if (customer.name == trimmed) return customer.id;
     }
@@ -228,7 +195,8 @@ class CatalogService {
     String? notes,
     bool isActive = true,
   }) async {
-    final isCreate = id == null;
+    final existing = id == null ? null : await _store.getCustomer(id);
+    final isCreate = existing == null;
     if (isCreate && !session.can(AppPermission.customersCreate)) {
       throw const PermissionException();
     }
@@ -238,143 +206,43 @@ class CatalogService {
     if (name.trim().isEmpty) {
       throw const ValidationException('اسم العميل مطلوب.');
     }
-
-    return _db.transaction(() async {
-      final now = DateTime.now().toUtc();
-      final deviceId = await _metadata.deviceId();
-      final customerId = id ?? newId();
-      final existing = id == null
-          ? null
-          : await (_db.select(
-              _db.customers,
-            )..where((t) => t.id.equals(id))).getSingleOrNull();
-
-      await _db
-          .into(_db.customers)
-          .insertOnConflictUpdate(
-            CustomersCompanion(
-              id: Value(customerId),
-              name: Value(name.trim()),
-              phone: Value(phone),
-              address: Value(address),
-              area: Value(area),
-              notes: Value(notes),
-              isActive: Value(isActive),
-              version: Value((existing?.version ?? 0) + 1),
-              deviceId: Value(deviceId),
-              createdAt: Value(existing?.createdAt ?? now),
-              updatedAt: Value(now),
-              isDeleted: const Value(false),
-            ),
-          );
-
-      if (existing == null) {
-        final accountId = newId();
-        await _db
-            .into(_db.customerAccounts)
-            .insert(
-              CustomerAccountsCompanion.insert(
-                id: accountId,
-                customerId: customerId,
-                cachedBalance: Money.zero().toStorage(),
-                deviceId: Value(deviceId),
-                createdAt: now,
-                updatedAt: now,
-              ),
-            );
-        await _queue.enqueue(
-          entityType: SyncEntityType.customerAccount,
-          entityId: accountId,
-          operation: SyncOperationType.create,
-          payload: {
-            'id': accountId,
-            'customer_id': customerId,
-            'cached_balance': Money.zero().toStorage(),
-            'version': 1,
-            'device_id': deviceId,
-          },
-          operationId: 'account-create-$accountId',
-        );
-      }
-
-      final payload = {
-        'id': customerId,
-        'name': name.trim(),
-        'phone': phone,
-        'address': address,
-        'area': area,
-        'notes': notes,
-        'is_active': isActive,
-        'version': (existing?.version ?? 0) + 1,
-        'device_id': deviceId,
-      };
-      await _audit.write(
-        userId: session.userId,
-        deviceId: deviceId,
-        action: isCreate ? 'customer.create' : 'customer.update',
-        entityType: 'customer',
-        entityId: customerId,
-        oldValue: existing == null
-            ? null
-            : {'name': existing.name, 'phone': existing.phone},
-        newValue: payload,
+    final now = DateTime.now().toUtc();
+    final deviceId = await _devices.deviceId();
+    final customerId = id ?? newId();
+    final customer = Customer(
+      id: customerId,
+      name: name.trim(),
+      phone: phone,
+      address: address,
+      area: area,
+      notes: notes,
+      isActive: isActive,
+      version: (existing?.version ?? 0) + 1,
+      deviceId: deviceId,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    );
+    await _store.putCustomer(customer);
+    if (existing == null) {
+      await _store.putAccount(
+        CustomerAccount(
+          id: newId(),
+          customerId: customerId,
+          cachedBalance: Money.zero().toStorage(),
+          deviceId: deviceId,
+          createdAt: now,
+          updatedAt: now,
+        ),
       );
-      await _queue.enqueue(
-        entityType: SyncEntityType.customer,
-        entityId: customerId,
-        operation: isCreate
-            ? SyncOperationType.create
-            : SyncOperationType.update,
-        payload: payload,
-        operationId: newId(),
-      );
-      return customerId;
-    });
-  }
-
-  Future<String> upsertCategory({
-    required AppSession session,
-    String? id,
-    required String name,
-    String? description,
-  }) async {
-    if (!session.can(AppPermission.productsCreate) &&
-        !session.can(AppPermission.productsUpdate)) {
-      throw const PermissionException();
     }
-    return _db.transaction(() async {
-      final now = DateTime.now().toUtc();
-      final deviceId = await _metadata.deviceId();
-      final categoryId = id ?? newId();
-      await _db
-          .into(_db.productCategories)
-          .insertOnConflictUpdate(
-            ProductCategoriesCompanion(
-              id: Value(categoryId),
-              name: Value(name.trim()),
-              description: Value(description),
-              version: const Value(1),
-              deviceId: Value(deviceId),
-              createdAt: Value(now),
-              updatedAt: Value(now),
-              isDeleted: const Value(false),
-              isActive: const Value(true),
-            ),
-          );
-      await _queue.enqueue(
-        entityType: SyncEntityType.category,
-        entityId: categoryId,
-        operation: id == null
-            ? SyncOperationType.create
-            : SyncOperationType.update,
-        payload: {
-          'id': categoryId,
-          'name': name.trim(),
-          'description': description,
-        },
-        operationId: newId(),
-      );
-      return categoryId;
-    });
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: isCreate ? 'customer.create' : 'customer.update',
+      entityType: 'customer',
+      entityId: customerId,
+      newValue: customer.toMap(),
+    );
+    return customerId;
   }
 }

@@ -68,6 +68,11 @@ service cloud.firestore {
         'roles',
         'transactions',
         'sessions',
+        'suppliers',
+        'supplier_accounts',
+        'supplier_account_transactions',
+        'purchases',
+        'purchase_items',
         'other',
         'sheet_tabs'
       ];
@@ -135,7 +140,9 @@ service cloud.firestore {
           && isKnownSection(section)
           && isValidSectionDoc(request.resource.data);
 
-        allow delete: if false;
+        allow delete: if isSignedIn()
+          && isCompany(companyId)
+          && isKnownSection(section);
       }
 
       match /files/{fileId} {

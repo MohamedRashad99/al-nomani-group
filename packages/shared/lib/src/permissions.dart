@@ -38,6 +38,15 @@ abstract final class AppPermission {
   static const outstandingView = 'outstanding.view';
   static const outstandingCreate = 'outstanding.create';
 
+  static const suppliersView = 'suppliers.view';
+  static const suppliersCreate = 'suppliers.create';
+  static const suppliersUpdate = 'suppliers.update';
+  static const suppliersDelete = 'suppliers.delete';
+
+  static const purchasesView = 'purchases.view';
+  static const purchasesCreate = 'purchases.create';
+  static const purchasesCancel = 'purchases.cancel';
+
   static const all = <String>[
     productsView,
     productsCreate,
@@ -68,6 +77,13 @@ abstract final class AppPermission {
     settingsUpdate,
     outstandingView,
     outstandingCreate,
+    suppliersView,
+    suppliersCreate,
+    suppliersUpdate,
+    suppliersDelete,
+    purchasesView,
+    purchasesCreate,
+    purchasesCancel,
   ];
 }
 
@@ -102,6 +118,12 @@ abstract final class RolePermissions {
       AppPermission.settingsView,
       AppPermission.outstandingView,
       AppPermission.outstandingCreate,
+      AppPermission.suppliersView,
+      AppPermission.suppliersCreate,
+      AppPermission.suppliersUpdate,
+      AppPermission.purchasesView,
+      AppPermission.purchasesCreate,
+      AppPermission.purchasesCancel,
     ],
     AppRole.cashier: [
       AppPermission.productsView,
@@ -112,6 +134,9 @@ abstract final class RolePermissions {
       AppPermission.salesCreate,
       AppPermission.collectionsView,
       AppPermission.collectionsCreate,
+      AppPermission.suppliersView,
+      AppPermission.purchasesView,
+      AppPermission.purchasesCreate,
     ],
     AppRole.viewer: [
       AppPermission.productsView,
@@ -121,6 +146,8 @@ abstract final class RolePermissions {
       AppPermission.collectionsView,
       AppPermission.reportsView,
       AppPermission.outstandingView,
+      AppPermission.suppliersView,
+      AppPermission.purchasesView,
     ],
   };
 }

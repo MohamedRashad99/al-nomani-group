@@ -4,8 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../domain/entities/erp_models.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -25,10 +25,10 @@ class UsersPage extends StatelessWidget {
               child: const Icon(Icons.add),
             )
           : null,
-      child: StreamBuilder<List<User>>(
+      child: StreamBuilder<List<AppUser>>(
         stream: sl<UserAdminService>().watch(),
         builder: (context, snap) {
-          final items = snap.data ?? const <User>[];
+          final items = snap.data ?? const <AppUser>[];
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -59,7 +59,7 @@ class UsersPage extends StatelessWidget {
     _ => 'غير محدد',
   };
 
-  static Future<void> _edit(BuildContext context, User? user) async {
+  static Future<void> _edit(BuildContext context, AppUser? user) async {
     final username = TextEditingController(text: user?.username ?? '');
     final display = TextEditingController(text: user?.displayName ?? '');
     final password = TextEditingController();

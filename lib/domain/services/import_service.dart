@@ -2,7 +2,6 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:csv/csv.dart';
 
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
 import '../session.dart';
 import 'catalog_service.dart';
 import 'inventory_service.dart';
@@ -20,10 +19,9 @@ class ImportPreviewRow {
 }
 
 class ImportService {
-  ImportService(this._catalog, this._inventory, this._db);
+  ImportService(this._catalog, this._inventory);
   final CatalogService _catalog;
   final InventoryService _inventory;
-  final AppDatabase _db;
 
   List<ImportPreviewRow> previewProducts(String csv) {
     final rows = const CsvToListConverter(eol: '\n').convert(csv);
@@ -165,9 +163,8 @@ class ImportService {
     var count = 0;
     for (final row in valid) {
       final sku = row.values['sku'] ?? '';
-      final product = await (_db.select(
-        _db.products,
-      )..where((product) => product.sku.equals(sku))).getSingleOrNull();
+      final matches = await _catalog.searchProducts(sku);
+      final product = matches.where((item) => item.sku == sku).firstOrNull;
       if (product == null) continue;
       await _inventory.adjust(
         session: session,

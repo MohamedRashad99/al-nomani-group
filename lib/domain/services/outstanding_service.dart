@@ -1,10 +1,10 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart';
 
 import '../../core/errors/app_exception.dart';
-import '../../data/local/app_database.dart';
-import '../../data/local/metadata_store.dart';
+import '../../data/remote/device_id_store.dart';
+import '../../data/remote/erp_store.dart';
 import '../../data/sync/sync_engine.dart';
+import '../entities/erp_models.dart';
 import '../session.dart';
 import 'account_service.dart';
 import 'audit_service.dart';
@@ -19,43 +19,36 @@ class OutstandingRow {
 
 class OutstandingService {
   OutstandingService({
-    required AppDatabase db,
-    required MetadataStore metadata,
+    required ErpStore store,
+    required DeviceIdStore devices,
     required AccountService accounts,
     required AuditService audit,
     required SyncEngine sync,
     required CollectionService collections,
-  }) : _db = db,
-       _metadata = metadata,
+  }) : _store = store,
+       _devices = devices,
        _accounts = accounts,
        _audit = audit,
        _sync = sync,
        _collections = collections;
 
-  final AppDatabase _db;
-  final MetadataStore _metadata;
+  final ErpStore _store;
+  final DeviceIdStore _devices;
   final AccountService _accounts;
   final AuditService _audit;
   final SyncEngine _sync;
   final CollectionService _collections;
 
-  Stream<List<OutstandingRow>> watch() {
-    return _db
-        .customSelect(
-          'SELECT 1',
-          readsFrom: {_db.customers, _db.customerAccounts},
-        )
-        .watch()
-        .asyncMap((_) => list());
+  Stream<List<OutstandingRow>> watch() async* {
+    yield await list();
+    await for (final _ in _store.watchChanges()) {
+      yield await list();
+    }
   }
 
   Future<List<OutstandingRow>> list() async {
-    final customers =
-        await (_db.select(_db.customers)
-              ..where((row) => row.isDeleted.equals(false))
-              ..orderBy([(row) => OrderingTerm.asc(row.name)]))
-            .get();
-    final accounts = await _db.select(_db.customerAccounts).get();
+    final customers = await _store.listCustomers();
+    final accounts = await _store.listAccounts();
     final balances = {
       for (final account in accounts)
         account.customerId: Money.parse(account.cachedBalance),
@@ -90,25 +83,29 @@ class OutstandingService {
   }
 
   Stream<({CustomerAccount? account, List<CustomerAccountTransaction> txs})>
-  watchStatement(String customerId) {
-    return _db
-        .customSelect(
-          'SELECT 1',
-          readsFrom: {_db.customerAccounts, _db.customerAccountTransactions},
-        )
-        .watch()
-        .asyncMap((_) async {
-          final account =
-              await (_db.select(_db.customerAccounts)
-                    ..where((row) => row.customerId.equals(customerId)))
-                  .getSingleOrNull();
-          final txs =
-              await (_db.select(_db.customerAccountTransactions)
-                    ..where((row) => row.customerId.equals(customerId))
-                    ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-                  .get();
-          return (account: account, txs: txs);
-        });
+  watchStatement(String customerId) async* {
+    Future<({CustomerAccount? account, List<CustomerAccountTransaction> txs})>
+    load() async {
+      final account = await _store.getAccountByCustomer(customerId);
+      final txs = await _store.listAccountTx(customerId: customerId);
+      return (account: account, txs: txs);
+    }
+
+    yield await load();
+    await for (final _ in _store.watchChanges()) {
+      yield await load();
+    }
+  }
+
+  Future<Customer?> getCustomer(String id) => _store.getCustomer(id);
+
+  Stream<Customer?> watchCustomer(String id) {
+    return _store.watchCustomers().map((rows) {
+      for (final row in rows) {
+        if (row.id == id) return row;
+      }
+      return null;
+    });
   }
 
   Future<void> add({
@@ -233,32 +230,23 @@ class OutstandingService {
     if (notes.trim().isEmpty) {
       throw const ValidationException('الملاحظات مطلوبة لتوثيق الحركة.');
     }
-
-    await _db.transaction(() async {
-      final deviceId = await _metadata.deviceId();
-      await _accounts.post(
-        customerId: customerId,
-        type: type,
-        amount: amount,
-        createdBy: session.userId,
-        deviceId: deviceId,
-        referenceType: 'outstanding_adjustment',
-        notes: notes.trim(),
-      );
-      await _audit.write(
-        userId: session.userId,
-        deviceId: deviceId,
-        action: action,
-        entityType: 'customerAccountTransaction',
-        entityId: customerId,
-        newValue: {
-          'customer_id': customerId,
-          'type': type,
-          'amount': amount.toStorage(),
-          'notes': notes.trim(),
-        },
-      );
-    });
+    final deviceId = await _devices.deviceId();
+    await _accounts.post(
+      customerId: customerId,
+      type: type,
+      amount: amount,
+      createdBy: session.userId,
+      deviceId: deviceId,
+      referenceType: 'outstanding_adjustment',
+      notes: notes.trim(),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: action,
+      entityType: 'customerAccountTransaction',
+      entityId: customerId,
+    );
     await _sync.maybeSyncAfterLocalWrite();
   }
 }

@@ -10,8 +10,6 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/file_download.dart';
-import '../../data/local/app_database.dart';
-import '../../domain/services/conflict_resolution_service.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/google_sheet_link_button.dart';
 import '../auth/auth_cubit.dart';
@@ -126,73 +124,6 @@ class _BackupView extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   child: Text(state.message!),
                 ),
-              StreamBuilder(
-                stream: sl<ConflictResolutionService>().watchOpenConflicts(),
-                builder: (context, snapshot) {
-                  final conflicts = snapshot.data ?? const <Conflict>[];
-                  if (conflicts.isEmpty) return const SizedBox.shrink();
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'تعارضات تحتاج مراجعة',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          for (final conflict in conflicts)
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                '${conflict.entityType} • ${conflict.entityId}',
-                              ),
-                              subtitle: const Text(
-                                'اختر النسخة المعتمدة. ستبقى النسختان محفوظتين في سجل التعارض.',
-                              ),
-                              isThreeLine: true,
-                              trailing: PopupMenuButton<String>(
-                                onSelected: (value) async {
-                                  final service =
-                                      sl<ConflictResolutionService>();
-                                  final currentSession = context
-                                      .read<AuthCubit>()
-                                      .state
-                                      .session!;
-                                  if (value == 'server') {
-                                    await service.acceptServer(
-                                      currentSession,
-                                      conflict.id,
-                                    );
-                                  } else {
-                                    await service.keepLocal(
-                                      currentSession,
-                                      conflict.id,
-                                    );
-                                  }
-                                  if (context.mounted) {
-                                    await context.read<BackupCubit>().refresh();
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                    value: 'server',
-                                    child: Text('اعتماد نسخة الخادم'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'local',
-                                    child: Text('الاحتفاظ بالنسخة المحلية'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
               _SheetExportCard(
                 busy: state.busy,
                 canExport: session?.can(AppPermission.backupFullSync) == true,

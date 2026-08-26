@@ -5,8 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/utils/breakpoints.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -70,7 +70,12 @@ class _ProductsPageState extends State<ProductsPage> {
                         child: ListTile(
                           title: Text(p.name),
                           subtitle: Text(
-                            '${p.sku} • ${p.currentStock} ${ProductUnit.fromCode(p.unit).arabicLabel}',
+                            [
+                              p.sku,
+                              if (p.packSize != null && p.packSize!.isNotEmpty)
+                                p.packSize,
+                              '${p.currentStock} ${p.unit}',
+                            ].join(' • '),
                           ),
                           trailing: MoneyText(Money.parse(p.sellingPrice)),
                           onTap: session.can(AppPermission.productsUpdate)
@@ -125,12 +130,10 @@ class _ProductsPageState extends State<ProductsPage> {
     final sell = TextEditingController(text: product?.sellingPrice ?? '');
     final stock = TextEditingController(text: product?.currentStock ?? '');
     final min = TextEditingController(text: product?.minimumStock ?? '');
-    var unit = product?.unit ?? 'kg';
+    final unit = TextEditingController(text: product?.unit ?? '');
+    final packSize = TextEditingController(text: product?.packSize ?? '');
     var categoryId = product?.categoryId;
-    final customUnit = TextEditingController(
-      text: product?.customUnitLabel ?? '',
-    );
-    final categories = await sl<CatalogService>().listCategories();
+    final categories = CatalogCategories.all;
     if (!mounted) return;
     await showModalBottomSheet<bool>(
       context: context,
@@ -191,24 +194,14 @@ class _ProductsPageState extends State<ProductsPage> {
                     ],
                     onChanged: (v) => setS(() => categoryId = v),
                   ),
-                  SearchableSelectField<String>(
-                    label: S.unit,
-                    required: true,
-                    allowCustom: false,
-                    value: unit,
-                    options: [
-                      for (final u in ProductUnit.values)
-                        SearchableOption(value: u.code, label: u.arabicLabel),
-                    ],
-                    onChanged: (v) => setS(() => unit = v ?? unit),
+                  TextField(
+                    controller: packSize,
+                    decoration: const InputDecoration(labelText: S.packSize),
                   ),
-                  if (unit == ProductUnit.custom.code)
-                    TextField(
-                      controller: customUnit,
-                      decoration: const InputDecoration(
-                        labelText: S.customUnitLabel,
-                      ),
-                    ),
+                  TextField(
+                    controller: unit,
+                    decoration: const InputDecoration(labelText: S.unit),
+                  ),
                   const SizedBox(height: 12),
                   if (error != null)
                     Text(error!, style: const TextStyle(color: Colors.red)),
@@ -232,6 +225,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                   sku: sku.text,
                                   categoryId: categoryId,
                                   brand: brand.text,
+                                  packSize: packSize.text,
                                   purchasePrice: Money.parse(
                                     purchase.text.isEmpty ? '0' : purchase.text,
                                   ),
@@ -244,11 +238,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                   minimumStock: Quantity.parse(
                                     min.text.isEmpty ? '0' : min.text,
                                   ),
-                                  unit: unit,
-                                  customUnitLabel:
-                                      unit == ProductUnit.custom.code
-                                      ? customUnit.text
-                                      : null,
+                                  unit: unit.text,
                                 );
                                 await sl<SyncEngine>()
                                     .maybeSyncAfterLocalWrite();
@@ -271,6 +261,47 @@ class _ProductsPageState extends State<ProductsPage> {
                           )
                         : const Text(S.save),
                   ),
+                  if (product != null &&
+                      context
+                              .read<AuthCubit>()
+                              .state
+                              .session
+                              ?.can(AppPermission.productsDelete) ==
+                          true) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              setS(() {
+                                saving = true;
+                                error = null;
+                              });
+                              try {
+                                await sl<AppBusyCubit>().guard(() async {
+                                  await sl<CatalogService>().deleteProduct(
+                                    session: context
+                                        .read<AuthCubit>()
+                                        .state
+                                        .session!,
+                                    id: product.id,
+                                  );
+                                  await sl<SyncEngine>()
+                                      .maybeSyncAfterLocalWrite();
+                                });
+                                if (ctx.mounted) Navigator.pop(ctx, true);
+                              } catch (e) {
+                                if (ctx.mounted) {
+                                  setS(() {
+                                    saving = false;
+                                    error = e.toString();
+                                  });
+                                }
+                              }
+                            },
+                      child: const Text(S.deleteProduct),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),

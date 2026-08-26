@@ -8,18 +8,17 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/utils/file_download.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/arabic_workbook_builder.dart';
 
 enum ReportFileType { csv, excel, pdf }
 
 class ReportExportService {
-  ReportExportService(this._db);
+  ReportExportService(this._workbook);
 
-  final AppDatabase _db;
+  final ArabicWorkbookBuilder _workbook;
 
   Future<void> exportSales(ReportFileType type) async {
-    final sections = await ArabicWorkbookBuilder(_db).build();
+    final sections = await _workbook.build();
     final sales = sections[SheetArabic.sales]!;
     final stamp = DateTime.now().toIso8601String().substring(0, 10);
     switch (type) {
@@ -83,7 +82,7 @@ class ReportExportService {
 
   Future<void> exportAllArabicExcel() async {
     final workbook = Excel.createExcel();
-    final sections = await ArabicWorkbookBuilder(_db).build();
+    final sections = await _workbook.build();
     for (final entry in sections.entries) {
       final sheet = workbook[entry.key];
       for (final row in entry.value) {

@@ -22,6 +22,15 @@ abstract final class S {
   static const settings = 'الإعدادات';
   static const more = 'المزيد';
   static const outstanding = 'المبالغ الآجلة';
+  static const suppliers = 'الموردون';
+  static const purchases = 'المشتريات';
+  static const newPurchase = 'شراء جديد';
+  static const selectSupplier = 'اختر المورد';
+  static const supplierName = 'اسم المورد';
+  static const packSize = 'الحجم / العبوة';
+  static const deleteProduct = 'حذف المنتج';
+  static const confirmPurchase = 'تأكيد الشراء';
+  static const purchaseSuccess = 'تم تسجيل الشراء بنجاح.';
   static const outstandingAdd = 'إضافة مبلغ آجل';
   static const outstandingSet = 'تعيين الرصيد الحالي';
   static const outstandingReduce = 'تخفيض مبلغ آجل';

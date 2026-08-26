@@ -6,42 +6,36 @@ import 'package:flutter/widgets.dart';
 import 'core/config/app_config.dart';
 import 'core/di/injector.dart';
 import 'core/firebase/firebase_bootstrap.dart';
-import 'data/local/app_database.dart';
-import 'data/local/metadata_store.dart';
-import 'data/sync/firebase_sync_service.dart';
+import 'data/remote/device_id_store.dart';
+import 'data/remote/erp_store.dart';
+import 'data/remote/firestore_erp_store.dart';
 import 'data/sync/sync_engine.dart';
 import 'domain/services/seed_service.dart';
 import 'features/auth/auth_cubit.dart';
 
-Future<void> bootstrap({AppDatabase? database}) async {
+Future<void> bootstrap({ErpStore? store}) async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
-  await configureDependencies(config: config, database: database);
+  await configureDependencies(config: config, store: store);
 
-  final db = sl<AppDatabase>();
-  try {
-    await db.customSelect('SELECT COUNT(*) AS c FROM sync_queue').get();
-  } catch (e) {
-    throw StateError(
-      'تعذر ترقية قاعدة البيانات المحلية. لم يتم تغيير بياناتك. يرجى تصدير نسخة احتياطية والتواصل مع المسؤول. $e',
-    );
-  }
-
-  final meta = sl<MetadataStore>();
-  await meta.set('app_version', AppVersions.appVersion);
-  await meta.set('database_version', '${AppVersions.databaseVersion}');
-  await meta.set('sync_protocol_version', '${AppVersions.syncProtocolVersion}');
-  await sl<SeedService>().seedIfEmpty();
+  final devices = sl<DeviceIdStore>();
+  await devices.setPref('app_version', AppVersions.appVersion);
+  await devices.setPref('database_version', '${AppVersions.databaseVersion}');
+  await devices.setPref(
+    'sync_protocol_version',
+    '${AppVersions.syncProtocolVersion}',
+  );
   await sl<SeedService>().ensureDemoAdminIdentity();
   await sl<AuthCubit>().restore();
-  unawaited(_startCloud(db));
+  unawaited(_attachFirebase());
   unawaited(sl<SyncEngine>().maybeRunScheduled());
 }
 
-Future<void> _startCloud(AppDatabase db) async {
+Future<void> _attachFirebase() async {
   if (!await FirebaseBootstrap.ensure()) return;
-  final users = await db.select(db.users).get();
-  if (users.isNotEmpty) return;
-  await sl<FirebaseSyncService>().hydrateLocal(db);
+  final store = sl<ErpStore>();
+  if (store is FirestoreErpStore) {
+    await store.ensureReady();
+  }
   await sl<SeedService>().ensureDemoAdminIdentity();
 }

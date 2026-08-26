@@ -1,31 +1,33 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 
-import '../local/app_database.dart';
+import '../../data/remote/erp_store.dart';
+import '../../domain/entities/erp_models.dart';
 
 class ArabicWorkbookBuilder {
-  ArabicWorkbookBuilder(this._db);
-  final AppDatabase _db;
+  ArabicWorkbookBuilder(this._store);
+  final ErpStore _store;
 
   Future<Map<String, List<List<Object?>>>> build() async {
-    final customers = await _db.select(_db.customers).get();
-    final products = await _db.select(_db.products).get();
-    final categories = await _db.select(_db.productCategories).get();
-    final accounts = await _db.select(_db.customerAccounts).get();
-    final accountTx = await _db.select(_db.customerAccountTransactions).get();
-    final sales = await _db.select(_db.sales).get();
-    final items = await _db.select(_db.saleItems).get();
-    final collections = await _db.select(_db.collections).get();
-    final movements = await _db.select(_db.inventoryMovements).get();
-    final users = await _db.select(_db.users).get();
-    final roles = await _db.select(_db.roles).get();
-    final settings = await _db.select(_db.settings).get();
-    final audits = await _db.select(_db.auditLogs).get();
+    final customers = await _store.listCustomers();
+    final products = await _store.listProducts();
+    final categories = CatalogCategories.all;
+    final accounts = await _store.listAccounts();
+    final accountTx = await _store.listAccountTx();
+    final sales = await _store.listSales();
+    final items = await _store.listSaleItems();
+    final collections = await _store.listCollections();
+    final movements = await _store.listMovements();
+    final users = await _store.listUsers();
+    final settings = await _store.listSettings();
+    final audits = await _store.listAudits();
+    final suppliers = await _store.listSuppliers();
+    final purchases = await _store.listPurchases();
 
     final customerNames = {for (final row in customers) row.id: row.name};
     final productNames = {for (final row in products) row.id: row.name};
     final categoryNames = {for (final row in categories) row.id: row.name};
     final userNames = {for (final row in users) row.id: row.displayName};
-    final roleNames = {for (final row in roles) row.id: row.displayNameAr};
+    final supplierNames = {for (final row in suppliers) row.id: row.name};
 
     List<List<Object?>> table(
       List<String> headers,
@@ -42,15 +44,13 @@ class ArabicWorkbookBuilder {
       SheetArabic.overview: [
         ['البيان', 'العدد'],
         ['وقت التحديث', SheetArabic.cell(DateTime.now())],
-        ['التصنيفات', categories.where((row) => !row.isDeleted).length],
-        ['المنتجات', products.where((row) => !row.isDeleted).length],
-        ['العملاء', customers.where((row) => !row.isDeleted).length],
-        ['المبيعات', sales.where((row) => !row.isDeleted).length],
-        ['بنود المبيعات', items.length],
-        ['المبالغ الآجلة', accounts.length],
-        ['التحصيلات', collections.where((row) => !row.isDeleted).length],
-        ['المخزون', movements.length],
-        ['المستخدمون', users.where((row) => !row.isDeleted).length],
+        ['التصنيفات', categories.length],
+        ['المنتجات', products.length],
+        ['العملاء', customers.length],
+        ['الموردون', suppliers.length],
+        ['المبيعات', sales.length],
+        ['المشتريات', purchases.length],
+        ['التحصيلات', collections.length],
       ],
       SheetArabic.sales: table(
         [
@@ -60,42 +60,27 @@ class ArabicWorkbookBuilder {
           'الإجمالي',
           'المدفوع',
           'المتبقي',
-          'نوع الدفع',
-          'البائع',
           'التاريخ',
         ],
-        sales.where((row) => !row.isDeleted).map((sale) {
-          final paid = double.tryParse(sale.paidAmount) ?? 0;
-          final remaining = double.tryParse(sale.remainingAmount) ?? 0;
-          final payType = paid <= 0
-              ? 'credit'
-              : remaining <= 0
-              ? 'cash'
-              : 'partial';
-          return [
+        sales.map(
+          (sale) => [
             sale.saleNumber,
             customerNames[sale.customerId] ?? '',
             sale.status,
             sale.subtotal,
             sale.paidAmount,
             sale.remainingAmount,
-            payType,
-            userNames[sale.createdBy] ?? sale.createdBy,
             sale.soldAt,
-          ];
-        }),
+          ],
+        ),
       ),
       SheetArabic.saleItems: table(
-        [
-          'رقم الفاتورة',
-          'المنتج',
-          'الكمية',
-          'الوحدة',
-          'سعر الوحدة',
-          'الإجمالي',
-        ],
+        ['رقم الفاتورة', 'المنتج', 'الكمية', 'الوحدة', 'سعر الوحدة', 'الإجمالي'],
         items.map((item) {
           final sale = sales.where((row) => row.id == item.saleId).firstOrNull;
+          if (sale != null && sale.status == 'cancelled') {
+            return <Object?>[];
+          }
           return [
             sale?.saleNumber ?? item.saleId,
             productNames[item.productId] ?? item.productId,
@@ -104,11 +89,11 @@ class ArabicWorkbookBuilder {
             item.unitPrice,
             item.lineTotal,
           ];
-        }),
+        }).where((row) => row.isNotEmpty),
       ),
       SheetArabic.customers: table(
         ['الاسم', 'الهاتف', 'العنوان', 'المنطقة', 'الرصيد الآجل', 'نشط'],
-        customers.where((row) => !row.isDeleted).map((customer) {
+        customers.map((customer) {
           final account = accounts
               .where((row) => row.customerId == customer.id)
               .firstOrNull;
@@ -132,14 +117,7 @@ class ArabicWorkbookBuilder {
         ),
       ),
       SheetArabic.accountTransactions: table(
-        [
-          'التاريخ',
-          'العميل',
-          'النوع',
-          'المبلغ',
-          'الرصيد بعد الحركة',
-          'المستخدم',
-        ],
+        ['التاريخ', 'العميل', 'النوع', 'المبلغ', 'الرصيد بعد الحركة', 'المستخدم'],
         accountTx.map(
           (tx) => [
             tx.createdAt,
@@ -156,17 +134,19 @@ class ArabicWorkbookBuilder {
           'الاسم',
           'الرمز',
           'التصنيف',
+          'الحجم',
           'سعر الشراء',
           'سعر البيع',
           'المخزون الحالي',
           'الوحدة',
           'نشط',
         ],
-        products.where((row) => !row.isDeleted).map(
+        products.map(
           (product) => [
             product.name,
             product.sku,
             categoryNames[product.categoryId] ?? '',
+            product.packSize ?? '',
             product.purchasePrice,
             product.sellingPrice,
             product.currentStock,
@@ -177,9 +157,7 @@ class ArabicWorkbookBuilder {
       ),
       SheetArabic.categories: table(
         ['الاسم', 'الوصف', 'نشط'],
-        categories.where((row) => !row.isDeleted).map(
-          (row) => [row.name, row.description ?? '', row.isActive],
-        ),
+        categories.map((row) => [row.name, row.description ?? '', row.isActive]),
       ),
       SheetArabic.inventory: table(
         [
@@ -205,7 +183,7 @@ class ArabicWorkbookBuilder {
       ),
       SheetArabic.collections: table(
         ['العميل', 'المبلغ', 'طريقة الدفع', 'التاريخ', 'المحصّل', 'الحالة'],
-        collections.where((row) => !row.isDeleted).map(
+        collections.map(
           (row) => [
             customerNames[row.customerId] ?? row.customerId,
             row.amount,
@@ -218,13 +196,8 @@ class ArabicWorkbookBuilder {
       ),
       SheetArabic.users: table(
         ['اسم المستخدم', 'الاسم', 'الدور', 'نشط'],
-        users.where((row) => !row.isDeleted).map(
-          (row) => [
-            row.username,
-            row.displayName,
-            roleNames[row.roleId] ?? row.roleId,
-            row.isActive,
-          ],
+        users.map(
+          (row) => [row.username, row.displayName, row.roleId, row.isActive],
         ),
       ),
       SheetArabic.settings: table(
@@ -239,6 +212,23 @@ class ArabicWorkbookBuilder {
             row.action,
             row.entityType,
             userNames[row.userId] ?? row.userId ?? '',
+          ],
+        ),
+      ),
+      'الموردون': table(
+        ['الاسم', 'الهاتف', 'المنطقة'],
+        suppliers.map((row) => [row.name, row.phone ?? '', row.area ?? '']),
+      ),
+      'المشتريات': table(
+        ['رقم الفاتورة', 'المورد', 'الحالة', 'الإجمالي', 'المدفوع', 'المتبقي'],
+        purchases.map(
+          (row) => [
+            row.purchaseNumber,
+            supplierNames[row.supplierId] ?? '',
+            row.status,
+            row.subtotal,
+            row.paidAmount,
+            row.remainingAmount,
           ],
         ),
       ),

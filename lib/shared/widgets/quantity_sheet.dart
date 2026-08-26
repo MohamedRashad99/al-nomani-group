@@ -37,7 +37,6 @@ class _QuantitySheet extends StatefulWidget {
 }
 
 class _QuantitySheetState extends State<_QuantitySheet> {
-  static const _presets = [1, 2, 3, 5, 10];
   final _controller = TextEditingController();
   String? _error;
 
@@ -66,10 +65,6 @@ class _QuantitySheetState extends State<_QuantitySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final chips = [
-      for (final preset in _presets)
-        if (_allowed(Quantity.parse('$preset'))) preset,
-    ];
     return Padding(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -96,20 +91,6 @@ class _QuantitySheetState extends State<_QuantitySheet> {
           if (widget.helperText != null) ...[
             const SizedBox(height: 6),
             Text(widget.helperText!),
-          ],
-          if (chips.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final preset in chips)
-                  ActionChip(
-                    label: Text('$preset'),
-                    onPressed: () => _submit('$preset'),
-                  ),
-              ],
-            ),
           ],
           const SizedBox(height: 12),
           AmountField(

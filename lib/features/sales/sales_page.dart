@@ -1,5 +1,4 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,8 +7,8 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/arabic_format.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../domain/entities/erp_models.dart';
 import '../../domain/models/sale_draft.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/sale_service.dart';
@@ -28,26 +27,6 @@ enum _PaymentFilter { all, cash, credit, partial }
 
 enum _PayMode { cash, credit }
 
-class SaleListEntry {
-  const SaleListEntry({
-    required this.sale,
-    required this.customerName,
-    required this.itemCount,
-  });
-
-  final Sale sale;
-  final String customerName;
-  final int itemCount;
-
-  String get paymentType {
-    final total = Money.parse(sale.subtotal);
-    final paid = Money.parse(sale.paidAmount);
-    if (paid.isZero) return 'credit';
-    if (paid >= total) return 'cash';
-    return 'partial';
-  }
-}
-
 class SalesPage extends StatefulWidget {
   const SalesPage({super.key});
 
@@ -57,17 +36,8 @@ class SalesPage extends StatefulWidget {
 
 class _SalesPageState extends State<SalesPage> {
   final _search = TextEditingController();
-  late final Stream<List<SaleListEntry>> _stream = sl<AppDatabase>()
-      .customSelect(
-        'SELECT 1',
-        readsFrom: {
-          sl<AppDatabase>().sales,
-          sl<AppDatabase>().customers,
-          sl<AppDatabase>().saleItems,
-        },
-      )
-      .watch()
-      .asyncMap((_) => _load());
+  late final Stream<List<SaleListEntry>> _stream =
+      sl<SaleService>().watchEntries();
   _SalePeriod _period = _SalePeriod.all;
   _PaymentFilter _payment = _PaymentFilter.all;
   bool _showCancelled = false;
@@ -76,35 +46,6 @@ class _SalesPageState extends State<SalesPage> {
   void dispose() {
     _search.dispose();
     super.dispose();
-  }
-
-  Future<List<SaleListEntry>> _load() async {
-    final db = sl<AppDatabase>();
-    final results = await Future.wait([
-      (db.select(db.sales)
-            ..where((row) => row.isDeleted.equals(false))
-            ..orderBy([(row) => OrderingTerm.desc(row.soldAt)]))
-          .get(),
-      db.select(db.customers).get(),
-      db.select(db.saleItems).get(),
-    ]);
-    final sales = results[0] as List<Sale>;
-    final customers = {
-      for (final customer in results[1] as List<Customer>)
-        customer.id: customer.name,
-    };
-    final counts = <String, int>{};
-    for (final item in results[2] as List<SaleItem>) {
-      counts.update(item.saleId, (value) => value + 1, ifAbsent: () => 1);
-    }
-    return [
-      for (final sale in sales)
-        SaleListEntry(
-          sale: sale,
-          customerName: customers[sale.customerId] ?? 'عميل غير متاح',
-          itemCount: counts[sale.id] ?? 0,
-        ),
-    ];
   }
 
   List<SaleListEntry> _filtered(List<SaleListEntry> entries) {
@@ -945,33 +886,12 @@ class SaleDetailPage extends StatefulWidget {
 }
 
 class _SaleDetailPageState extends State<SaleDetailPage> {
-  late Future<_SaleDetails?> _future;
+  late Future<SaleDetails?> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
-  }
-
-  Future<_SaleDetails?> _load() async {
-    final db = sl<AppDatabase>();
-    final sale = await (db.select(
-      db.sales,
-    )..where((row) => row.id.equals(widget.saleId))).getSingleOrNull();
-    if (sale == null) return null;
-    final customer = await (db.select(
-      db.customers,
-    )..where((row) => row.id.equals(sale.customerId))).getSingleOrNull();
-    final items = await (db.select(
-      db.saleItems,
-    )..where((row) => row.saleId.equals(sale.id))).get();
-    final products = await db.select(db.products).get();
-    return _SaleDetails(
-      sale: sale,
-      customer: customer,
-      items: items,
-      productNames: {for (final product in products) product.id: product.name},
-    );
+    _future = sl<SaleService>().loadDetails(widget.saleId);
   }
 
   @override
@@ -979,7 +899,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
     final session = context.watch<AuthCubit>().state.session;
     return Scaffold(
       appBar: AppBar(title: const Text('تفاصيل البيع')),
-      body: FutureBuilder<_SaleDetails?>(
+      body: FutureBuilder<SaleDetails?>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -1093,7 +1013,9 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('سيتم عكس المخزون وحساب العميل. لن تُحذف الفاتورة.'),
+            const Text(
+              'سيُعاد المخزون. إن وُجدت تحصيلات لاحقة فلن تُرد، ويُعكس المتبقي غير المسدد فقط.',
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: reason,
@@ -1129,7 +1051,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم إلغاء البيع وعكس حركاته.')),
         );
-        setState(() => _future = _load());
+        setState(() => _future = sl<SaleService>().loadDetails(widget.saleId));
       }
     } catch (error) {
       if (mounted) {
@@ -1163,16 +1085,3 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _SaleDetails {
-  const _SaleDetails({
-    required this.sale,
-    required this.customer,
-    required this.items,
-    required this.productNames,
-  });
-
-  final Sale sale;
-  final Customer? customer;
-  final List<SaleItem> items;
-  final Map<String, String> productNames;
-}

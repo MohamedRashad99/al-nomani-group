@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/utils/arabic_format.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/outstanding_service.dart';
 import '../../features/app/app_busy_cubit.dart';
@@ -254,11 +254,8 @@ class CustomerStatementRoutePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final db = sl<AppDatabase>();
     return StreamBuilder<Customer?>(
-      stream: (db.select(
-        db.customers,
-      )..where((row) => row.id.equals(customerId))).watchSingleOrNull(),
+      stream: sl<OutstandingService>().watchCustomer(customerId),
       builder: (context, snapshot) {
         if (!snapshot.hasData &&
             snapshot.connectionState == ConnectionState.waiting) {

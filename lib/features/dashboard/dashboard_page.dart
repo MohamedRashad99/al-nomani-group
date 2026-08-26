@@ -25,8 +25,15 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late final Stream<DashboardSnapshot> _stream = sl<DashboardService>().watch();
+  late Stream<DashboardSnapshot> _stream = sl<DashboardService>().watch();
   late Future<SyncHealth> _health = sl<SyncEngine>().health();
+
+  void _refresh() {
+    setState(() {
+      _stream = sl<DashboardService>().watch();
+      _health = sl<SyncEngine>().health();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +42,7 @@ class _DashboardPageState extends State<DashboardPage> {
       actions: [
         IconButton(
           tooltip: 'تحديث الحالة',
-          onPressed: () => setState(() => _health = sl<SyncEngine>().health()),
+          onPressed: _refresh,
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],

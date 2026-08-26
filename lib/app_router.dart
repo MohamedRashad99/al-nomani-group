@@ -13,9 +13,11 @@ import 'features/import/import_page.dart';
 import 'features/more/more_page.dart';
 import 'features/outstanding/outstanding_page.dart';
 import 'features/products/products_page.dart';
+import 'features/purchases/purchases_page.dart';
 import 'features/reports/reports_page.dart';
 import 'features/sales/sales_page.dart';
 import 'features/settings/settings_page.dart';
+import 'features/suppliers/suppliers_page.dart';
 import 'features/users/users_page.dart';
 
 GoRouter createRouter(AuthCubit auth) {
@@ -63,6 +65,35 @@ GoRouter createRouter(AuthCubit auth) {
         ],
       ),
       GoRoute(
+        path: '/suppliers',
+        builder: (_, _) => const SuppliersPage(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (_, state) => SupplierDetailPage(
+              supplierId: state.pathParameters['id']!,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/purchases',
+        builder: (_, _) => const SuppliersPage(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (_, state) => NewPurchasePage(
+              supplierId: state.uri.queryParameters['supplierId'],
+            ),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (_, state) =>
+                PurchaseDetailPage(purchaseId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+      GoRoute(
         path: '/sales',
         builder: (_, _) => const SalesPage(),
         routes: [
@@ -91,6 +122,9 @@ String? _requiredPermission(String location) {
   if (location == '/sales/new') return AppPermission.salesCreate;
   if (location.startsWith('/sales')) return AppPermission.salesView;
   if (location.startsWith('/customers')) return AppPermission.customersView;
+  if (location == '/purchases/new') return AppPermission.purchasesCreate;
+  if (location.startsWith('/purchases')) return AppPermission.purchasesView;
+  if (location.startsWith('/suppliers')) return AppPermission.suppliersView;
   if (location.startsWith('/collections')) {
     return AppPermission.collectionsView;
   }
