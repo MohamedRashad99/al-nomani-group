@@ -25,9 +25,9 @@ Future<void> bootstrap({ErpStore? store}) async {
     'sync_protocol_version',
     '${AppVersions.syncProtocolVersion}',
   );
+  await _attachFirebase();
   await sl<SeedService>().ensureDemoAdminIdentity();
   await sl<AuthCubit>().restore();
-  unawaited(_attachFirebase());
   unawaited(sl<SyncEngine>().maybeRunScheduled());
 }
 
@@ -37,5 +37,4 @@ Future<void> _attachFirebase() async {
   if (store is FirestoreErpStore) {
     await store.ensureReady();
   }
-  await sl<SeedService>().ensureDemoAdminIdentity();
 }
