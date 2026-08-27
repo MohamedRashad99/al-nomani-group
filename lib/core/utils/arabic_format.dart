@@ -34,6 +34,11 @@ abstract final class ArabicFormat {
   static String movementType(String code) => switch (code) {
     'sale' => 'بيع',
     'sale_reversal' => 'عكس بيع',
+    'sale_cancel' => 'إلغاء بيع',
+    'purchase' => 'شراء',
+    'purchase_cancel' => 'إلغاء شراء',
+    'return' => 'مرتجع',
+    'sale_return' => 'مرتجع بيع',
     'stock_in' => 'إدخال مخزون',
     'stock_out' => 'إخراج مخزون',
     'adjustment' => 'تسوية مخزون',

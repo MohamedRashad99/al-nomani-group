@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/firebase/firebase_bootstrap.dart';
+import '../../core/utils/stream_utils.dart';
 import '../../domain/entities/erp_models.dart';
 import 'erp_map.dart';
 import 'erp_store.dart';
@@ -19,6 +20,7 @@ class FirestoreErpStore implements ErpStore {
       _company.collection(name);
 
   final _localChanges = StreamController<void>.broadcast();
+  Stream<void>? _watchChanges;
 
   Future<void> ensureReady() async {
     if (!await FirebaseBootstrap.ensure()) {
@@ -88,16 +90,18 @@ class FirestoreErpStore implements ErpStore {
 
   @override
   Stream<void> watchChanges() {
-    return StreamGroup.merge([
+    return _watchChanges ??= mergeAndDebounce([
       _localChanges.stream,
       _col('products').snapshots().map((_) {}),
       _col('customers').snapshots().map((_) {}),
       _col('sales').snapshots().map((_) {}),
+      _col('sale_items').snapshots().map((_) {}),
       _col('collections').snapshots().map((_) {}),
       _col('accounts').snapshots().map((_) {}),
       _col('inventory').snapshots().map((_) {}),
       _col('suppliers').snapshots().map((_) {}),
       _col('purchases').snapshots().map((_) {}),
+      _col('purchase_items').snapshots().map((_) {}),
     ]);
   }
 
@@ -138,6 +142,8 @@ class FirestoreErpStore implements ErpStore {
   @override
   Future<void> putCustomer(Customer customer) =>
       _put('customers', customer.id, customer.toMap());
+  @override
+  Future<void> deleteCustomer(String id) => _delete('customers', id);
 
   @override
   Future<List<CustomerAccount>> listAccounts() =>
@@ -145,10 +151,10 @@ class FirestoreErpStore implements ErpStore {
   @override
   Future<CustomerAccount?> getAccountByCustomer(String customerId) async {
     final accounts = await listAccounts();
-    for (final account in accounts) {
-      if (account.customerId == customerId) return account;
-    }
-    return null;
+    final byCustomer = {
+      for (final account in accounts) account.customerId: account,
+    };
+    return byCustomer[customerId];
   }
 
   @override
@@ -286,10 +292,8 @@ class FirestoreErpStore implements ErpStore {
   Future<AppUser?> getUserByUsername(String username) async {
     final needle = username.trim();
     final users = await listUsers();
-    for (final user in users) {
-      if (user.username == needle) return user;
-    }
-    return null;
+    final byUsername = {for (final user in users) user.username: user};
+    return byUsername[needle];
   }
 
   @override
@@ -448,20 +452,3 @@ class FirestoreErpStore implements ErpStore {
   }
 }
 
-class StreamGroup {
-  static Stream<void> merge(List<Stream<void>> streams) {
-    final controller = StreamController<void>.broadcast();
-    final subs = <StreamSubscription<void>>[];
-    for (final stream in streams) {
-      subs.add(stream.listen((_) {
-        if (!controller.isClosed) controller.add(null);
-      }));
-    }
-    controller.onCancel = () async {
-      for (final sub in subs) {
-        await sub.cancel();
-      }
-    };
-    return controller.stream;
-  }
-}

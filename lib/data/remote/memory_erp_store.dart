@@ -92,6 +92,12 @@ class MemoryErpStore implements ErpStore {
   }
 
   @override
+  Future<void> deleteCustomer(String id) async {
+    customers.remove(id);
+    _touch();
+  }
+
+  @override
   Future<List<CustomerAccount>> listAccounts() async => accounts.values.toList();
   @override
   Future<CustomerAccount?> getAccountByCustomer(String customerId) async {

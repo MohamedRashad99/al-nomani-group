@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:printing/printing.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
@@ -11,8 +14,28 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
 
-class ReportsPage extends StatelessWidget {
+class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage> {
+  late final Future<DashboardSnapshot> _dashboard = sl<DashboardService>().load();
+
+  ReportBranding _branding() {
+    final session = context.read<AuthCubit>().state.session;
+    if (session == null) {
+      return ReportBranding(
+        companyName: S.appName,
+        systemName: S.appSubtitle,
+        administratorName: S.owner,
+        generatedAt: DateTime.now(),
+      );
+    }
+    return ReportBranding.fromSession(session);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +46,8 @@ class ReportsPage extends StatelessWidget {
         true;
     return AppScaffold(
       title: S.reports,
-      child: StreamBuilder<DashboardSnapshot>(
-        stream: sl<DashboardService>().watch(),
+      child: FutureBuilder<DashboardSnapshot>(
+        future: _dashboard,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const BrandedLoading();
           final dashboard = snapshot.data!;
@@ -71,32 +94,31 @@ class ReportsPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Excel يشمل المبيعات والمخزون والعملاء والآجل والمنتجات والتحصيلات. CSV للمبيعات فقط.',
+                        'اختر المعاينة داخل النظام أو التنزيل. المعاينة لا تنزّل الملف تلقائياً.',
                       ),
                       const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _ExportButton(
-                            label: S.csv,
-                            icon: Icons.table_rows_outlined,
-                            enabled: canExport,
-                            type: ReportFileType.csv,
-                          ),
-                          _ExportButton(
-                            label: S.excel,
-                            icon: Icons.grid_on_outlined,
-                            enabled: canExport,
-                            type: ReportFileType.excel,
-                          ),
-                          _ExportButton(
-                            label: 'PDF',
-                            icon: Icons.picture_as_pdf_outlined,
-                            enabled: canExport,
-                            type: ReportFileType.pdf,
-                          ),
-                        ],
+                      _ReportFormatCard(
+                        label: S.csv,
+                        icon: Icons.table_rows_outlined,
+                        enabled: canExport,
+                        type: ReportFileType.csv,
+                        branding: _branding(),
+                      ),
+                      const SizedBox(height: 10),
+                      _ReportFormatCard(
+                        label: S.excel,
+                        icon: Icons.grid_on_outlined,
+                        enabled: canExport,
+                        type: ReportFileType.excel,
+                        branding: _branding(),
+                      ),
+                      const SizedBox(height: 10),
+                      _ReportFormatCard(
+                        label: 'PDF',
+                        icon: Icons.picture_as_pdf_outlined,
+                        enabled: canExport,
+                        type: ReportFileType.pdf,
+                        branding: _branding(),
                       ),
                       if (!canExport) ...[
                         const SizedBox(height: 10),
@@ -114,42 +136,165 @@ class ReportsPage extends StatelessWidget {
   }
 }
 
-class _ExportButton extends StatelessWidget {
-  const _ExportButton({
+class _ReportFormatCard extends StatelessWidget {
+  const _ReportFormatCard({
     required this.label,
     required this.icon,
     required this.enabled,
     required this.type,
+    required this.branding,
   });
 
   final String label;
   final IconData icon;
   final bool enabled;
   final ReportFileType type;
+  final ReportBranding branding;
+
+  Future<void> _preview(BuildContext context) async {
+    try {
+      final service = sl<ReportExportService>();
+      if (type == ReportFileType.pdf) {
+        final bytes = await service.buildPdfBytes(branding: branding);
+        if (!context.mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => _PdfPreviewPage(title: label, bytes: bytes),
+          ),
+        );
+        return;
+      }
+      final sections = await service.sections();
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Text('${S.reportPreview} — $label'),
+            content: SizedBox(
+              width: 720,
+              height: 520,
+              child: ListView(
+                children: [
+                  for (final row in branding.coverRows())
+                    Text('${row.first}: ${row.last}'),
+                  const Divider(),
+                  for (final entry in sections.entries) ...[
+                    Text(
+                      entry.key,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: [
+                          for (final header in entry.value.first)
+                            DataColumn(label: Text(header.toString())),
+                        ],
+                        rows: [
+                          for (final row in entry.value.skip(1).take(40))
+                            DataRow(
+                              cells: [
+                                for (final cell in row)
+                                  DataCell(Text(cell.toString())),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(S.close),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
+  Future<void> _download(BuildContext context) async {
+    try {
+      await sl<ReportExportService>().download(type, branding: branding);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم تنزيل ملف $label.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.tonalIcon(
-      onPressed: !enabled
-          ? null
-          : () async {
-              try {
-                await sl<ReportExportService>().exportSales(type);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('تم تنزيل ملف $label.')),
-                  );
-                }
-              } catch (error) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(error.toString())));
-                }
-              }
-            },
-      icon: Icon(icon),
-      label: Text(label),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label)),
+            TextButton.icon(
+              onPressed: enabled ? () => _preview(context) : null,
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text(S.preview),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.tonalIcon(
+              onPressed: enabled ? () => _download(context) : null,
+              icon: const Icon(Icons.download_outlined),
+              label: const Text(S.downloadFile),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdfPreviewPage extends StatelessWidget {
+  const _PdfPreviewPage({required this.title, required this.bytes});
+
+  final String title;
+  final Uint8List bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${S.reportPreview} — $title')),
+      body: PdfPreview(
+        build: (_) async => bytes,
+        canChangePageFormat: false,
+        canChangeOrientation: false,
+        canDebug: false,
+        allowPrinting: false,
+        allowSharing: false,
+        useActions: false,
+        pdfFileName: 'مجموعة-النعماني.pdf',
+      ),
     );
   }
 }

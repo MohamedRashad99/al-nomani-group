@@ -20,6 +20,7 @@ import '../../domain/services/catalog_service.dart';
 import '../../domain/services/collection_service.dart';
 import '../../domain/services/conflict_resolution_service.dart';
 import '../../domain/services/dashboard_service.dart';
+import '../../domain/services/entity_link_inspector.dart';
 import '../../domain/services/import_service.dart';
 import '../../domain/services/inventory_service.dart';
 import '../../domain/services/outstanding_service.dart';
@@ -79,8 +80,14 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(
     () => InventoryService(store: sl(), devices: sl(), audit: sl()),
   );
+  sl.registerLazySingleton(() => EntityLinkInspector(sl()));
   sl.registerLazySingleton(
-    () => CatalogService(store: sl(), devices: sl(), audit: sl()),
+    () => CatalogService(
+      store: sl(),
+      devices: sl(),
+      audit: sl(),
+      inspector: sl(),
+    ),
   );
   sl.registerLazySingleton(
     () => SaleService(

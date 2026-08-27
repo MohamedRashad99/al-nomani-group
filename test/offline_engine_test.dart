@@ -6,6 +6,7 @@ import 'package:al_nomani_group/core/di/injector.dart';
 import 'package:al_nomani_group/core/utils/arabic_format.dart';
 import 'package:al_nomani_group/data/remote/erp_store.dart';
 import 'package:al_nomani_group/data/remote/memory_erp_store.dart';
+import 'package:al_nomani_group/data/sync/arabic_workbook_builder.dart';
 import 'package:al_nomani_group/domain/models/purchase_draft.dart';
 import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/services/catalog_service.dart';
@@ -262,6 +263,8 @@ void main() {
     expect(sale.isDeleted, isFalse);
     expect(after.currentStock, before.currentStock);
     expect(account.cachedBalance, '0.000');
+    final dashboard = await sl<DashboardService>().load();
+    expect(dashboard.todaySales.isZero, isTrue);
   });
 
   test('cancel after collection reverses unpaid remainder only', () async {
@@ -296,6 +299,17 @@ void main() {
     expect(store.products['p-npk']!.currentStock, before.currentStock);
     expect(account.cachedBalance, '0.000');
     expect(store.sales[result.saleId]!.status, 'cancelled');
+    expect(store.sales[result.saleId]!.isDeleted, isFalse);
+    final workbook = await ArabicWorkbookBuilder(store).build();
+    final overview = workbook[SheetArabic.overview]!;
+    expect(
+      overview.any((row) => row.first == 'المبيعات المكتملة' && row.last == 0),
+      isTrue,
+    );
+    expect(
+      overview.any((row) => row.first == 'المبيعات الملغاة' && row.last == 1),
+      isTrue,
+    );
   });
 
   test('business codes are presented with Arabic labels', () {
@@ -488,6 +502,103 @@ void main() {
     );
   });
 
+  test('cancelled sale no longer blocks product deletion', () async {
+    final store = await readyStore();
+    final result = await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
+    await sl<SaleService>().cancel(admin(), result.saleId, 'لإتاحة الحذف');
+    final report = await sl<CatalogService>().inspectProduct('p-imidacloprid');
+    expect(report.canDelete, isTrue);
+    expect(report.cancelledSales, 1);
+    expect(report.activeSales, 0);
+    await sl<CatalogService>().deleteProduct(
+      session: admin(),
+      id: 'p-imidacloprid',
+    );
+    expect(store.products.containsKey('p-imidacloprid'), isFalse);
+    expect(store.sales[result.saleId]!.status, 'cancelled');
+  });
+
+  test('unused customer can be deleted', () async {
+    final store = await readyStore();
+    await sl<CatalogService>().deleteCustomer(
+      session: admin(),
+      id: 'c-fatima',
+    );
+    expect(store.customers.containsKey('c-fatima'), isFalse);
+  });
+
+  test('completed sale blocks customer deletion', () async {
+    await readyStore();
+    await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
+    final report = await sl<CatalogService>().inspectCustomer('c-ahmed');
+    expect(report.canDelete, isFalse);
+    expect(report.activeSales, 1);
+    expect(
+      () => sl<CatalogService>().deleteCustomer(
+        session: admin(),
+        id: 'c-ahmed',
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('cancelled customer sales allow customer deletion', () async {
+    final store = await readyStore();
+    final result = await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-salem',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('1'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.500'),
+          ),
+        ],
+      ),
+    );
+    await sl<SaleService>().cancel(admin(), result.saleId, 'لإتاحة حذف العميل');
+    final report = await sl<CatalogService>().inspectCustomer('c-salem');
+    expect(report.canDelete, isTrue);
+    expect(report.cancelledSales, 1);
+    await sl<CatalogService>().deleteCustomer(
+      session: admin(),
+      id: 'c-salem',
+    );
+    expect(store.customers.containsKey('c-salem'), isFalse);
+    expect(store.sales[result.saleId]!.status, 'cancelled');
+  });
+
   test('outstanding add, set, and reduce keep a full ledger', () async {
     final store = await readyStore();
     final outstanding = sl<OutstandingService>();
@@ -599,5 +710,9 @@ void main() {
           .cachedBalance,
       '0.000',
     );
+    final report = await sl<CatalogService>().inspectProduct('p-npk');
+    expect(report.canDelete, isTrue);
+    await sl<CatalogService>().deleteProduct(session: admin(), id: 'p-npk');
+    expect(store.products.containsKey('p-npk'), isFalse);
   });
 }

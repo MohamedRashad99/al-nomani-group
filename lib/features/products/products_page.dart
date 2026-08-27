@@ -12,6 +12,7 @@ import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
 
@@ -273,11 +274,21 @@ class _ProductsPageState extends State<ProductsPage> {
                       onPressed: saving
                           ? null
                           : () async {
-                              setS(() {
-                                saving = true;
-                                error = null;
-                              });
                               try {
+                                final report = await sl<CatalogService>()
+                                    .inspectProduct(product.id);
+                                if (!ctx.mounted) return;
+                                final confirmed =
+                                    await showDeletionWorkflowDialog(
+                                      context: ctx,
+                                      title: S.deleteProduct,
+                                      report: report,
+                                    );
+                                if (confirmed != true) return;
+                                setS(() {
+                                  saving = true;
+                                  error = null;
+                                });
                                 await sl<AppBusyCubit>().guard(() async {
                                   await sl<CatalogService>().deleteProduct(
                                     session: context

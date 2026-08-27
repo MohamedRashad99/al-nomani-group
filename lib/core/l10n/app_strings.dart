@@ -29,6 +29,10 @@ abstract final class S {
   static const supplierName = 'اسم المورد';
   static const packSize = 'الحجم / العبوة';
   static const deleteProduct = 'حذف المنتج';
+  static const deleteCustomer = 'حذف العميل';
+  static const preview = 'معاينة';
+  static const downloadFile = 'تنزيل';
+  static const reportPreview = 'معاينة التقرير';
   static const confirmPurchase = 'تأكيد الشراء';
   static const purchaseSuccess = 'تم تسجيل الشراء بنجاح.';
   static const outstandingAdd = 'إضافة مبلغ آجل';

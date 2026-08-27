@@ -6,19 +6,23 @@ import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
+import 'entity_link_inspector.dart';
 
 class CatalogService {
   CatalogService({
     required ErpStore store,
     required DeviceIdStore devices,
     required AuditService audit,
+    required EntityLinkInspector inspector,
   }) : _store = store,
        _devices = devices,
-       _audit = audit;
+       _audit = audit,
+       _inspector = inspector;
 
   final ErpStore _store;
   final DeviceIdStore _devices;
   final AuditService _audit;
+  final EntityLinkInspector _inspector;
 
   Future<List<Product>> searchProducts(String query) async {
     return _filterProducts(await _store.listProducts(), query);
@@ -133,6 +137,12 @@ class CatalogService {
     return productId;
   }
 
+  Future<EntityLinkReport> inspectProduct(String id) =>
+      _inspector.inspectProduct(id);
+
+  Future<EntityLinkReport> inspectCustomer(String id) =>
+      _inspector.inspectCustomer(id);
+
   Future<void> deleteProduct({
     required AppSession session,
     required String id,
@@ -140,12 +150,9 @@ class CatalogService {
     if (!session.can(AppPermission.productsDelete)) {
       throw const PermissionException();
     }
-    final saleItems = await _store.listSaleItems(productId: id);
-    final purchaseItems = await _store.listPurchaseItems(productId: id);
-    if (saleItems.isNotEmpty || purchaseItems.isNotEmpty) {
-      throw const ValidationException(
-        'لا يمكن حذف المنتج لأنه مستخدم في فواتير بيع أو شراء.',
-      );
+    final report = await _inspector.inspectProduct(id);
+    if (!report.canDelete) {
+      throw ValidationException(report.summary);
     }
     await _store.deleteProduct(id);
     await _audit.write(
@@ -153,6 +160,27 @@ class CatalogService {
       deviceId: await _devices.deviceId(),
       action: 'product.delete',
       entityType: 'product',
+      entityId: id,
+    );
+  }
+
+  Future<void> deleteCustomer({
+    required AppSession session,
+    required String id,
+  }) async {
+    if (!session.can(AppPermission.customersDelete)) {
+      throw const PermissionException();
+    }
+    final report = await _inspector.inspectCustomer(id);
+    if (!report.canDelete) {
+      throw ValidationException(report.summary);
+    }
+    await _store.deleteCustomer(id);
+    await _audit.write(
+      userId: session.userId,
+      deviceId: await _devices.deviceId(),
+      action: 'customer.delete',
+      entityType: 'customer',
       entityId: id,
     );
   }

@@ -13,6 +13,7 @@ import '../../domain/services/outstanding_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
 
 class CustomersPage extends StatefulWidget {
@@ -180,6 +181,57 @@ class _CustomersPageState extends State<CustomersPage> {
                           )
                         : const Text(S.save),
                   ),
+                  if (customer != null &&
+                      context
+                              .read<AuthCubit>()
+                              .state
+                              .session
+                              ?.can(AppPermission.customersDelete) ==
+                          true) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              try {
+                                final report = await sl<CatalogService>()
+                                    .inspectCustomer(customer.id);
+                                if (!ctx.mounted) return;
+                                final confirmed =
+                                    await showDeletionWorkflowDialog(
+                                      context: ctx,
+                                      title: S.deleteCustomer,
+                                      report: report,
+                                    );
+                                if (confirmed != true) return;
+                                setS(() {
+                                  saving = true;
+                                  error = null;
+                                });
+                                await sl<AppBusyCubit>().guard(() async {
+                                  await sl<CatalogService>().deleteCustomer(
+                                    session: context
+                                        .read<AuthCubit>()
+                                        .state
+                                        .session!,
+                                    id: customer.id,
+                                  );
+                                  await sl<SyncEngine>()
+                                      .maybeSyncAfterLocalWrite();
+                                });
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              } catch (e) {
+                                if (ctx.mounted) {
+                                  setS(() {
+                                    saving = false;
+                                    error = e.toString();
+                                  });
+                                }
+                              }
+                            },
+                      child: const Text(S.deleteCustomer),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),

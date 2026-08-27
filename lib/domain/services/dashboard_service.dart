@@ -2,6 +2,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 
 import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
+import '../operational_status.dart';
 
 class DashboardRank {
   const DashboardRank({
@@ -73,12 +74,35 @@ class DashboardSnapshot {
 class DashboardService {
   DashboardService(this._store);
   final ErpStore _store;
+  String? _lastFingerprint;
 
   Stream<DashboardSnapshot> watch() async* {
-    yield await load();
+    final first = await load();
+    _lastFingerprint = _fingerprint(first);
+    yield first;
     await for (final _ in _store.watchChanges()) {
-      yield await load();
+      final next = await load();
+      final key = _fingerprint(next);
+      if (key == _lastFingerprint) continue;
+      _lastFingerprint = key;
+      yield next;
     }
+  }
+
+  String _fingerprint(DashboardSnapshot snapshot) {
+    return [
+      snapshot.todaySales.toStorage(),
+      snapshot.weeklySales.toStorage(),
+      snapshot.monthlySales.toStorage(),
+      snapshot.outstandingDebt.toStorage(),
+      snapshot.monthlyCollections.toStorage(),
+      snapshot.totalProducts,
+      snapshot.lowStock,
+      snapshot.outOfStock,
+      snapshot.recentSales.map((row) => '${row.id}:${row.updatedAt}').join(),
+      snapshot.recentCollections.map((row) => row.id).join(),
+      snapshot.recentMovements.map((row) => row.id).join(),
+    ].join('|');
   }
 
   Future<DashboardSnapshot> load() async {
@@ -93,12 +117,12 @@ class DashboardService {
     final allSales = await _store.listSales();
     final sales = [
       for (final sale in allSales)
-        if (!sale.isDeleted && sale.status == 'completed') sale,
+        if (OperationalStatus.isActiveSale(sale)) sale,
     ];
     final completedIds = {for (final sale in sales) sale.id};
     final collections = [
       for (final row in await _store.listCollections())
-        if (!row.isDeleted && row.status == 'completed') row,
+        if (OperationalStatus.isActiveCollection(row)) row,
     ];
     final products = await _store.listProducts();
     final accounts = await _store.listAccounts();

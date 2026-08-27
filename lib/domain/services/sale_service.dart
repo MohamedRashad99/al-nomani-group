@@ -254,22 +254,22 @@ class SaleService {
     final current = Money.parse(account.cachedBalance);
     final netReverse = remaining.isNegative ? Money.zero() : remaining;
     if (current + (Money.zero() - netReverse) >= Money.zero()) {
-      if (!subtotal.isZero) {
+      if (paid.isPositive) {
         await _accounts.post(
           customerId: sale.customerId,
-          type: 'sale_cancel',
-          amount: subtotal,
+          type: 'payment_cancel',
+          amount: paid,
           createdBy: session.userId,
           deviceId: deviceId,
           referenceType: 'sale_cancel',
           referenceId: saleId,
         );
       }
-      if (paid.isPositive) {
+      if (!subtotal.isZero) {
         await _accounts.post(
           customerId: sale.customerId,
-          type: 'payment_cancel',
-          amount: paid,
+          type: 'sale_cancel',
+          amount: subtotal,
           createdBy: session.userId,
           deviceId: deviceId,
           referenceType: 'sale_cancel',

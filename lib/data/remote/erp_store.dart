@@ -13,6 +13,7 @@ abstract class ErpStore {
   Stream<List<Customer>> watchCustomers();
   Future<Customer?> getCustomer(String id);
   Future<void> putCustomer(Customer customer);
+  Future<void> deleteCustomer(String id);
 
   Future<List<CustomerAccount>> listAccounts();
   Future<CustomerAccount?> getAccountByCustomer(String customerId);

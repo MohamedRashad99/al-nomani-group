@@ -11,6 +11,7 @@ abstract final class AppPermission {
   static const customersView = 'customers.view';
   static const customersCreate = 'customers.create';
   static const customersUpdate = 'customers.update';
+  static const customersDelete = 'customers.delete';
 
   static const salesView = 'sales.view';
   static const salesCreate = 'sales.create';
@@ -58,6 +59,7 @@ abstract final class AppPermission {
     customersView,
     customersCreate,
     customersUpdate,
+    customersDelete,
     salesView,
     salesCreate,
     salesCancel,
@@ -107,6 +109,7 @@ abstract final class RolePermissions {
       AppPermission.customersView,
       AppPermission.customersCreate,
       AppPermission.customersUpdate,
+      AppPermission.customersDelete,
       AppPermission.salesView,
       AppPermission.salesCreate,
       AppPermission.salesCancel,

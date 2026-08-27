@@ -2,6 +2,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 
 import '../../data/remote/erp_store.dart';
 import '../../domain/entities/erp_models.dart';
+import '../../domain/operational_status.dart';
 
 class ArabicWorkbookBuilder {
   ArabicWorkbookBuilder(this._store);
@@ -29,6 +30,28 @@ class ArabicWorkbookBuilder {
     final userNames = {for (final row in users) row.id: row.displayName};
     final supplierNames = {for (final row in suppliers) row.id: row.name};
 
+    final completedSales = [
+      for (final sale in sales)
+        if (OperationalStatus.isActiveSale(sale)) sale,
+    ];
+    final cancelledSales = [
+      for (final sale in sales)
+        if (OperationalStatus.isCancelled(sale.status)) sale,
+    ];
+    final completedPurchases = [
+      for (final purchase in purchases)
+        if (OperationalStatus.isActivePurchase(purchase)) purchase,
+    ];
+    final cancelledPurchases = [
+      for (final purchase in purchases)
+        if (OperationalStatus.isCancelled(purchase.status)) purchase,
+    ];
+    final completedCollections = [
+      for (final row in collections)
+        if (OperationalStatus.isActiveCollection(row)) row,
+    ];
+    final salesById = {for (final sale in sales) sale.id: sale};
+
     List<List<Object?>> table(
       List<String> headers,
       Iterable<List<Object?>> rows,
@@ -48,9 +71,11 @@ class ArabicWorkbookBuilder {
         ['المنتجات', products.length],
         ['العملاء', customers.length],
         ['الموردون', suppliers.length],
-        ['المبيعات', sales.length],
-        ['المشتريات', purchases.length],
-        ['التحصيلات', collections.length],
+        ['المبيعات المكتملة', completedSales.length],
+        ['المبيعات الملغاة', cancelledSales.length],
+        ['المشتريات المكتملة', completedPurchases.length],
+        ['المشتريات الملغاة', cancelledPurchases.length],
+        ['التحصيلات', completedCollections.length],
       ],
       SheetArabic.sales: table(
         [
@@ -77,12 +102,12 @@ class ArabicWorkbookBuilder {
       SheetArabic.saleItems: table(
         ['رقم الفاتورة', 'المنتج', 'الكمية', 'الوحدة', 'سعر الوحدة', 'الإجمالي'],
         items.map((item) {
-          final sale = sales.where((row) => row.id == item.saleId).firstOrNull;
-          if (sale != null && sale.status == 'cancelled') {
+          final sale = salesById[item.saleId];
+          if (sale == null || !OperationalStatus.isActiveSale(sale)) {
             return <Object?>[];
           }
           return [
-            sale?.saleNumber ?? item.saleId,
+            sale.saleNumber,
             productNames[item.productId] ?? item.productId,
             item.quantity,
             item.unit,
