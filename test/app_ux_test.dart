@@ -1,3 +1,4 @@
+import 'package:al_nomani_group/core/theme/app_colors.dart';
 import 'package:al_nomani_group/features/app/app_alert_cubit.dart';
 import 'package:al_nomani_group/features/app/app_alert_host.dart';
 import 'package:al_nomani_group/features/app/startup_splash.dart';
@@ -41,12 +42,20 @@ void main() {
     expect(find.text('معاينة'), findsOneWidget);
   });
 
-  testWidgets('animated splash shows the brand mark', (tester) async {
+  testWidgets('animated splash uses dark green and drifting seeds', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(home: StartupSplashView()),
     );
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, AppColors.darkGreen);
+    expect(StartupSplashView.displayDuration, const Duration(seconds: 2));
+    expect(find.byKey(const Key('splash-seeds')), findsOneWidget);
     expect(find.text('مجموعة النعماني'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(StartupSplashView), findsOneWidget);
+    await tester.pump(StartupSplashView.displayDuration);
     expect(find.byType(StartupSplashView), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 50));

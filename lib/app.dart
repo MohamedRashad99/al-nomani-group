@@ -47,12 +47,10 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
         await bootstrap();
       }
       final router = createRouter(sl<AuthCubit>());
-      if (!alreadyReady) {
-        const minSplash = Duration(milliseconds: 700);
-        final elapsed = DateTime.now().difference(started);
-        if (elapsed < minSplash) {
-          await Future<void>.delayed(minSplash - elapsed);
-        }
+      final elapsed = DateTime.now().difference(started);
+      final remaining = StartupSplashView.displayDuration - elapsed;
+      if (remaining > Duration.zero) {
+        await Future<void>.delayed(remaining);
       }
       if (!mounted) return;
       hideHtmlBootSplash();

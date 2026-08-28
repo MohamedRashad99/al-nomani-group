@@ -1,6 +1,7 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 
 import '../../data/remote/erp_store.dart';
+import '../entities/erp_models.dart';
 import '../operational_status.dart';
 
 class LinkedRecord {
@@ -162,27 +163,25 @@ class EntityLinkInspector {
   }
 
   Future<EntityLinkReport> inspectCustomer(String customerId) async {
-    final customer = await _store.getCustomer(customerId);
+    final bundled = await Future.wait<Object?>([
+      _store.getCustomer(customerId),
+      _store.listSales(),
+      _store.listCollections(),
+      _store.getAccountByCustomer(customerId),
+      _store.listAccountTx(customerId: customerId),
+    ]);
+    final customer = bundled[0] as Customer?;
     final name = customer?.name ?? 'العميل';
     final sales = [
-      for (final sale in await _store.listSales())
+      for (final sale in bundled[1] as List<Sale>)
         if (sale.customerId == customerId && !sale.isDeleted) sale,
     ];
     final collections = [
-      for (final row in await _store.listCollections())
+      for (final row in bundled[2] as List<Collection>)
         if (row.customerId == customerId && !row.isDeleted) row,
     ];
-    final account = await _store.getAccountByCustomer(customerId);
-    final txs = await _store.listAccountTx(customerId: customerId);
-    final saleIds = {for (final sale in sales) sale.id};
-    final movements = [
-      for (final row in await _store.listMovements())
-        if (row.referenceId != null && saleIds.contains(row.referenceId)) row,
-    ];
-    final returns = [
-      for (final row in movements)
-        if (row.type == 'return' || row.type == 'sale_return') row,
-    ];
+    final account = bundled[3] as CustomerAccount?;
+    final txs = bundled[4] as List<CustomerAccountTransaction>;
 
     final activeSales = [
       for (final sale in sales)
@@ -217,8 +216,8 @@ class EntityLinkInspector {
       cancelledPurchases: 0,
       receipts: collections.length,
       accountEntries: txs.length,
-      inventoryMovements: movements.length,
-      returns: returns.length,
+      inventoryMovements: 0,
+      returns: 0,
       outstanding: outstanding,
       activeSaleLinks: [
         for (final sale in activeSales.take(12))

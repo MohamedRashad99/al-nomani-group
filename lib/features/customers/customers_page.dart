@@ -216,41 +216,47 @@ class _CustomersPageState extends State<CustomersPage> {
                       onPressed: saving
                           ? null
                           : () async {
-                              try {
-                                final report = await sl<CatalogService>()
-                                    .inspectCustomer(customer.id);
-                                if (!ctx.mounted) return;
-                                final confirmed =
-                                    await showDeletionWorkflowDialog(
-                                      context: ctx,
-                                      title: S.deleteCustomer,
-                                      report: report,
-                                    );
-                                if (confirmed != true) return;
-                                setS(() {
-                                  saving = true;
-                                  error = null;
-                                });
-                                await sl<AppBusyCubit>().guard(() async {
-                                  await sl<CatalogService>().deleteCustomer(
-                                    session: context
-                                        .read<AuthCubit>()
-                                        .state
-                                        .session!,
-                                    id: customer.id,
+                            setS(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              final report = await sl<CatalogService>()
+                                  .inspectCustomer(customer.id);
+                              if (!ctx.mounted) return;
+                              setS(() => saving = false);
+                              final confirmed =
+                                  await showDeletionWorkflowDialog(
+                                    context: ctx,
+                                    title: S.deleteCustomer,
+                                    report: report,
                                   );
-                                  await sl<SyncEngine>()
-                                      .maybeSyncAfterLocalWrite();
+                              if (confirmed != true) return;
+                              setS(() {
+                                saving = true;
+                                error = null;
+                              });
+                              await sl<AppBusyCubit>().guard(() async {
+                                await sl<CatalogService>().deleteCustomer(
+                                  session: context
+                                      .read<AuthCubit>()
+                                      .state
+                                      .session!,
+                                  id: customer.id,
+                                  inspected: report,
+                                );
+                                await sl<SyncEngine>()
+                                    .maybeSyncAfterLocalWrite();
+                              });
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setS(() {
+                                  saving = false;
+                                  error = e.toString();
                                 });
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              } catch (e) {
-                                if (ctx.mounted) {
-                                  setS(() {
-                                    saving = false;
-                                    error = e.toString();
-                                  });
-                                }
                               }
+                            }
                             },
                       child: const Text(S.deleteCustomer),
                     ),

@@ -169,11 +169,12 @@ class CatalogService {
   Future<void> deleteCustomer({
     required AppSession session,
     required String id,
+    EntityLinkReport? inspected,
   }) async {
     if (!session.can(AppPermission.customersDelete)) {
       throw const PermissionException();
     }
-    final report = await _inspector.inspectCustomer(id);
+    final report = inspected ?? await _inspector.inspectCustomer(id);
     if (!report.canDelete) {
       throw ValidationException(report.summary);
     }
