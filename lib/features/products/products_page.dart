@@ -14,6 +14,8 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/product_images_editor.dart';
+import '../../shared/widgets/product_thumb.dart';
 import '../../shared/widgets/searchable_select.dart';
 
 class ProductsPage extends StatefulWidget {
@@ -69,6 +71,7 @@ class _ProductsPageState extends State<ProductsPage> {
                           vertical: 6,
                         ),
                         child: ListTile(
+                          leading: ProductThumb(product: p),
                           title: Text(p.name),
                           subtitle: Text(
                             [
@@ -92,6 +95,7 @@ class _ProductsPageState extends State<ProductsPage> {
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
                       columns: const [
+                        DataColumn(label: Text('')),
                         DataColumn(label: Text(S.productName)),
                         DataColumn(label: Text(S.sku)),
                         DataColumn(label: Text(S.currentStock)),
@@ -105,6 +109,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                 ? (_) => _edit(p)
                                 : null,
                             cells: [
+                              DataCell(ProductThumb(product: p, size: 36)),
                               DataCell(Text(p.name)),
                               DataCell(Text(p.sku)),
                               DataCell(Text(p.currentStock)),
@@ -124,15 +129,18 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   Future<void> _edit(Product? product) async {
+    final productId = product?.id ?? newId();
     final name = TextEditingController(text: product?.name ?? '');
     final sku = TextEditingController(text: product?.sku ?? '');
     final brand = TextEditingController(text: product?.brand ?? '');
+    final description = TextEditingController(text: product?.description ?? '');
     final purchase = TextEditingController(text: product?.purchasePrice ?? '');
     final sell = TextEditingController(text: product?.sellingPrice ?? '');
     final stock = TextEditingController(text: product?.currentStock ?? '');
     final min = TextEditingController(text: product?.minimumStock ?? '');
     final unit = TextEditingController(text: product?.unit ?? '');
     final packSize = TextEditingController(text: product?.packSize ?? '');
+    var images = [...product?.images ?? const <ProductImage>[]];
     var categoryId = product?.categoryId;
     final categories = CatalogCategories.all;
     if (!mounted) return;
@@ -164,6 +172,32 @@ class _ProductsPageState extends State<ProductsPage> {
                   TextField(
                     controller: brand,
                     decoration: const InputDecoration(labelText: S.brand),
+                  ),
+                  TextField(
+                    controller: description,
+                    decoration: const InputDecoration(labelText: 'الوصف'),
+                    maxLines: 2,
+                  ),
+                  ProductImagesEditor(
+                    productId: productId,
+                    images: images,
+                    onChanged: (next) => setS(() => images = next),
+                    onSuggestion: (suggestion) {
+                      setS(() {
+                        if ((suggestion.name ?? '').isNotEmpty) {
+                          name.text = suggestion.name!;
+                        }
+                        if ((suggestion.brand ?? '').isNotEmpty) {
+                          brand.text = suggestion.brand!;
+                        }
+                        if ((suggestion.packSize ?? '').isNotEmpty) {
+                          packSize.text = suggestion.packSize!;
+                        }
+                        if ((suggestion.description ?? '').isNotEmpty) {
+                          description.text = suggestion.description!;
+                        }
+                      });
+                    },
                   ),
                   AmountField(
                     controller: purchase,
@@ -221,11 +255,12 @@ class _ProductsPageState extends State<ProductsPage> {
                                       .read<AuthCubit>()
                                       .state
                                       .session!,
-                                  id: product?.id,
+                                  id: productId,
                                   name: name.text,
                                   sku: sku.text,
                                   categoryId: categoryId,
                                   brand: brand.text,
+                                  description: description.text,
                                   packSize: packSize.text,
                                   purchasePrice: Money.parse(
                                     purchase.text.isEmpty ? '0' : purchase.text,
@@ -240,6 +275,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                     min.text.isEmpty ? '0' : min.text,
                                   ),
                                   unit: unit.text,
+                                  images: images,
                                 );
                                 await sl<SyncEngine>()
                                     .maybeSyncAfterLocalWrite();

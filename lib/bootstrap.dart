@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'core/config/app_config.dart';
 import 'core/di/injector.dart';
 import 'core/firebase/firebase_bootstrap.dart';
+import 'core/utils/app_reload.dart';
 import 'data/remote/device_id_store.dart';
 import 'data/remote/erp_store.dart';
 import 'data/remote/firestore_erp_store.dart';
@@ -17,6 +18,7 @@ Future<void> bootstrap({ErpStore? store}) async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
   await configureDependencies(config: config, store: store);
+  await ensureCurrentWebBuild(config.buildLabel);
 
   final devices = sl<DeviceIdStore>();
   await devices.setPref('app_version', AppVersions.appVersion);

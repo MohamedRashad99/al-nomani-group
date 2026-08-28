@@ -10,6 +10,7 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/file_download.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/google_sheet_link_button.dart';
 import '../auth/auth_cubit.dart';
@@ -41,9 +42,7 @@ class _BackupView extends StatelessWidget {
         listener: (context, state) {
           final message = state.message;
           if (message == null) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
-          );
+          sl<AppAlertCubit>().info(message);
         },
         child: BlocBuilder<BackupCubit, BackupState>(
         builder: (context, state) {
@@ -165,12 +164,8 @@ class _BackupView extends StatelessWidget {
                             mimeType: 'application/json;charset=utf-8',
                           );
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'تم تنزيل النسخة الاحتياطية المحلية.',
-                                ),
-                              ),
+                            sl<AppAlertCubit>().success(
+                              'تم تنزيل النسخة الاحتياطية المحلية.',
                             );
                           }
                         }

@@ -4,6 +4,7 @@ import 'package:bcrypt/bcrypt.dart';
 import '../../data/remote/device_id_store.dart';
 import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
+import 'user_identity.dart';
 
 class SeedService {
   SeedService(this._store, this._devices);
@@ -15,9 +16,14 @@ class SeedService {
   static const demoAdminDisplayName = 'م / أحمد نعمان الجعبيري';
 
   Future<void> ensureDemoAdminIdentity() async {
-    final existing = await _store.getUserByUsername(demoAdminUsername);
+    final users = await _store.listUsers();
     final now = DateTime.now().toUtc();
     final deviceId = await _devices.deviceId();
+    final hiddenIds = await _softDeleteDuplicateAdmins(users, deviceId, now);
+    final existing = UserIdentity.pickByUsername(
+      await _store.listUsers(),
+      demoAdminUsername,
+    );
     if (existing == null) {
       await _store.putUser(
         AppUser(
@@ -40,23 +46,65 @@ class SeedService {
           existing.passwordHash.isNotEmpty &&
           BCrypt.checkpw(demoAdminPassword, existing.passwordHash);
     } catch (_) {}
-    if (existing.displayName == demoAdminDisplayName && passwordMatches) {
+
+    final needsProfileFix =
+        existing.displayName != demoAdminDisplayName ||
+        existing.roleId.isEmpty ||
+        !existing.isActive;
+    if (passwordMatches && !needsProfileFix && hiddenIds.isEmpty) {
       return;
     }
 
     await _store.putUser(
-      AppUser(
-        id: existing.id,
-        username: existing.username,
+      existing.copyWith(
         displayName: demoAdminDisplayName,
-        passwordHash: BCrypt.hashpw(demoAdminPassword, BCrypt.gensalt()),
+        passwordHash: passwordMatches
+            ? existing.passwordHash
+            : BCrypt.hashpw(demoAdminPassword, BCrypt.gensalt()),
         roleId: existing.roleId.isEmpty ? AppRole.admin : existing.roleId,
         isActive: true,
         version: existing.version + 1,
         deviceId: deviceId,
-        createdAt: existing.createdAt,
         updatedAt: now,
       ),
     );
+  }
+
+  Future<List<String>> _softDeleteDuplicateAdmins(
+    List<AppUser> users,
+    String deviceId,
+    DateTime now,
+  ) async {
+    final admins = UserIdentity.matchesByUsername(users, demoAdminUsername);
+    if (admins.length <= 1) return const [];
+    admins.sort(UserIdentity.compareCanonical);
+    final kept = admins.first;
+    final hiddenIds = <String>[];
+    for (final extra in admins.skip(1)) {
+      hiddenIds.add(extra.id);
+      await _store.putUser(
+        extra.copyWith(
+          isDeleted: true,
+          isActive: false,
+          version: extra.version + 1,
+          deviceId: deviceId,
+          updatedAt: now,
+        ),
+      );
+    }
+    await _store.putAudit(
+      AuditLog(
+        id: newId(),
+        userId: kept.id,
+        deviceId: deviceId,
+        action: 'user.dedupe_admin',
+        entityType: 'user',
+        entityId: kept.id,
+        oldValue: hiddenIds.join(','),
+        newValue: kept.id,
+        createdAt: now,
+      ),
+    );
+    return hiddenIds;
   }
 }

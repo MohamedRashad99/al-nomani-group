@@ -81,7 +81,17 @@ Product productFromMap(Map<String, dynamic> data, String id) {
     updatedAt: mapDateOrNull(data, const ['updated_at', 'updatedAt']) ?? now,
     isDeleted: mapBool(data, const ['is_deleted', 'isDeleted'], fallback: false) ||
         data['operation'] == 'delete',
+    images: _imagesFrom(data['images']),
   );
+}
+
+List<ProductImage> _imagesFrom(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        ProductImage.fromMap(Map<String, dynamic>.from(item)),
+  ];
 }
 
 Customer customerFromMap(Map<String, dynamic> data, String id) {
@@ -93,6 +103,7 @@ Customer customerFromMap(Map<String, dynamic> data, String id) {
     address: mapTextOrNull(data, const ['address']),
     area: mapTextOrNull(data, const ['area']),
     notes: mapTextOrNull(data, const ['notes']),
+    linkedSupplierId: mapTextOrNull(data, const ['linked_supplier_id', 'linkedSupplierId']),
     isActive: mapBool(data, const ['is_active', 'isActive']),
     version: mapVersion(data),
     deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
@@ -252,6 +263,7 @@ Supplier supplierFromMap(Map<String, dynamic> data, String id) {
     address: mapTextOrNull(data, const ['address']),
     area: mapTextOrNull(data, const ['area']),
     notes: mapTextOrNull(data, const ['notes']),
+    linkedCustomerId: mapTextOrNull(data, const ['linked_customer_id', 'linkedCustomerId']),
     isActive: mapBool(data, const ['is_active', 'isActive']),
     version: mapVersion(data),
     deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
@@ -326,6 +338,11 @@ PurchaseItem purchaseItemFromMap(Map<String, dynamic> data, String id) {
     unit: mapText(data, const ['unit']),
     unitPrice: mapText(data, const ['unit_price', 'unitPrice'], '0'),
     lineTotal: mapText(data, const ['line_total', 'lineTotal'], '0'),
+    returnedQuantity: mapText(
+      data,
+      const ['returned_quantity', 'returnedQuantity'],
+      '0',
+    ),
     version: mapVersion(data),
     deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
     createdAt: mapDate(data, const ['created_at', 'createdAt']),

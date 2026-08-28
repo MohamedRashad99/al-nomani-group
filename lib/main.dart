@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'bootstrap.dart';
 import 'core/l10n/app_strings.dart';
+import 'features/app/startup_splash.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const StartupSplashApp());
   try {
     await bootstrap();
     runApp(const AlNomaniApp());

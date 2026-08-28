@@ -324,6 +324,127 @@ class PurchaseService {
     );
   }
 
+  Future<void> returnLines(
+    AppSession session,
+    String purchaseId, {
+    Map<String, Quantity>? quantitiesByItemId,
+    String? notes,
+  }) async {
+    if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.purchasesCancel)) {
+      throw const PermissionException();
+    }
+    final purchase = await _store.getPurchase(purchaseId);
+    if (purchase == null || purchase.isDeleted) {
+      throw const ValidationException('فاتورة الشراء غير موجودة.');
+    }
+    if (purchase.status == 'cancelled' || purchase.status == 'returned') {
+      throw const ValidationException('لا يمكن إرجاع هذه الفاتورة.');
+    }
+    final items = await _store.listPurchaseItems(purchaseId: purchaseId);
+    final now = DateTime.now().toUtc();
+    final deviceId = await _devices.deviceId();
+    var credit = Money.zero();
+    var anyReturned = false;
+    var allFullyReturned = true;
+    for (final item in items) {
+      final original = Quantity.parse(item.quantity);
+      final already = Quantity.parse(item.returnedQuantity);
+      var remaining = original - already;
+      if (remaining.isNegative) remaining = Quantity.zero();
+      final requested = quantitiesByItemId == null
+          ? remaining
+          : (quantitiesByItemId[item.id] ?? Quantity.zero());
+      if (requested.isNegative || requested.isZero) {
+        if (remaining.isPositive) allFullyReturned = false;
+        continue;
+      }
+      if (requested > remaining) {
+        throw const ValidationException('كمية المرتجع أكبر من المتبقي.');
+      }
+      anyReturned = true;
+      final nextReturned = already + requested;
+      if (nextReturned < original) allFullyReturned = false;
+      final lineCredit = Money.fromMinorUnits(
+        (requested.milli * Money.parse(item.unitPrice).minorUnits) ~/
+            BigInt.from(1000),
+      );
+      credit += lineCredit;
+      await _inventory.apply(
+        session: session,
+        productId: item.productId,
+        quantity: requested,
+        type: 'purchase_return',
+        notes: notes,
+        referenceType: 'purchase_return',
+        referenceId: purchaseId,
+      );
+      await _store.putPurchaseItem(
+        PurchaseItem(
+          id: item.id,
+          purchaseId: item.purchaseId,
+          productId: item.productId,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal,
+          returnedQuantity: nextReturned.toStorage(),
+          version: item.version + 1,
+          deviceId: deviceId,
+          createdAt: item.createdAt,
+        ),
+      );
+    }
+    if (!anyReturned) {
+      throw const ValidationException('حدد كمية مرتجع واحدة على الأقل.');
+    }
+    if (credit.isPositive) {
+      await _accounts.post(
+        supplierId: purchase.supplierId,
+        type: 'purchase_return',
+        amount: credit,
+        createdBy: session.userId,
+        deviceId: deviceId,
+        referenceType: 'purchase_return',
+        referenceId: purchaseId,
+        notes: notes,
+        allowNegative: true,
+      );
+    }
+    final remainingUnpaid = Money.parse(purchase.remainingAmount) - credit;
+    await _store.putPurchase(
+      Purchase(
+        id: purchase.id,
+        supplierId: purchase.supplierId,
+        purchaseNumber: purchase.purchaseNumber,
+        status: allFullyReturned ? 'returned' : 'partial',
+        subtotal: purchase.subtotal,
+        paidAmount: purchase.paidAmount,
+        remainingAmount: remainingUnpaid.isNegative
+            ? Money.zero().toStorage()
+            : remainingUnpaid.toStorage(),
+        notes: purchase.notes,
+        purchasedAt: purchase.purchasedAt,
+        createdBy: purchase.createdBy,
+        cancelledAt: purchase.cancelledAt,
+        cancelledBy: purchase.cancelledBy,
+        cancelReason: purchase.cancelReason,
+        version: purchase.version + 1,
+        deviceId: deviceId,
+        createdAt: purchase.createdAt,
+        updatedAt: now,
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'purchase.return',
+      entityType: 'purchase',
+      entityId: purchaseId,
+      newValue: {'credit': credit.toStorage(), 'notes': notes},
+    );
+  }
+
   Future<String> _nextNumber() async {
     final count = (await _store.listPurchases()).length;
     return 'P-${(count + 1).toString().padLeft(6, '0')}';

@@ -10,11 +10,13 @@ import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/outstanding_service.dart';
+import '../../domain/services/supplier_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/searchable_select.dart';
 
 class CustomersPage extends StatefulWidget {
   const CustomersPage({super.key});
@@ -96,6 +98,7 @@ class _CustomersPageState extends State<CustomersPage> {
     final area = TextEditingController(text: customer?.area ?? '');
     final address = TextEditingController(text: customer?.address ?? '');
     final notes = TextEditingController(text: customer?.notes ?? '');
+    String? linkedSupplierId = customer?.linkedSupplierId;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -135,6 +138,25 @@ class _CustomersPageState extends State<CustomersPage> {
                     controller: notes,
                     decoration: const InputDecoration(labelText: S.notes),
                   ),
+                  FutureBuilder<List<Supplier>>(
+                    future: sl<SupplierService>().search(''),
+                    builder: (context, snap) {
+                      final suppliers = snap.data ?? const <Supplier>[];
+                      return SearchableSelectField<String?>(
+                        label: 'ربط كمورد',
+                        value: linkedSupplierId,
+                        options: [
+                          const SearchableOption(value: null, label: 'بدون ربط'),
+                          for (final supplier in suppliers)
+                            SearchableOption(
+                              value: supplier.id,
+                              label: supplier.name,
+                            ),
+                        ],
+                        onChanged: (v) => setS(() => linkedSupplierId = v),
+                      );
+                    },
+                  ),
                   if (error != null)
                     Text(error!, style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 12),
@@ -159,6 +181,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                   area: area.text,
                                   address: address.text,
                                   notes: notes.text,
+                                  linkedSupplierId: linkedSupplierId,
                                 );
                                 await sl<SyncEngine>()
                                     .maybeSyncAfterLocalWrite();

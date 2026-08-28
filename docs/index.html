@@ -20,6 +20,19 @@
   </style>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      function loadBootstrap(version) {
+        var script = document.createElement('script');
+        script.src = 'flutter_bootstrap.js?v=' + encodeURIComponent(version || Date.now());
+        script.async = true;
+        document.body.appendChild(script);
+      }
+      fetch('version.json?t=' + Date.now())
+        .then(function (response) { return response.json(); })
+        .then(function (data) { loadBootstrap(data.build_label); })
+        .catch(function () { loadBootstrap(); });
+    })();
+  </script>
 </body>
 </html>

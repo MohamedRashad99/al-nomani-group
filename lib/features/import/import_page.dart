@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/di/injector.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/import_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 
@@ -218,9 +219,6 @@ class _ImportPageState extends State<ImportPage> {
   }
 
   void _message(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    sl<AppAlertCubit>().info(message);
   }
 }

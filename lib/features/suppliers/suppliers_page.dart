@@ -8,13 +8,16 @@ import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/arabic_format.dart';
 import '../../domain/entities/erp_models.dart';
+import '../../domain/services/catalog_service.dart';
 import '../../domain/services/purchase_service.dart';
 import '../../domain/services/supplier_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/searchable_select.dart';
 
 class SuppliersPage extends StatefulWidget {
   const SuppliersPage({super.key});
@@ -97,6 +100,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     final area = TextEditingController(text: supplier?.area ?? '');
     final address = TextEditingController(text: supplier?.address ?? '');
     final notes = TextEditingController(text: supplier?.notes ?? '');
+    String? linkedCustomerId = supplier?.linkedCustomerId;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -136,6 +140,25 @@ class _SuppliersPageState extends State<SuppliersPage> {
                     controller: notes,
                     decoration: const InputDecoration(labelText: S.notes),
                   ),
+                  FutureBuilder<List<Customer>>(
+                    future: sl<CatalogService>().searchCustomers(''),
+                    builder: (context, snap) {
+                      final customers = snap.data ?? const <Customer>[];
+                      return SearchableSelectField<String?>(
+                        label: 'ربط كعميل',
+                        value: linkedCustomerId,
+                        options: [
+                          const SearchableOption(value: null, label: 'بدون ربط'),
+                          for (final customer in customers)
+                            SearchableOption(
+                              value: customer.id,
+                              label: customer.name,
+                            ),
+                        ],
+                        onChanged: (v) => setS(() => linkedCustomerId = v),
+                      );
+                    },
+                  ),
                   if (error != null)
                     Text(error!, style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 12),
@@ -160,6 +183,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
                                   area: area.text,
                                   address: address.text,
                                   notes: notes.text,
+                                  linkedCustomerId: linkedCustomerId,
                                 );
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
@@ -267,12 +291,51 @@ class SupplierDetailPage extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 12),
+              FutureBuilder<SupplierAging>(
+                future: sl<SupplierService>().aging(supplierId),
+                builder: (context, snap) {
+                  final aging = snap.data;
+                  if (aging == null) return const SizedBox.shrink();
+                  return Card(
+                    child: Column(
+                      children: [
+                        const ListTile(title: Text('أعمار المستحقات')),
+                        ListTile(
+                          title: const Text('0–30 يوم'),
+                          trailing: MoneyText(aging.d0to30),
+                        ),
+                        ListTile(
+                          title: const Text('31–60 يوم'),
+                          trailing: MoneyText(aging.d31to60),
+                        ),
+                        ListTile(
+                          title: const Text('61–90 يوم'),
+                          trailing: MoneyText(aging.d61to90),
+                        ),
+                        ListTile(
+                          title: const Text('أكثر من 90 يوم'),
+                          trailing: MoneyText(aging.over90),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
               if (session?.can(AppPermission.suppliersUpdate) == true ||
                   session?.can(AppPermission.purchasesCreate) == true)
                 FilledButton.tonal(
                   onPressed: () => _pay(context, supplier),
                   child: const Text('تسجيل دفعة للمورد'),
                 ),
+              if (session?.can(AppPermission.suppliersUpdate) == true ||
+                  session?.can(AppPermission.purchasesCreate) == true) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => _receipt(context, supplier),
+                  child: const Text('إيصال من المورد'),
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 S.purchases,
@@ -343,6 +406,8 @@ class SupplierDetailPage extends StatelessWidget {
     'payment' => 'سداد',
     'purchase_cancel' => 'عكس شراء ملغى',
     'payment_cancel' => 'عكس سداد',
+    'purchase_return' => 'مرتجع شراء',
+    'receipt' => 'إيصال / خصم',
     _ => 'حركة حساب',
   };
 
@@ -410,6 +475,71 @@ class SupplierDetailPage extends StatelessWidget {
     );
   }
 
+  static Future<void> _receipt(BuildContext context, Supplier supplier) async {
+    final amount = TextEditingController();
+    final notes = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        var saving = false;
+        String? error;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setS) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('إيصال من المورد إلى الشركة'),
+                AmountField(controller: amount, label: S.paidAmount),
+                TextField(
+                  controller: notes,
+                  decoration: const InputDecoration(labelText: S.notes),
+                ),
+                if (error != null)
+                  Text(error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setS(() {
+                            saving = true;
+                            error = null;
+                          });
+                          try {
+                            await sl<SupplierService>().recordReceipt(
+                              session: context.read<AuthCubit>().state.session!,
+                              supplierId: supplier.id,
+                              amount: Money.parse(amount.text),
+                              notes: notes.text,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setS(() {
+                                saving = false;
+                                error = e.toString();
+                              });
+                            }
+                          }
+                        },
+                  child: const Text(S.save),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   static Future<void> _delete(BuildContext context, Supplier supplier) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -440,9 +570,7 @@ class SupplierDetailPage extends StatelessWidget {
       if (context.mounted) context.go('/suppliers');
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      sl<AppAlertCubit>().error(error.toString());
     }
   }
 }

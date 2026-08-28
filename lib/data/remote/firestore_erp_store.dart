@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/firebase/firebase_bootstrap.dart';
 import '../../core/utils/stream_utils.dart';
 import '../../domain/entities/erp_models.dart';
+import '../../domain/services/user_identity.dart';
 import 'erp_map.dart';
 import 'erp_store.dart';
 
@@ -350,10 +351,7 @@ class FirestoreErpStore implements ErpStore {
 
   @override
   Future<AppUser?> getUserByUsername(String username) async {
-    final needle = username.trim();
-    final users = await listUsers();
-    final byUsername = {for (final user in users) user.username: user};
-    return byUsername[needle];
+    return UserIdentity.pickByUsername(await listUsers(), username);
   }
 
   @override

@@ -8,9 +8,11 @@ import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/inventory_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/product_thumb.dart';
 import '../../shared/widgets/quantity_sheet.dart';
 
 class InventoryPage extends StatefulWidget {
@@ -62,6 +64,7 @@ class _InventoryPageState extends State<InventoryPage> {
                         vertical: 6,
                       ),
                       child: ListTile(
+                        leading: ProductThumb(product: p),
                         title: Text(p.name),
                         subtitle: Text('${S.currentStock}: ${p.currentStock}'),
                         trailing: !canMove
@@ -119,9 +122,7 @@ class _InventoryPageState extends State<InventoryPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      sl<AppAlertCubit>().error(error.toString());
     }
   }
 

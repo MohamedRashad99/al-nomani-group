@@ -7,6 +7,7 @@ import 'package:al_nomani_group/core/utils/arabic_format.dart';
 import 'package:al_nomani_group/data/remote/erp_store.dart';
 import 'package:al_nomani_group/data/remote/memory_erp_store.dart';
 import 'package:al_nomani_group/data/sync/arabic_workbook_builder.dart';
+import 'package:al_nomani_group/domain/entities/erp_models.dart';
 import 'package:al_nomani_group/domain/models/purchase_draft.dart';
 import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/services/catalog_service.dart';
@@ -17,6 +18,8 @@ import 'package:al_nomani_group/domain/services/purchase_service.dart';
 import 'package:al_nomani_group/domain/services/sale_service.dart';
 import 'package:al_nomani_group/domain/services/seed_service.dart';
 import 'package:al_nomani_group/domain/services/supplier_service.dart';
+import 'package:al_nomani_group/domain/services/user_admin_service.dart';
+import 'package:al_nomani_group/domain/services/user_identity.dart';
 import 'package:al_nomani_group/domain/session.dart';
 import 'package:al_nomani_group/features/auth/auth_cubit.dart';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
@@ -714,5 +717,97 @@ void main() {
     expect(report.canDelete, isTrue);
     await sl<CatalogService>().deleteProduct(session: admin(), id: 'p-npk');
     expect(store.products.containsKey('p-npk'), isFalse);
+  });
+
+  test('seed twice and extra admin stubs keep one visible admin', () async {
+    final store = await readyStore();
+    final before = store.users.values.where((user) => !user.isDeleted).length;
+    await sl<SeedService>().ensureDemoAdminIdentity();
+    expect(store.users.values.where((user) => !user.isDeleted).length, before);
+    final now = DateTime.now().toUtc();
+    store.users['admin-stub'] = AppUser(
+      id: 'admin-stub',
+      username: 'ADMIN',
+      displayName: SeedService.demoAdminDisplayName,
+      passwordHash: '',
+      roleId: AppRole.admin,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await sl<SeedService>().ensureDemoAdminIdentity();
+    final visibleAdmins = store.users.values.where(
+      (user) =>
+          !user.isDeleted && UserIdentity.sameUsername(user.username, 'admin'),
+    );
+    expect(visibleAdmins.length, 1);
+    expect(store.users['admin-stub']!.isDeleted, isTrue);
+    expect(
+      UserIdentity.pickByUsername(store.users.values, 'admin')?.passwordHash,
+      isNotEmpty,
+    );
+    expect(
+      () => sl<UserAdminService>().upsert(
+        session: admin(),
+        username: 'admin',
+        displayName: 'مستخدم آخر',
+        password: '54321',
+        roleId: AppRole.cashier,
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('new products default to an empty images list', () async {
+    final store = await readyStore();
+    expect(store.products['p-npk']!.images, isEmpty);
+  });
+
+  test('purchase return, payment, and receipt stay on the supplier ledger', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد المرتجعات',
+    );
+    final before = Quantity.parse(store.products['p-urea']!.currentStock);
+    final created = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-urea',
+            quantity: Quantity.parse('4'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.000'),
+          ),
+        ],
+      ),
+    );
+    expect(
+      Quantity.parse(store.products['p-urea']!.currentStock),
+      before + Quantity.parse('4'),
+    );
+    await sl<SupplierService>().recordPayment(
+      session: session,
+      supplierId: supplierId,
+      amount: Money.parse('10.000'),
+    );
+    await sl<PurchaseService>().returnLines(session, created.purchaseId);
+    expect(store.products['p-urea']!.currentStock, before.toStorage());
+    expect(store.purchases[created.purchaseId]!.status, 'returned');
+    expect(
+      store.supplierTx.values.any((tx) => tx.type == 'purchase_return'),
+      isTrue,
+    );
+    await sl<SupplierService>().recordReceipt(
+      session: session,
+      supplierId: supplierId,
+      amount: Money.parse('2.000'),
+      notes: 'خصم فاتورة',
+    );
+    expect(store.supplierTx.values.any((tx) => tx.type == 'payment'), isTrue);
+    expect(store.supplierTx.values.any((tx) => tx.type == 'receipt'), isTrue);
   });
 }

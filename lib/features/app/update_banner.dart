@@ -30,9 +30,11 @@ class _UpdateBannerState extends State<UpdateBanner> {
     try {
       final response = await sl<Dio>().get<Map<String, dynamic>>(
         'version.json',
+        queryParameters: {'t': DateTime.now().millisecondsSinceEpoch},
       );
-      final remote = response.data?['app_version'] as String?;
-      if (remote != null && remote != sl<AppConfig>().appVersion && mounted) {
+      final remote = '${response.data?['build_label'] ?? ''}';
+      final local = sl<AppConfig>().buildLabel;
+      if (remote.isNotEmpty && remote != local && mounted) {
         setState(() => _available = true);
       }
     } catch (_) {

@@ -6,6 +6,7 @@ import '../../core/config/app_config.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/google_sheet_link_button.dart';
@@ -182,9 +183,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await sl<SyncEngine>().saveSyncSettings(mode: mode, days: days);
     if (mounted) {
       setState(() => _future = _load());
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات.')));
+      sl<AppAlertCubit>().success('تم حفظ الإعدادات.');
     }
   }
 
@@ -196,22 +195,16 @@ class _SettingsPageState extends State<SettingsPage> {
       final health = await sl<SyncEngine>().health();
       if (!mounted) return;
       final failed = health.failed > 0 || health.backupFailed > 0;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            failed
-                ? health.backupLastError ??
-                      health.lastError ??
-                      'اكتملت المحاولة مع أخطاء.'
-                : S.syncSuccess,
-          ),
-        ),
-      );
+      if (failed) {
+        sl<AppAlertCubit>().error(
+          health.backupLastError ?? health.lastError ?? 'اكتملت المحاولة مع أخطاء.',
+        );
+      } else {
+        sl<AppAlertCubit>().success(S.syncSuccess);
+      }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      sl<AppAlertCubit>().error(error.toString());
     } finally {
       if (mounted) setState(() => _syncingNow = false);
     }

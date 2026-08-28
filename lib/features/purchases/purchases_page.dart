@@ -13,6 +13,7 @@ import '../../domain/models/purchase_draft.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/purchase_service.dart';
 import '../../domain/services/supplier_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
@@ -305,15 +306,19 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
         context.pop();
       }
     } catch (error) {
-      if (mounted) _message(error.toString());
+      if (mounted) _message(error.toString(), error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _message(String text) {
+  void _message(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    if (error) {
+      sl<AppAlertCubit>().error(text);
+    } else {
+      sl<AppAlertCubit>().success(text);
+    }
   }
 }
 
@@ -379,6 +384,18 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                 emphasized: true,
               ),
               if (purchase.status != 'cancelled' &&
+                  purchase.status != 'returned' &&
+                  session?.can(AppPermission.purchasesCreate) == true) ...[
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () => _return(details),
+                  icon: const Icon(Icons.undo_outlined),
+                  label: const Text('مرتجع شراء'),
+                ),
+              ],
+              if (purchase.status != 'cancelled' &&
+                  purchase.status != 'returned' &&
+                  purchase.status != 'partial' &&
                   session?.can(AppPermission.purchasesCancel) == true) ...[
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
@@ -395,6 +412,57 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
         },
       ),
     );
+  }
+
+  Future<void> _return(PurchaseDetails details) async {
+    final remainingLines = [
+      for (final item in details.items)
+        if (_remaining(item).isPositive) item,
+    ];
+    if (remainingLines.isEmpty) {
+      sl<AppAlertCubit>().warning('لا توجد كميات قابلة للمرتجع.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('مرتجع شراء'),
+        content: Text(
+          'سيتم إرجاع الكميات المتبقية (${remainingLines.length} بند) وعكس المخزون مع قيد دائن للمورد. تبقى الفاتورة الأصلية للمراجعة.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(S.back),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('تأكيد المرتجع'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await sl<PurchaseService>().returnLines(
+        context.read<AuthCubit>().state.session!,
+        widget.purchaseId,
+      );
+      await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      if (!mounted) return;
+      sl<AppAlertCubit>().success('تم تسجيل مرتجع الشراء.');
+      setState(
+        () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
+      );
+    } catch (error) {
+      sl<AppAlertCubit>().error(error.toString());
+    }
+  }
+
+  Quantity _remaining(PurchaseItem item) {
+    final remaining =
+        Quantity.parse(item.quantity) - Quantity.parse(item.returnedQuantity);
+    return remaining.isNegative ? Quantity.zero() : remaining;
   }
 
   Future<void> _cancel() async {
@@ -441,19 +509,13 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
       );
       await sl<SyncEngine>().maybeSyncAfterLocalWrite();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إلغاء الشراء وعكس حركاته.')),
-        );
+        sl<AppAlertCubit>().success('تم إلغاء الشراء وعكس حركاته.');
         setState(
           () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
         );
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
+      if (mounted) sl<AppAlertCubit>().error(error.toString());
     }
   }
 }

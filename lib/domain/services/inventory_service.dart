@@ -35,7 +35,8 @@ class InventoryService {
         type != 'sale' &&
         type != 'sale_cancel' &&
         type != 'purchase' &&
-        type != 'purchase_cancel') {
+        type != 'purchase_cancel' &&
+        type != 'purchase_return') {
       throw const PermissionException();
     }
     if (quantity.isZero) {
@@ -127,6 +128,7 @@ class InventoryService {
       case 'stock_out':
       case 'manual_decrease':
       case 'purchase_cancel':
+      case 'purchase_return':
         return -abs;
       case 'adjustment':
         return quantity;

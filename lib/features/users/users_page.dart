@@ -7,6 +7,7 @@ import '../../core/l10n/app_strings.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/user_admin_service.dart';
+import '../../domain/services/user_identity.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -28,7 +29,9 @@ class UsersPage extends StatelessWidget {
       child: StreamBuilder<List<AppUser>>(
         stream: sl<UserAdminService>().watch(),
         builder: (context, snap) {
-          final items = snap.data ?? const <AppUser>[];
+          final items = UserIdentity.collapseVisible(
+            snap.data ?? const <AppUser>[],
+          );
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }

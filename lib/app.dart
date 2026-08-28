@@ -10,6 +10,8 @@ import 'core/di/injector.dart';
 import 'core/l10n/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'data/sync/sync_engine.dart';
+import 'features/app/app_alert_cubit.dart';
+import 'features/app/app_alert_host.dart';
 import 'features/app/app_busy_cubit.dart';
 import 'features/app/update_banner.dart';
 import 'features/auth/auth_cubit.dart';
@@ -50,6 +52,7 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
       providers: [
         BlocProvider.value(value: sl<AuthCubit>()),
         BlocProvider.value(value: sl<AppBusyCubit>()),
+        BlocProvider.value(value: sl<AppAlertCubit>()),
       ],
       child: MaterialApp.router(
         title: S.appName,
@@ -65,11 +68,13 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
         builder: (context, child) {
           return Directionality(
             textDirection: TextDirection.rtl,
-            child: Column(
-              children: [
-                const UpdateBanner(),
-                Expanded(child: child ?? const SizedBox.shrink()),
-              ],
+            child: AppAlertHost(
+              child: Column(
+                children: [
+                  const UpdateBanner(),
+                  Expanded(child: child ?? const SizedBox.shrink()),
+                ],
+              ),
             ),
           );
         },

@@ -34,6 +34,8 @@ class SupplierAccountService {
       'payment' => -amount,
       'purchase_cancel' => -amount,
       'payment_cancel' => amount,
+      'purchase_return' => -amount,
+      'receipt' => -amount,
       'manual_debit' => amount,
       'manual_credit' => -amount,
       _ => throw ValidationException('نوع حركة حساب المورد غير معروف: $type'),

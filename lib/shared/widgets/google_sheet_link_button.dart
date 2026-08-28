@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/utils/open_url.dart';
+import '../../features/app/app_alert_cubit.dart';
 
 class GoogleSheetLinkButton extends StatelessWidget {
   const GoogleSheetLinkButton({super.key, required this.url});
@@ -14,11 +16,7 @@ class GoogleSheetLinkButton extends StatelessWidget {
     return OutlinedButton.icon(
       onPressed: () async {
         final opened = await openExternalUrl(url);
-        if (!opened && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تعذر فتح Google Sheet.')),
-          );
-        }
+        if (!opened) sl<AppAlertCubit>().error('تعذر فتح Google Sheet.');
       },
       icon: const Icon(Icons.open_in_new),
       label: const Text(S.openGoogleSheet),

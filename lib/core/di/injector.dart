@@ -31,6 +31,9 @@ import '../../domain/services/seed_service.dart';
 import '../../domain/services/supplier_account_service.dart';
 import '../../domain/services/supplier_service.dart';
 import '../../domain/services/user_admin_service.dart';
+import '../../domain/services/product_ai_service.dart';
+import '../../domain/services/product_image_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../features/backup/backup_cubit.dart';
@@ -172,6 +175,9 @@ Future<void> configureDependencies({
   );
   sl.registerLazySingleton(SyncQueueRepository.new);
   sl.registerLazySingleton(AppBusyCubit.new);
+  sl.registerLazySingleton(AppAlertCubit.new);
+  sl.registerLazySingleton(ProductImageService.new);
+  sl.registerLazySingleton(ProductAiService.new);
   sl.registerLazySingleton(() => AuthCubit(sl(), sl()));
   sl.registerFactory(() => BackupCubit(sl(), sl(), sl()));
 }

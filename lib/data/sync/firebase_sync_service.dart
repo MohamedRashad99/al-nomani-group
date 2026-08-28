@@ -8,7 +8,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/firebase/firebase_bootstrap.dart';
 import '../local/app_database.dart';
+import '../remote/erp_map.dart';
 import 'firebase_actor.dart';
+import '../../domain/services/user_identity.dart';
 
 class FirebaseSyncService {
   static const companyId = 'al_nomani';
@@ -125,18 +127,25 @@ class FirebaseSyncService {
     String deviceId,
     String uid,
   ) async {
-    await _company.collection('users').doc(actor.userId).set({
+    final snapshot = await _company.collection('users').get();
+    final users = [
+      for (final doc in snapshot.docs) userFromMap(doc.data(), doc.id),
+    ];
+    final existing = UserIdentity.pickByUsername(users, actor.username);
+    final docId = existing?.id ?? actor.userId;
+    if (docId.isEmpty) return;
+    await _company.collection('users').doc(docId).set({
       ...actor.toFields(),
-      'id': actor.userId,
+      'id': docId,
       'username': actor.username,
       'display_name': actor.displayName,
       'role_id': actor.roleId,
-      'operationId': 'user-profile-${actor.userId}',
+      'operationId': 'user-profile-$docId',
       'operation': 'update',
-      'version': 1,
+      'version': (existing?.version ?? 0) + 1,
       'deviceId': deviceId,
       'entityType': 'user',
-      'entityId': actor.userId,
+      'entityId': docId,
       'section': 'users',
       'lastSeenAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),

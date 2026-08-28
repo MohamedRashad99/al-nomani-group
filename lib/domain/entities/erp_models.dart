@@ -53,6 +53,7 @@ class Product {
     required this.createdAt,
     required this.updatedAt,
     this.isDeleted = false,
+    this.images = const [],
   });
 
   final String id;
@@ -74,6 +75,7 @@ class Product {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isDeleted;
+  final List<ProductImage> images;
 
   Product copyWith({
     String? currentStock,
@@ -84,6 +86,7 @@ class Product {
     DateTime? updatedAt,
     String? deviceId,
     bool? isDeleted,
+    List<ProductImage>? images,
   }) {
     return Product(
       id: id,
@@ -105,6 +108,7 @@ class Product {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      images: images ?? this.images,
     );
   }
 
@@ -128,7 +132,43 @@ class Product {
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
     'is_deleted': isDeleted,
+    'images': [for (final image in images) image.toMap()],
   };
+}
+
+class ProductImage {
+  const ProductImage({
+    required this.id,
+    required this.url,
+    this.thumbUrl,
+    this.storagePath,
+  });
+
+  final String id;
+  final String url;
+  final String? thumbUrl;
+  final String? storagePath;
+
+  String get displayUrl => (thumbUrl != null && thumbUrl!.isNotEmpty)
+      ? thumbUrl!
+      : url;
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'url': url,
+    'thumb_url': thumbUrl,
+    'storage_path': storagePath,
+  };
+
+  factory ProductImage.fromMap(Map<String, dynamic> data) {
+    return ProductImage(
+      id: '${data['id'] ?? ''}',
+      url: '${data['url'] ?? ''}',
+      thumbUrl: data['thumb_url']?.toString() ?? data['thumbUrl']?.toString(),
+      storagePath:
+          data['storage_path']?.toString() ?? data['storagePath']?.toString(),
+    );
+  }
 }
 
 class Customer {
@@ -139,6 +179,7 @@ class Customer {
     this.address,
     this.area,
     this.notes,
+    this.linkedSupplierId,
     this.isActive = true,
     this.version = 1,
     this.deviceId,
@@ -153,6 +194,7 @@ class Customer {
   final String? address;
   final String? area;
   final String? notes;
+  final String? linkedSupplierId;
   final bool isActive;
   final int version;
   final String? deviceId;
@@ -167,6 +209,7 @@ class Customer {
     'address': address,
     'area': area,
     'notes': notes,
+    'linked_supplier_id': linkedSupplierId,
     'is_active': isActive,
     'version': version,
     'device_id': deviceId,
@@ -493,6 +536,31 @@ class AppUser {
   final DateTime updatedAt;
   final bool isDeleted;
 
+  AppUser copyWith({
+    String? displayName,
+    String? passwordHash,
+    String? roleId,
+    bool? isActive,
+    int? version,
+    String? deviceId,
+    DateTime? updatedAt,
+    bool? isDeleted,
+  }) {
+    return AppUser(
+      id: id,
+      username: username,
+      displayName: displayName ?? this.displayName,
+      passwordHash: passwordHash ?? this.passwordHash,
+      roleId: roleId ?? this.roleId,
+      isActive: isActive ?? this.isActive,
+      version: version ?? this.version,
+      deviceId: deviceId ?? this.deviceId,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'username': username,
@@ -552,6 +620,7 @@ class Supplier {
     this.address,
     this.area,
     this.notes,
+    this.linkedCustomerId,
     this.isActive = true,
     this.version = 1,
     this.deviceId,
@@ -566,6 +635,7 @@ class Supplier {
   final String? address;
   final String? area;
   final String? notes;
+  final String? linkedCustomerId;
   final bool isActive;
   final int version;
   final String? deviceId;
@@ -580,6 +650,7 @@ class Supplier {
     'address': address,
     'area': area,
     'notes': notes,
+    'linked_customer_id': linkedCustomerId,
     'is_active': isActive,
     'version': version,
     'device_id': deviceId,
@@ -753,6 +824,7 @@ class PurchaseItem {
     required this.unit,
     required this.unitPrice,
     required this.lineTotal,
+    this.returnedQuantity = '0',
     this.version = 1,
     this.deviceId,
     required this.createdAt,
@@ -765,6 +837,7 @@ class PurchaseItem {
   final String unit;
   final String unitPrice;
   final String lineTotal;
+  final String returnedQuantity;
   final int version;
   final String? deviceId;
   final DateTime createdAt;
@@ -777,6 +850,7 @@ class PurchaseItem {
     'unit': unit,
     'unit_price': unitPrice,
     'line_total': lineTotal,
+    'returned_quantity': returnedQuantity,
     'version': version,
     'device_id': deviceId,
     'created_at': createdAt.toIso8601String(),

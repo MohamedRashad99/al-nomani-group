@@ -9,6 +9,7 @@ import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
+import 'user_identity.dart';
 
 class UserAdminService {
   UserAdminService({
@@ -51,10 +52,21 @@ class UserAdminService {
     if (creating && (password == null || password.length < 5)) {
       throw const ValidationException('كلمة المرور يجب ألا تقل عن 5 أحرف.');
     }
+    final trimmedUsername = username.trim();
+    if (trimmedUsername.isEmpty) {
+      throw const ValidationException('اسم المستخدم مطلوب.');
+    }
     final now = DateTime.now().toUtc();
     final deviceId = await _devices.deviceId();
     final userId = id ?? newId();
     final existing = id == null ? null : await _store.getUser(id);
+    final taken = UserIdentity.pickByUsername(
+      await _store.listUsers(),
+      trimmedUsername,
+    );
+    if (taken != null && taken.id != userId) {
+      throw const ValidationException('اسم المستخدم مستخدم مسبقاً.');
+    }
     final hash = password == null || password.isEmpty
         ? existing?.passwordHash
         : BCrypt.hashpw(password, BCrypt.gensalt());
@@ -63,7 +75,7 @@ class UserAdminService {
     }
     final user = AppUser(
       id: userId,
-      username: username.trim(),
+      username: trimmedUsername,
       displayName: displayName.trim(),
       passwordHash: hash,
       roleId: roleId,

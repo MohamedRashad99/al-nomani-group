@@ -12,6 +12,7 @@ import '../../domain/entities/erp_models.dart';
 import '../../domain/models/sale_draft.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/sale_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
@@ -760,15 +761,19 @@ class _NewSalePageState extends State<NewSalePage> {
         context.pop();
       }
     } catch (error) {
-      if (mounted) _message(error.toString());
+      if (mounted) _message(error.toString(), error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _message(String text) {
+  void _message(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    if (error) {
+      sl<AppAlertCubit>().error(text);
+    } else {
+      sl<AppAlertCubit>().success(text);
+    }
   }
 }
 
@@ -1048,17 +1053,11 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
       );
       await sl<SyncEngine>().maybeSyncAfterLocalWrite();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إلغاء البيع وعكس حركاته.')),
-        );
+        sl<AppAlertCubit>().success('تم إلغاء البيع وعكس حركاته.');
         setState(() => _future = sl<SaleService>().loadDetails(widget.saleId));
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
+      if (mounted) sl<AppAlertCubit>().error(error.toString());
     }
   }
 }

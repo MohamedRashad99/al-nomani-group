@@ -87,6 +87,7 @@ class CatalogService {
     required String unit,
     String? customUnitLabel,
     bool isActive = true,
+    List<ProductImage>? images,
   }) async {
     final existing = id == null ? null : await _store.getProduct(id);
     final isCreate = existing == null;
@@ -124,6 +125,7 @@ class CatalogService {
       deviceId: deviceId,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
+      images: images ?? existing?.images ?? const [],
     );
     await _store.putProduct(product);
     await _audit.write(
@@ -221,6 +223,7 @@ class CatalogService {
     String? address,
     String? area,
     String? notes,
+    String? linkedSupplierId,
     bool isActive = true,
   }) async {
     final existing = id == null ? null : await _store.getCustomer(id);
@@ -237,6 +240,7 @@ class CatalogService {
     final now = DateTime.now().toUtc();
     final deviceId = await _devices.deviceId();
     final customerId = id ?? newId();
+    final nextLink = linkedSupplierId ?? existing?.linkedSupplierId;
     final customer = Customer(
       id: customerId,
       name: name.trim(),
@@ -244,6 +248,7 @@ class CatalogService {
       address: address,
       area: area,
       notes: notes,
+      linkedSupplierId: nextLink?.trim().isEmpty == true ? null : nextLink,
       isActive: isActive,
       version: (existing?.version ?? 0) + 1,
       deviceId: deviceId,
@@ -251,6 +256,7 @@ class CatalogService {
       updatedAt: now,
     );
     await _store.putCustomer(customer);
+    await _syncLinkedSupplier(customerId, existing?.linkedSupplierId, customer.linkedSupplierId);
     if (existing == null) {
       await _store.putAccount(
         CustomerAccount(
@@ -272,5 +278,57 @@ class CatalogService {
       newValue: customer.toMap(),
     );
     return customerId;
+  }
+
+  Future<void> _syncLinkedSupplier(
+    String customerId,
+    String? previousSupplierId,
+    String? nextSupplierId,
+  ) async {
+    if (previousSupplierId == nextSupplierId) return;
+    if (previousSupplierId != null && previousSupplierId.isNotEmpty) {
+      final previous = await _store.getSupplier(previousSupplierId);
+      if (previous != null && previous.linkedCustomerId == customerId) {
+        await _store.putSupplier(
+          Supplier(
+            id: previous.id,
+            name: previous.name,
+            phone: previous.phone,
+            address: previous.address,
+            area: previous.area,
+            notes: previous.notes,
+            linkedCustomerId: null,
+            isActive: previous.isActive,
+            version: previous.version + 1,
+            deviceId: previous.deviceId,
+            createdAt: previous.createdAt,
+            updatedAt: DateTime.now().toUtc(),
+            isDeleted: previous.isDeleted,
+          ),
+        );
+      }
+    }
+    if (nextSupplierId != null && nextSupplierId.isNotEmpty) {
+      final next = await _store.getSupplier(nextSupplierId);
+      if (next == null) return;
+      if (next.linkedCustomerId == customerId) return;
+      await _store.putSupplier(
+        Supplier(
+          id: next.id,
+          name: next.name,
+          phone: next.phone,
+          address: next.address,
+          area: next.area,
+          notes: next.notes,
+          linkedCustomerId: customerId,
+          isActive: next.isActive,
+          version: next.version + 1,
+          deviceId: next.deviceId,
+          createdAt: next.createdAt,
+          updatedAt: DateTime.now().toUtc(),
+          isDeleted: next.isDeleted,
+        ),
+      );
+    }
   }
 }

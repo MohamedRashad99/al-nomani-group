@@ -9,10 +9,12 @@ import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../domain/services/dashboard_service.dart';
 import '../../domain/services/report_export_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/report_busy_barrier.dart';
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -136,7 +138,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 }
 
-class _ReportFormatCard extends StatelessWidget {
+class _ReportFormatCard extends StatefulWidget {
   const _ReportFormatCard({
     required this.label,
     required this.icon,
@@ -151,32 +153,51 @@ class _ReportFormatCard extends StatelessWidget {
   final ReportFileType type;
   final ReportBranding branding;
 
-  Future<void> _preview(BuildContext context) async {
+  @override
+  State<_ReportFormatCard> createState() => _ReportFormatCardState();
+}
+
+class _ReportFormatCardState extends State<_ReportFormatCard> {
+  var _busy = false;
+
+  Future<void> _run(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
+      await action();
+    } catch (error) {
+      sl<AppAlertCubit>().error(error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _preview() async {
+    await _run(() async {
       final service = sl<ReportExportService>();
-      if (type == ReportFileType.pdf) {
-        final bytes = await service.buildPdfBytes(branding: branding);
-        if (!context.mounted) return;
+      if (widget.type == ReportFileType.pdf) {
+        final bytes = await service.buildPdfBytes(branding: widget.branding);
+        if (!mounted) return;
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => _PdfPreviewPage(title: label, bytes: bytes),
+            builder: (_) => _PdfPreviewPage(title: widget.label, bytes: bytes),
           ),
         );
         return;
       }
       final sections = await service.sections();
-      if (!context.mounted) return;
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            title: Text('${S.reportPreview} — $label'),
+            title: Text('${S.reportPreview} — ${widget.label}'),
             content: SizedBox(
               width: 720,
               height: 520,
               child: ListView(
                 children: [
-                  for (final row in branding.coverRows())
+                  for (final row in widget.branding.coverRows())
                     Text('${row.first}: ${row.last}'),
                   const Divider(),
                   for (final entry in sections.entries) ...[
@@ -217,58 +238,48 @@ class _ReportFormatCard extends StatelessWidget {
           );
         },
       );
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
-    }
+    });
   }
 
-  Future<void> _download(BuildContext context) async {
-    try {
-      await sl<ReportExportService>().download(type, branding: branding);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم تنزيل ملف $label.')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
-    }
+  Future<void> _download() async {
+    await _run(() async {
+      await sl<ReportExportService>().download(
+        widget.type,
+        branding: widget.branding,
+      );
+      sl<AppAlertCubit>().success('تم تنزيل ملف ${widget.label}.');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            Icon(icon),
-            const SizedBox(width: 10),
-            Expanded(child: Text(label)),
-            TextButton.icon(
-              onPressed: enabled ? () => _preview(context) : null,
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text(S.preview),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.tonalIcon(
-              onPressed: enabled ? () => _download(context) : null,
-              icon: const Icon(Icons.download_outlined),
-              label: const Text(S.downloadFile),
-            ),
-          ],
+    return ReportBusyBarrier(
+      busy: _busy,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).dividerColor),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(widget.icon),
+              const SizedBox(width: 10),
+              Expanded(child: Text(widget.label)),
+              TextButton.icon(
+                onPressed: widget.enabled && !_busy ? _preview : null,
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text(S.preview),
+              ),
+              const SizedBox(width: 4),
+              FilledButton.tonalIcon(
+                onPressed: widget.enabled && !_busy ? _download : null,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text(S.downloadFile),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/collection_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
@@ -162,11 +163,7 @@ class CollectionsPage extends StatelessWidget {
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(S.collectionSuccess),
-                                  ),
-                                );
+                                sl<AppAlertCubit>().success(S.collectionSuccess);
                               }
                             } catch (e) {
                               if (ctx.mounted) {

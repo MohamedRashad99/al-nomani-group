@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../domain/entities/erp_models.dart';
+import '../../domain/services/user_identity.dart';
 import 'erp_store.dart';
 
 class MemoryErpStore implements ErpStore {
@@ -200,11 +201,7 @@ class MemoryErpStore implements ErpStore {
   Future<AppUser?> getUser(String id) async => users[id];
   @override
   Future<AppUser?> getUserByUsername(String username) async {
-    final needle = username.trim();
-    for (final user in users.values) {
-      if (user.username == needle && !user.isDeleted) return user;
-    }
-    return null;
+    return UserIdentity.pickByUsername(users.values, username);
   }
 
   @override

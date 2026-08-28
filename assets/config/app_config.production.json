@@ -1,4 +1,4 @@
-{
+﻿{
   "environment": "production",
   "api_base_url": "https://api.example.com",
   "sync_interval_days": 5,
@@ -8,7 +8,7 @@
   "google_sheets_webapp_url": "",
   "google_sheets_write_token": "nomani-sheet-2026",
   "app_version": "1.0.1",
-  "build_label": "v1:280826:03:00:06",
+  "build_label": "v1:280826:15:45:36",
   "database_version": 2,
   "sync_protocol_version": 1
 }
