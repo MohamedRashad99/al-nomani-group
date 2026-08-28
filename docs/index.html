@@ -17,11 +17,35 @@
   <link rel="manifest" href="manifest.json">
   <style>
     html, body { height: 100%; margin: 0; background: #F4F1EA; }
+    #boot {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; background: #F4F1EA;
+      z-index: 9999; color: #1B5E20; font-family: Tahoma, sans-serif;
+    }
+    #boot img {
+      width: 96px; height: 96px; border-radius: 28px; background: #fff;
+      padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.08);
+      animation: nomani-pulse 1s ease-in-out infinite alternate;
+    }
+    #boot p { margin: 16px 0 0; font-weight: 700; }
+    @keyframes nomani-pulse {
+      from { transform: scale(.92); opacity: .8; }
+      to { transform: scale(1); opacity: 1; }
+    }
   </style>
 </head>
 <body>
+  <div id="boot">
+    <img src="icons/al-nomani-192.png" alt="مجموعة النعماني">
+    <p>مجموعة النعماني</p>
+  </div>
   <script>
     (function () {
+      function dropBoot() {
+        var boot = document.getElementById('boot');
+        if (boot) boot.remove();
+      }
+      window.addEventListener('flutter-first-frame', dropBoot);
       function loadBootstrap(version) {
         var script = document.createElement('script');
         script.src = 'flutter_bootstrap.js?v=' + encodeURIComponent(version || Date.now());

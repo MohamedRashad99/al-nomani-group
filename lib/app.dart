@@ -6,13 +6,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import 'app_router.dart';
+import 'bootstrap.dart';
 import 'core/di/injector.dart';
 import 'core/l10n/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/app_reload.dart';
 import 'data/sync/sync_engine.dart';
 import 'features/app/app_alert_cubit.dart';
 import 'features/app/app_alert_host.dart';
 import 'features/app/app_busy_cubit.dart';
+import 'features/app/startup_splash.dart';
 import 'features/app/update_banner.dart';
 import 'features/auth/auth_cubit.dart';
 
@@ -24,30 +27,122 @@ class AlNomaniApp extends StatefulWidget {
 }
 
 class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
-  late final GoRouter _router = createRouter(sl<AuthCubit>());
+  GoRouter? _router;
+  var _booting = true;
+  Object? _bootError;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => hideHtmlBootSplash());
+    unawaited(_boot());
+  }
+
+  Future<void> _boot() async {
+    final started = DateTime.now();
+    final alreadyReady = sl.isRegistered<AuthCubit>();
+    try {
+      if (!alreadyReady) {
+        await bootstrap();
+      }
+      final router = createRouter(sl<AuthCubit>());
+      if (!alreadyReady) {
+        const minSplash = Duration(milliseconds: 700);
+        final elapsed = DateTime.now().difference(started);
+        if (elapsed < minSplash) {
+          await Future<void>.delayed(minSplash - elapsed);
+        }
+      }
+      if (!mounted) return;
+      hideHtmlBootSplash();
+      setState(() {
+        _router = router;
+        _booting = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _bootError = error;
+        _booting = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _router.dispose();
+    _router?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && sl.isRegistered<SyncEngine>()) {
       unawaited(sl<SyncEngine>().maybeRunScheduled());
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_bootError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('ar'),
+        theme: AppTheme.rtl(),
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/al_nomani_logo.png',
+                          width: 96,
+                          height: 96,
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'تعذر بدء النظام بأمان',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '${S.migrationFailed}\n\n$_bootError',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_booting || _router == null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('ar'),
+        theme: AppTheme.rtl(),
+        home: const Directionality(
+          textDirection: TextDirection.rtl,
+          child: StartupSplashView(),
+        ),
+      );
+    }
+
     return MultiBlocProvider(
       providers: [
         BlocProvider.value(value: sl<AuthCubit>()),
@@ -78,7 +173,7 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
             ),
           );
         },
-        routerConfig: _router,
+        routerConfig: _router!,
       ),
     );
   }

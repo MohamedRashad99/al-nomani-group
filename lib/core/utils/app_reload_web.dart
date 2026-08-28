@@ -2,6 +2,10 @@
 
 import 'dart:html' as html;
 
+void hideHtmlBootSplash() {
+  html.document.getElementById('boot')?.remove();
+}
+
 Future<void> reloadApplication() async {
   await _dropStaleWorker();
   html.window.location.reload();

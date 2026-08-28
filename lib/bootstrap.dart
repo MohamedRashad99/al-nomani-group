@@ -18,7 +18,6 @@ Future<void> bootstrap({ErpStore? store}) async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
   await configureDependencies(config: config, store: store);
-  await ensureCurrentWebBuild(config.buildLabel);
 
   final devices = sl<DeviceIdStore>();
   await devices.setPref('app_version', AppVersions.appVersion);
@@ -27,10 +26,17 @@ Future<void> bootstrap({ErpStore? store}) async {
     'sync_protocol_version',
     '${AppVersions.syncProtocolVersion}',
   );
-  await _attachFirebase();
-  await sl<SeedService>().ensureDemoAdminIdentity();
   await sl<AuthCubit>().restore();
-  unawaited(sl<SyncEngine>().maybeRunScheduled());
+  unawaited(_warmBackend(config.buildLabel));
+}
+
+Future<void> _warmBackend(String buildLabel) async {
+  try {
+    await _attachFirebase();
+    await sl<SeedService>().ensureDemoAdminIdentity();
+    unawaited(sl<SyncEngine>().maybeRunScheduled());
+  } catch (_) {}
+  unawaited(ensureCurrentWebBuild(buildLabel));
 }
 
 Future<void> _attachFirebase() async {

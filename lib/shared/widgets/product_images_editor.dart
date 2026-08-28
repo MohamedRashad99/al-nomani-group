@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/product_ai_service.dart';
 import '../../domain/services/product_image_service.dart';
+import 'product_thumb.dart';
 
 class ProductImagesEditor extends StatefulWidget {
   const ProductImagesEditor({
@@ -30,64 +31,79 @@ class ProductImagesEditor extends StatefulWidget {
 class _ProductImagesEditorState extends State<ProductImagesEditor> {
   var _busy = false;
   String? _error;
+  Uint8List? _lastPicked;
 
   Future<void> _add({required bool camera}) async {
+    Uint8List? bytes;
+    try {
+      bytes = await _pickBytes(camera: camera);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'تعذر فتح اختيار الصورة. جرّب JPG أو PNG.');
+      }
+      return;
+    }
+    if (bytes == null || bytes.isEmpty || !mounted) return;
+    _lastPicked = bytes;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      Uint8List? bytes;
-      if (kIsWeb && !camera) {
-        final picked = await FilePicker.platform.pickFiles(
-          type: FileType.image,
-          withData: true,
-        );
-        bytes = picked?.files.single.bytes;
-      } else {
-        final file = await ImagePicker().pickImage(
-          source: camera ? ImageSource.camera : ImageSource.gallery,
-          imageQuality: 88,
-        );
-        bytes = await file?.readAsBytes();
-      }
-      if (bytes == null || bytes.isEmpty) return;
       final image = await sl<ProductImageService>().upload(
         productId: widget.productId,
         bytes: bytes,
       );
       widget.onChanged([...widget.images, image]);
-      if (widget.onSuggestion != null && mounted) {
-        await _maybeSuggest(bytes);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'تعذر حفظ الصورة. استخدم صورة JPG أو PNG أصغر.',
+        );
       }
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _maybeSuggest(Uint8List bytes) async {
-    final useAi = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعرّف على المنتج؟'),
-        content: const Text(
-          'يمكن اقتراح الاسم والعلامة والحجم من الصورة. لن يُحفظ أي شيء قبل تأكيدك.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('لاحقاً'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('اقتراح'),
-          ),
-        ],
-      ),
+  Future<Uint8List?> _pickBytes({required bool camera}) async {
+    if (camera) {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      return file == null ? null : await file.readAsBytes();
+    }
+    if (kIsWeb) {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+        allowMultiple: false,
+      );
+      final bytes = picked?.files.single.bytes;
+      if (bytes != null && bytes.isNotEmpty) return bytes;
+    }
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1600,
     );
-    if (useAi != true || !mounted) return;
+    return file == null ? null : await file.readAsBytes();
+  }
+
+  Future<void> _suggest() async {
+    final bytes = _lastPicked;
+    if (bytes == null || bytes.isEmpty) {
+      setState(
+        () => _error = 'اختر صورة أولاً ثم اضغط تعرّف.',
+      );
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final suggestion = await sl<ProductAiService>().suggestFromPhoto(bytes);
       if (!mounted) return;
@@ -97,8 +113,15 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
         builder: (ctx) => _AiReviewSheet(suggestion: suggestion),
       );
       if (confirmed != null) widget.onSuggestion?.call(confirmed);
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'التعرف الذكي غير متاح حالياً. يمكنك إدخال البيانات يدوياً.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -132,11 +155,13 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          widget.images[i].displayUrl,
+                        child: SizedBox(
                           width: 88,
                           height: 88,
-                          fit: BoxFit.cover,
+                          child: ProductImageView(
+                            url: widget.images[i].displayUrl,
+                            size: 88,
+                          ),
                         ),
                       ),
                       Positioned(
@@ -162,6 +187,7 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _add(camera: false),
@@ -173,6 +199,12 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
               icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('كاميرا'),
             ),
+            if (widget.onSuggestion != null)
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _suggest,
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: const Text('تعرّف'),
+              ),
           ],
         ),
         if (_busy)
