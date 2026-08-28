@@ -55,12 +55,11 @@ class _DashboardPageState extends State<DashboardPage> {
           return FutureBuilder<SyncHealth>(
             future: _health,
             builder: (context, healthSnap) {
-              final health = healthSnap.data;
-              if (health == null) {
-                return const BrandedLoading(message: 'نجهّز ملخص أعمالك');
-              }
               return _DashboardBody(
-                data: _DashboardData(snapshot.data!, health),
+                data: _DashboardData(
+                  snapshot.data!,
+                  healthSnap.data ?? SyncHealth.checking,
+                ),
               );
             },
           );

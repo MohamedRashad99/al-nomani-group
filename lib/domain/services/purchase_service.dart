@@ -89,12 +89,14 @@ class PurchaseService {
   }
 
   Future<List<PurchaseListEntry>> listEntries({String? supplierId}) async {
-    final purchases = await _store.listPurchases(supplierId: supplierId);
+    final purchasesFuture = _store.listPurchases(supplierId: supplierId);
+    final suppliersFuture = _store.listSuppliers();
+    final itemsFuture = _store.listPurchaseItems();
+    final purchases = await purchasesFuture;
     final suppliers = {
-      for (final supplier in await _store.listSuppliers())
-        supplier.id: supplier.name,
+      for (final supplier in await suppliersFuture) supplier.id: supplier.name,
     };
-    final items = await _store.listPurchaseItems();
+    final items = await itemsFuture;
     final counts = <String, int>{};
     for (final item in items) {
       counts.update(

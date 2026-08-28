@@ -47,8 +47,10 @@ class OutstandingService {
   }
 
   Future<List<OutstandingRow>> list() async {
-    final customers = await _store.listCustomers();
-    final accounts = await _store.listAccounts();
+    final customersFuture = _store.listCustomers();
+    final accountsFuture = _store.listAccounts();
+    final customers = await customersFuture;
+    final accounts = await accountsFuture;
     final balances = {
       for (final account in accounts)
         account.customerId: Money.parse(account.cachedBalance),

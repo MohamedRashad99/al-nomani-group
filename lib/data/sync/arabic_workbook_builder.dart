@@ -9,20 +9,35 @@ class ArabicWorkbookBuilder {
   final ErpStore _store;
 
   Future<Map<String, List<List<Object?>>>> build() async {
-    final customers = await _store.listCustomers();
-    final products = await _store.listProducts();
+    late final List<Customer> customers;
+    late final List<Product> products;
+    late final List<CustomerAccount> accounts;
+    late final List<CustomerAccountTransaction> accountTx;
+    late final List<Sale> sales;
+    late final List<SaleItem> items;
+    late final List<Collection> collections;
+    late final List<InventoryMovement> movements;
+    late final List<AppUser> users;
+    late final List<AppSetting> settings;
+    late final List<AuditLog> audits;
+    late final List<Supplier> suppliers;
+    late final List<Purchase> purchases;
+    await Future.wait([
+      _store.listCustomers().then((value) => customers = value),
+      _store.listProducts().then((value) => products = value),
+      _store.listAccounts().then((value) => accounts = value),
+      _store.listAccountTx().then((value) => accountTx = value),
+      _store.listSales().then((value) => sales = value),
+      _store.listSaleItems().then((value) => items = value),
+      _store.listCollections().then((value) => collections = value),
+      _store.listMovements().then((value) => movements = value),
+      _store.listUsers().then((value) => users = value),
+      _store.listSettings().then((value) => settings = value),
+      _store.listAudits().then((value) => audits = value),
+      _store.listSuppliers().then((value) => suppliers = value),
+      _store.listPurchases().then((value) => purchases = value),
+    ]);
     final categories = CatalogCategories.all;
-    final accounts = await _store.listAccounts();
-    final accountTx = await _store.listAccountTx();
-    final sales = await _store.listSales();
-    final items = await _store.listSaleItems();
-    final collections = await _store.listCollections();
-    final movements = await _store.listMovements();
-    final users = await _store.listUsers();
-    final settings = await _store.listSettings();
-    final audits = await _store.listAudits();
-    final suppliers = await _store.listSuppliers();
-    final purchases = await _store.listPurchases();
 
     final customerNames = {for (final row in customers) row.id: row.name};
     final productNames = {for (final row in products) row.id: row.name};

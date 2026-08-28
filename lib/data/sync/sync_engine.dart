@@ -49,6 +49,25 @@ class SyncHealth {
     required this.serverAuthenticated,
     this.spreadsheetUrl,
   });
+
+  static const checking = SyncHealth(
+    lastSuccessfulSync: null,
+    nextScheduledSync: null,
+    lastFullBackup: null,
+    pending: 0,
+    failed: 0,
+    synced: 0,
+    lastError: null,
+    online: true,
+    statusAr: 'جارٍ التحقق من Firebase',
+    backupConfigured: true,
+    backupPending: 0,
+    backupFailed: 0,
+    backupLastError: null,
+    backupDiagnostic: 'جارٍ التحقق من Firebase',
+    serverReachable: true,
+    serverAuthenticated: true,
+  );
 }
 
 class SyncEngine {
@@ -72,6 +91,8 @@ class SyncEngine {
   final FirebaseSyncService _firebase;
   final GoogleSheetsLiveSync? _sheets;
   final Connectivity _connectivity;
+  Timer? _sheetsTimer;
+  Future<void>? _sheetsPush;
 
   Future<bool> isOnline() async {
     try {
@@ -83,7 +104,10 @@ class SyncEngine {
   }
 
   Future<void> maybeSyncAfterLocalWrite() async {
-    unawaited(syncNow(force: true));
+    _sheetsTimer?.cancel();
+    _sheetsTimer = Timer(const Duration(seconds: 20), () {
+      unawaited(syncNow(force: true));
+    });
   }
 
   Future<int> intervalDays() async {
@@ -128,16 +152,28 @@ class SyncEngine {
 
   Future<void> syncNow({required bool force}) async {
     if (!await isOnline() && !force) return;
+    if (_sheetsPush != null) {
+      await _sheetsPush;
+      return;
+    }
+    final work = _pushSheets();
+    _sheetsPush = work;
+    try {
+      await work;
+    } finally {
+      if (identical(_sheetsPush, work)) {
+        _sheetsPush = null;
+      }
+    }
+  }
+
+  Future<void> _pushSheets() async {
     try {
       final sheets = _sheets;
       if (sheets != null) {
         await sheets.pushAll();
       }
       await _devices.setPref(
-        SyncConfigKeys.lastSuccessfulSyncAt,
-        DateTime.now().toUtc().toIso8601String(),
-      );
-      await _store.putSetting(
         SyncConfigKeys.lastSuccessfulSyncAt,
         DateTime.now().toUtc().toIso8601String(),
       );
@@ -187,7 +223,7 @@ class SyncEngine {
       backupFailed: fb.ok ? 0 : 1,
       backupLastError: fb.error,
       backupDiagnostic: fb.ok
-          ? 'Firebase جاهز • ${fb.records} سجل'
+          ? 'Firebase جاهز'
           : fb.error,
       serverReachable: fb.ok,
       serverAuthenticated: fb.ok,

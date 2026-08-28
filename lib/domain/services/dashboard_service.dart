@@ -114,20 +114,29 @@ class DashboardService {
     final startMonth = DateTime.utc(now.year, now.month, 1);
     final startYesterday = startToday.subtract(const Duration(days: 1));
 
-    final allSales = await _store.listSales();
+    final allSalesFuture = _store.listSales();
+    final collectionsFuture = _store.listCollections();
+    final productsFuture = _store.listProducts();
+    final accountsFuture = _store.listAccounts();
+    final saleItemsFuture = _store.listSaleItems();
+    final customersFuture = _store.listCustomers();
+    final movementsFuture = _store.listMovements();
+    final allSales = await allSalesFuture;
+    final collectionsRaw = await collectionsFuture;
+    final products = await productsFuture;
+    final accounts = await accountsFuture;
+    final saleItems = await saleItemsFuture;
+    final customers = await customersFuture;
+    final movements = await movementsFuture;
     final sales = [
       for (final sale in allSales)
         if (OperationalStatus.isActiveSale(sale)) sale,
     ];
     final completedIds = {for (final sale in sales) sale.id};
     final collections = [
-      for (final row in await _store.listCollections())
+      for (final row in collectionsRaw)
         if (OperationalStatus.isActiveCollection(row)) row,
     ];
-    final products = await _store.listProducts();
-    final accounts = await _store.listAccounts();
-    final saleItems = await _store.listSaleItems();
-    final customers = await _store.listCustomers();
 
     Money sumSales(DateTime from) => sales
         .where((s) => s.soldAt.isAfter(from) || s.soldAt.isAtSameMomentAs(from))
@@ -163,7 +172,6 @@ class DashboardService {
     final recentSales = [...sales]..sort((a, b) => b.soldAt.compareTo(a.soldAt));
     final recentCols = [...collections]
       ..sort((a, b) => b.collectedAt.compareTo(a.collectedAt));
-    final movements = await _store.listMovements();
 
     final productById = {for (final product in products) product.id: product};
     final productTotals = <String, Money>{};

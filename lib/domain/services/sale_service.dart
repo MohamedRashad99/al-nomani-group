@@ -87,11 +87,14 @@ class SaleService {
   }
 
   Future<List<SaleListEntry>> listEntries() async {
-    final sales = await _store.listSales();
+    final salesFuture = _store.listSales();
+    final customersFuture = _store.listCustomers();
+    final itemsFuture = _store.listSaleItems();
+    final sales = await salesFuture;
     final customers = {
-      for (final customer in await _store.listCustomers()) customer.id: customer.name,
+      for (final customer in await customersFuture) customer.id: customer.name,
     };
-    final items = await _store.listSaleItems();
+    final items = await itemsFuture;
     final counts = <String, int>{};
     for (final item in items) {
       counts.update(item.saleId, (value) => value + 1, ifAbsent: () => 1);
@@ -110,9 +113,12 @@ class SaleService {
   Future<SaleDetails?> loadDetails(String saleId) async {
     final sale = await _store.getSale(saleId);
     if (sale == null) return null;
-    final customer = await _store.getCustomer(sale.customerId);
-    final items = await _store.listSaleItems(saleId: saleId);
-    final products = await _store.listProducts();
+    final customerFuture = _store.getCustomer(sale.customerId);
+    final itemsFuture = _store.listSaleItems(saleId: saleId);
+    final productsFuture = _store.listProducts();
+    final customer = await customerFuture;
+    final items = await itemsFuture;
+    final products = await productsFuture;
     return SaleDetails(
       sale: sale,
       customer: customer,

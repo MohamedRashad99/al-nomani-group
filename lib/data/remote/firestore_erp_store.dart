@@ -21,9 +21,17 @@ class FirestoreErpStore implements ErpStore {
 
   final _localChanges = StreamController<void>.broadcast();
   Stream<void>? _watchChanges;
+  Future<void>? _ready;
+  final _lists = <String, List<Object>>{};
+  final _inflight = <String, Future<List<Object>>>{};
 
-  Future<void> ensureReady() async {
+  Future<void> ensureReady() {
+    return _ready ??= _ensureReadyOnce();
+  }
+
+  Future<void> _ensureReadyOnce() async {
     if (!await FirebaseBootstrap.ensure()) {
+      _ready = null;
       throw StateError(FirebaseBootstrap.lastError ?? 'Firebase غير جاهز.');
     }
     await _company.set({
@@ -32,16 +40,35 @@ class FirestoreErpStore implements ErpStore {
     }, SetOptions(merge: true));
   }
 
+  List<T> _parseSnap<T>(
+    QuerySnapshot<Map<String, dynamic>> snap,
+    T Function(Map<String, dynamic> data, String id) parse,
+    bool Function(T value) keep,
+  ) {
+    return [
+      for (final doc in snap.docs)
+        if (doc.data()['operation'] != 'delete') parse(doc.data(), doc.id),
+    ].where(keep).toList();
+  }
+
+  void _remember<T>(String name, List<T> rows) {
+    _lists[name] = rows.cast<Object>();
+  }
+
+  void _invalidate(String name) {
+    _lists.remove(name);
+    _inflight.remove(name);
+  }
+
   Stream<List<T>> _watchCol<T>(
     String name,
     T Function(Map<String, dynamic> data, String id) parse,
     bool Function(T value) keep,
   ) {
     return _col(name).snapshots().map((snap) {
-      return [
-        for (final doc in snap.docs)
-          if (doc.data()['operation'] != 'delete') parse(doc.data(), doc.id),
-      ].where(keep).toList();
+      final rows = _parseSnap(snap, parse, keep);
+      _remember(name, rows);
+      return rows;
     });
   }
 
@@ -51,11 +78,34 @@ class FirestoreErpStore implements ErpStore {
     bool Function(T value) keep,
   ) async {
     await ensureReady();
-    final snap = await _col(name).get();
-    return [
-      for (final doc in snap.docs)
-        if (doc.data()['operation'] != 'delete') parse(doc.data(), doc.id),
-    ].where(keep).toList();
+    final cached = _lists[name];
+    if (cached != null) {
+      return cached.cast<T>();
+    }
+    final pending = _inflight[name];
+    if (pending != null) {
+      return (await pending).cast<T>();
+    }
+    final future = _col(name).get().then((snap) {
+      final rows = _parseSnap(snap, parse, keep);
+      _remember(name, rows);
+      return rows.cast<Object>();
+    });
+    _inflight[name] = future;
+    try {
+      return (await future).cast<T>();
+    } finally {
+      _inflight.remove(name);
+    }
+  }
+
+  T? _cachedById<T>(String name, bool Function(T value) match) {
+    final cached = _lists[name];
+    if (cached == null) return null;
+    for (final row in cached.cast<T>()) {
+      if (match(row)) return row;
+    }
+    return null;
   }
 
   Future<void> _put(
@@ -79,12 +129,14 @@ class FirestoreErpStore implements ErpStore {
       'updatedBy': uid,
     };
     await _col(section).doc(id).set(data, SetOptions(merge: true));
+    _invalidate(section);
     _localChanges.add(null);
   }
 
   Future<void> _delete(String section, String id) async {
     await ensureReady();
     await _col(section).doc(id).delete();
+    _invalidate(section);
     _localChanges.add(null);
   }
 
@@ -113,6 +165,8 @@ class FirestoreErpStore implements ErpStore {
       _watchCol('products', productFromMap, (e) => !e.isDeleted);
   @override
   Future<Product?> getProduct(String id) async {
+    final cached = _cachedById<Product>('products', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('products').doc(id).get();
     if (!doc.exists) return null;
@@ -133,6 +187,8 @@ class FirestoreErpStore implements ErpStore {
       _watchCol('customers', customerFromMap, (e) => !e.isDeleted);
   @override
   Future<Customer?> getCustomer(String id) async {
+    final cached = _cachedById<Customer>('customers', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('customers').doc(id).get();
     if (!doc.exists) return null;
@@ -199,6 +255,8 @@ class FirestoreErpStore implements ErpStore {
 
   @override
   Future<Sale?> getSale(String id) async {
+    final cached = _cachedById<Sale>('sales', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('sales').doc(id).get();
     if (!doc.exists) return null;
@@ -282,6 +340,8 @@ class FirestoreErpStore implements ErpStore {
       _watchCol('users', userFromMap, (e) => !e.isDeleted);
   @override
   Future<AppUser?> getUser(String id) async {
+    final cached = _cachedById<AppUser>('users', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('users').doc(id).get();
     if (!doc.exists) return null;
@@ -315,6 +375,8 @@ class FirestoreErpStore implements ErpStore {
       _watchCol('suppliers', supplierFromMap, (e) => !e.isDeleted);
   @override
   Future<Supplier?> getSupplier(String id) async {
+    final cached = _cachedById<Supplier>('suppliers', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('suppliers').doc(id).get();
     if (!doc.exists) return null;
@@ -389,6 +451,8 @@ class FirestoreErpStore implements ErpStore {
 
   @override
   Future<Purchase?> getPurchase(String id) async {
+    final cached = _cachedById<Purchase>('purchases', (row) => row.id == id);
+    if (cached != null) return cached;
     await ensureReady();
     final doc = await _col('purchases').doc(id).get();
     if (!doc.exists) return null;
@@ -423,10 +487,11 @@ class FirestoreErpStore implements ErpStore {
 
   @override
   Future<String?> getSetting(String key) async {
-    await ensureReady();
-    final doc = await _col('settings').doc(key).get();
-    if (!doc.exists) return null;
-    return mapTextOrNull(doc.data()!, const ['value']);
+    final settings = await listSettings();
+    for (final row in settings) {
+      if (row.key == key) return row.value;
+    }
+    return null;
   }
 
   @override
@@ -438,17 +503,16 @@ class FirestoreErpStore implements ErpStore {
   });
 
   @override
-  Future<List<AppSetting>> listSettings() async {
-    await ensureReady();
-    final snap = await _col('settings').get();
-    return [
-      for (final doc in snap.docs)
-        AppSetting(
-          key: doc.id,
-          value: mapText(doc.data(), const ['value']),
-          updatedAt: mapDate(doc.data(), const ['updated_at', 'updatedAt']),
-        ),
-    ];
+  Future<List<AppSetting>> listSettings() {
+    return _listCol(
+      'settings',
+      (data, id) => AppSetting(
+        key: id,
+        value: mapText(data, const ['value']),
+        updatedAt: mapDate(data, const ['updated_at', 'updatedAt']),
+      ),
+      (_) => true,
+    );
   }
 }
 

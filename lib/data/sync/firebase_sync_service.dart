@@ -149,12 +149,8 @@ class FirebaseSyncService {
       return (records: 0, ok: false, error: FirebaseBootstrap.lastError);
     }
     try {
-      var total = 0;
-      for (final name in {...sectionByEntity.values, 'transactions', 'other'}) {
-        final count = await _company.collection(name).count().get();
-        total += count.count ?? 0;
-      }
-      return (records: total, ok: true, error: null);
+      final doc = await _company.get();
+      return (records: doc.exists ? 1 : 0, ok: true, error: null);
     } catch (error) {
       return (records: 0, ok: false, error: error.toString());
     }
