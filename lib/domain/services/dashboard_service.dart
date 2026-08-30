@@ -25,6 +25,18 @@ class SalesTrendPoint {
   final Money amount;
 }
 
+class DashboardInsight {
+  const DashboardInsight({
+    required this.id,
+    required this.name,
+    required this.detail,
+  });
+
+  final String id;
+  final String name;
+  final String detail;
+}
+
 class DashboardSnapshot {
   final Money todaySales;
   final Money weeklySales;
@@ -46,6 +58,11 @@ class DashboardSnapshot {
   final double todaySalesChangePercent;
   final Map<String, String> customerNames;
   final Map<String, String> productNames;
+  final List<Product> outOfStockProducts;
+  final List<DashboardInsight> fastMoving;
+  final List<DashboardInsight> slowMoving;
+  final List<DashboardInsight> expectedShortages;
+  final List<DashboardInsight> expectedPurchases;
 
   const DashboardSnapshot({
     required this.todaySales,
@@ -68,6 +85,11 @@ class DashboardSnapshot {
     required this.todaySalesChangePercent,
     required this.customerNames,
     required this.productNames,
+    this.outOfStockProducts = const [],
+    this.fastMoving = const [],
+    this.slowMoving = const [],
+    this.expectedShortages = const [],
+    this.expectedPurchases = const [],
   });
 }
 
@@ -102,6 +124,8 @@ class DashboardService {
       snapshot.recentSales.map((row) => '${row.id}:${row.updatedAt}').join(),
       snapshot.recentCollections.map((row) => row.id).join(),
       snapshot.recentMovements.map((row) => row.id).join(),
+      snapshot.fastMoving.map((row) => row.id).join(),
+      snapshot.expectedShortages.map((row) => row.id).join(),
     ].join('|');
   }
 
@@ -254,6 +278,63 @@ class DashboardService {
             a.currentStock,
           ).compareTo(Quantity.parse(b.currentStock)),
         );
+    final outOfStockProducts =
+        products
+            .where((product) => !Quantity.parse(product.currentStock).isPositive)
+            .toList();
+
+    final start30 = startToday.subtract(const Duration(days: 30));
+    final salesLast30 = {
+      for (final sale in sales)
+        if (!sale.soldAt.isBefore(start30)) sale.id,
+    };
+    final qty30 = <String, Quantity>{};
+    for (final item in saleItems) {
+      if (!salesLast30.contains(item.saleId)) continue;
+      final qty = Quantity.parse(item.quantity);
+      qty30.update(
+        item.productId,
+        (value) => value + qty,
+        ifAbsent: () => qty,
+      );
+    }
+    final rankedQty = qty30.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    DashboardInsight insightFor(String id, String detail) => DashboardInsight(
+      id: id,
+      name: productById[id]?.name ?? 'منتج',
+      detail: detail,
+    );
+    final fastMoving = [
+      for (final entry in rankedQty.take(5))
+        insightFor(entry.key, 'مبيع ${entry.value.toStorage()} خلال 30 يوماً'),
+    ];
+    final slowMoving = [
+      for (final product in products)
+        if (!qty30.containsKey(product.id) &&
+            Quantity.parse(product.currentStock).isPositive)
+          insightFor(product.id, 'بدون حركة بيع خلال 30 يوماً'),
+    ].take(5).toList();
+    final expectedShortages = <DashboardInsight>[];
+    final expectedPurchases = <DashboardInsight>[];
+    for (final product in products) {
+      final sold = qty30[product.id];
+      if (sold == null || sold.isZero) continue;
+      final daily = sold.milli ~/ BigInt.from(30);
+      if (daily <= BigInt.zero) continue;
+      final stock = Quantity.parse(product.currentStock);
+      final daysLeft = stock.milli ~/ daily;
+      if (daysLeft <= BigInt.from(14)) {
+        final row = insightFor(
+          product.id,
+          'يتوقع النفاد خلال ${daysLeft.toString()} يوماً',
+        );
+        expectedShortages.add(row);
+        expectedPurchases.add(
+          insightFor(product.id, 'يحتاج شراء قبل نفاد المخزون'),
+        );
+      }
+    }
 
     return DashboardSnapshot(
       todaySales: todaySales,
@@ -278,6 +359,11 @@ class DashboardService {
         for (final customer in customers) customer.id: customer.name,
       },
       productNames: {for (final product in products) product.id: product.name},
+      outOfStockProducts: outOfStockProducts.take(6).toList(),
+      fastMoving: fastMoving,
+      slowMoving: slowMoving,
+      expectedShortages: expectedShortages.take(5).toList(),
+      expectedPurchases: expectedPurchases.take(5).toList(),
     );
   }
 }

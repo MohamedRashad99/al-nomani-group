@@ -174,6 +174,7 @@ class _DashboardBodyState extends State<_DashboardBody>
                   color: AppColors.green,
                   helper:
                       '${dashboard.todaySalesChangePercent >= 0 ? '+' : ''}${dashboard.todaySalesChangePercent.toStringAsFixed(0)}٪ عن أمس',
+                  trend: dashboard.todaySalesChangePercent,
                   ),
                 ),
                 _reveal(
@@ -217,6 +218,7 @@ class _DashboardBodyState extends State<_DashboardBody>
                   color: AppColors.danger,
                   helper:
                       '${ArabicFormat.number(dashboard.outOfStock)} منتج نافد',
+                  pulse: dashboard.outOfStock > 0,
                   ),
                 ),
               ],
@@ -234,6 +236,20 @@ class _DashboardBodyState extends State<_DashboardBody>
             child: _reveal(
               order: 5,
               child: _QuickActions(permissions: permissions),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            22,
+            horizontalPadding,
+            0,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: _reveal(
+              order: 55,
+              child: _SmartInsightsPanel(snapshot: dashboard),
             ),
           ),
         ),
@@ -515,6 +531,8 @@ class _KpiCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.helper,
+    this.trend,
+    this.pulse = false,
   });
 
   final String label;
@@ -522,6 +540,8 @@ class _KpiCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String helper;
+  final double? trend;
+  final bool pulse;
 
   @override
   Widget build(BuildContext context) {
@@ -535,14 +555,7 @@ class _KpiCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  padding: EdgeInsets.all(phone ? 6 : 8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, size: phone ? 18 : 20, color: color),
-                ),
+                _KpiIcon(icon: icon, color: color, phone: phone, pulse: pulse),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -562,17 +575,243 @@ class _KpiCard extends StatelessWidget {
               child: FittedBox(fit: BoxFit.scaleDown, child: value),
             ),
             const SizedBox(height: 6),
-            Text(
-              helper,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.muted,
-                fontSize: phone ? 10 : null,
-              ),
+            Row(
+              children: [
+                if (trend != null) ...[
+                  _TrendArrow(change: trend!),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Text(
+                    helper,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.muted,
+                      fontSize: phone ? 10 : null,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _KpiIcon extends StatelessWidget {
+  const _KpiIcon({
+    required this.icon,
+    required this.color,
+    required this.phone,
+    required this.pulse,
+  });
+
+  final IconData icon;
+  final Color color;
+  final bool phone;
+  final bool pulse;
+
+  @override
+  Widget build(BuildContext context) {
+    final mark = Container(
+      padding: EdgeInsets.all(phone ? 6 : 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, size: phone ? 18 : 20, color: color),
+    );
+    if (!pulse) return mark;
+    return _SoftPulse(child: mark);
+  }
+}
+
+class _TrendArrow extends StatelessWidget {
+  const _TrendArrow({required this.change});
+
+  final double change;
+
+  @override
+  Widget build(BuildContext context) {
+    final up = change >= 0;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      child: Icon(
+        up ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+        key: ValueKey(up),
+        size: 16,
+        color: up ? AppColors.green : AppColors.danger,
+      ),
+    );
+  }
+}
+
+class _SoftPulse extends StatefulWidget {
+  const _SoftPulse({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SoftPulse> createState() => _SoftPulseState();
+}
+
+class _SoftPulseState extends State<_SoftPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.55, end: 1).animate(_pulse),
+      child: widget.child,
+    );
+  }
+}
+
+class _LiveDot extends StatelessWidget {
+  const _LiveDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SoftPulse(
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: AppColors.leaf,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+class _SmartInsightsPanel extends StatelessWidget {
+  const _SmartInsightsPanel({required this.snapshot});
+
+  final DashboardSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: 'تنبيهات المخزون والتوقع',
+      subtitle: 'حسابات محلية خفيفة من المبيعات والمخزون الحالي',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InsightGroup(
+            title: 'مخزون منخفض',
+            empty: 'لا توجد أصناف منخفضة حالياً',
+            items: [
+              for (final product in snapshot.lowStockProducts.take(4))
+                DashboardInsight(
+                  id: product.id,
+                  name: product.name,
+                  detail: 'المتبقي ${product.currentStock}',
+                ),
+            ],
+          ),
+          _InsightGroup(
+            title: 'نافد',
+            empty: 'لا توجد أصناف نافدة',
+            items: [
+              for (final product in snapshot.outOfStockProducts)
+                DashboardInsight(
+                  id: product.id,
+                  name: product.name,
+                  detail: 'المخزون صفر',
+                ),
+            ],
+          ),
+          _InsightGroup(
+            title: 'الأسرع حركة / الأكثر مبيعاً',
+            empty: 'لا توجد حركة بيع كافية',
+            items: snapshot.fastMoving,
+          ),
+          _InsightGroup(
+            title: 'البطيء حركة',
+            empty: 'لا توجد أصناف راكدة ظاهرة',
+            items: snapshot.slowMoving,
+          ),
+          _InsightGroup(
+            title: 'نفاد متوقع',
+            empty: 'لا يتوقع نفاد قريب',
+            items: snapshot.expectedShortages,
+          ),
+          _InsightGroup(
+            title: 'احتياج شراء متوقع',
+            empty: 'لا توجد توصية شراء حالياً',
+            items: snapshot.expectedPurchases,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightGroup extends StatelessWidget {
+  const _InsightGroup({
+    required this.title,
+    required this.empty,
+    required this.items,
+  });
+
+  final String title;
+  final String empty;
+  final List<DashboardInsight> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          if (items.isEmpty)
+            Text(
+              empty,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+            )
+          else
+            for (final item in items.take(4))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      item.detail,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
       ),
     );
   }
@@ -920,6 +1159,7 @@ class _RecentActivity extends StatelessWidget {
     return _Panel(
       title: 'آخر النشاطات',
       subtitle: 'المبيعات والتحصيلات المسجلة محلياً',
+      badge: snapshot.recentSales.isNotEmpty,
       action: TextButton(
         onPressed: () => context.go('/sales'),
         child: const Text('عرض الكل'),
@@ -987,12 +1227,14 @@ class _Panel extends StatelessWidget {
     required this.child,
     this.subtitle,
     this.action,
+    this.badge = false,
   });
 
   final String title;
   final String? subtitle;
   final Widget? action;
   final Widget child;
+  final bool badge;
 
   @override
   Widget build(BuildContext context) {
@@ -1000,7 +1242,17 @@ class _Panel extends StatelessWidget {
     final heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        Row(
+          children: [
+            Flexible(
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            if (badge) ...[
+              const SizedBox(width: 8),
+              const _LiveDot(),
+            ],
+          ],
+        ),
         if (subtitle != null)
           Text(
             subtitle!,

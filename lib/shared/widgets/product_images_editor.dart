@@ -55,6 +55,10 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
         bytes: bytes,
       );
       widget.onChanged([...widget.images, image]);
+      if (camera && widget.onSuggestion != null && mounted) {
+        await _suggest();
+        return;
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -270,6 +274,18 @@ class _AiReviewSheetState extends State<_AiReviewSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('راجع اقتراح التعرف قبل الحفظ'),
+          if (widget.suggestion.category != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('التصنيف: ${widget.suggestion.category}'),
+            ),
+          if (widget.suggestion.closestMatches.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'أقرب منتجات: ${widget.suggestion.closestMatches.join(' • ')}',
+              ),
+            ),
           if (widget.suggestion.lowConfidence)
             const Padding(
               padding: EdgeInsets.only(top: 8),

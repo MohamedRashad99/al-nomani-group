@@ -2,6 +2,7 @@ import 'package:al_nomani_group/core/theme/app_colors.dart';
 import 'package:al_nomani_group/features/app/app_alert_cubit.dart';
 import 'package:al_nomani_group/features/app/app_alert_host.dart';
 import 'package:al_nomani_group/features/app/startup_splash.dart';
+import 'package:al_nomani_group/shared/widgets/customer_contact_actions.dart';
 import 'package:al_nomani_group/shared/widgets/product_thumb.dart';
 import 'package:al_nomani_group/shared/widgets/report_busy_barrier.dart';
 import 'package:flutter/material.dart';
@@ -74,5 +75,22 @@ void main() {
       ),
     );
     expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('customer contact actions hide when phone is empty', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: CustomerContactActions(phone: ''))),
+    );
+    expect(find.byTooltip('اتصال'), findsNothing);
+    expect(find.byTooltip('واتساب'), findsNothing);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: CustomerContactActions(phone: '777123456')),
+      ),
+    );
+    expect(find.byTooltip('اتصال'), findsOneWidget);
+    expect(find.byTooltip('واتساب'), findsOneWidget);
   });
 }

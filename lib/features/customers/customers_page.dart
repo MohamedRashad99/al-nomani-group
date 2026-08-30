@@ -14,6 +14,7 @@ import '../../domain/services/supplier_service.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/customer_contact_actions.dart';
 import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -74,12 +75,17 @@ class _CustomersPageState extends State<CustomersPage> {
                         subtitle: Text('${c.phone ?? ''} • ${c.area ?? ''}'),
                         onTap: () =>
                             context.push('/customers/${c.id}/statement'),
-                        trailing: session.can(AppPermission.customersUpdate)
-                            ? IconButton(
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CustomerContactActions(phone: c.phone),
+                            if (session.can(AppPermission.customersUpdate))
+                              IconButton(
                                 icon: const Icon(Icons.edit),
                                 onPressed: () => _edit(c),
-                              )
-                            : null,
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -279,7 +285,10 @@ class CustomerStatementPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${S.statement} — ${customer.name}')),
+      appBar: AppBar(
+        title: Text('${S.statement} — ${customer.name}'),
+        actions: [CustomerContactActions(phone: customer.phone)],
+      ),
       body: StreamBuilder(
         stream: sl<OutstandingService>().watchStatement(customer.id),
         builder: (context, snap) {

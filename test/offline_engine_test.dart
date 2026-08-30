@@ -233,6 +233,11 @@ void main() {
     expect(dashboard.salesTrend, hasLength(7));
     expect(dashboard.topProducts.first.name, isNotEmpty);
     expect(dashboard.topCustomers.first.name, isNotEmpty);
+    expect(dashboard.lowStockProducts, isNotEmpty);
+    expect(dashboard.fastMoving, isNotEmpty);
+    expect(dashboard.fastMoving.first.id, 'p-imidacloprid');
+    expect(dashboard.outOfStockProducts, isEmpty);
+    expect(dashboard.slowMoving, isNotEmpty);
   });
 
   test('sale cancellation restores stock and customer debt', () async {
