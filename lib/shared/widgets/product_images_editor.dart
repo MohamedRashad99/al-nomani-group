@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/pick_image.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/product_ai_service.dart';
 import '../../domain/services/product_image_service.dart';
@@ -72,12 +73,18 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
 
   Future<Uint8List?> _pickBytes({required bool camera}) async {
     if (camera) {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-        maxWidth: 1600,
-      );
-      return file == null ? null : await file.readAsBytes();
+      if (kIsWeb) {
+        final captured = await pickWebCameraImage();
+        if (captured != null && captured.isNotEmpty) return captured;
+      }
+      try {
+        final file = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          imageQuality: 85,
+          maxWidth: 1600,
+        );
+        if (file != null) return file.readAsBytes();
+      } catch (_) {}
     }
     if (kIsWeb) {
       final picked = await FilePicker.platform.pickFiles(

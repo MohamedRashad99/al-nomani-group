@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/egypt_phone.dart';
 import '../../core/utils/open_url.dart';
 import '../../features/app/app_alert_cubit.dart';
 
@@ -10,28 +11,30 @@ class CustomerContactActions extends StatelessWidget {
 
   final String? phone;
 
-  static String digitsOnly(String raw) =>
-      raw.replaceAll(RegExp(r'[^\d+]'), '');
+  static String digitsOnly(String raw) => EgyptPhone.digitsOnly(raw);
 
   @override
   Widget build(BuildContext context) {
-    final raw = phone?.trim() ?? '';
-    if (raw.isEmpty) return const SizedBox.shrink();
-    final digits = digitsOnly(raw);
-    if (digits.isEmpty) return const SizedBox.shrink();
+    final tel = EgyptPhone.telUri(phone);
+    if (tel == null) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
           tooltip: 'اتصال',
-          onPressed: () => _open('tel:$digits', 'تعذر فتح تطبيق الاتصال.'),
+          onPressed: () => _open(
+            tel,
+            fallback: null,
+            error: 'تعذر فتح تطبيق الاتصال. استخدم هاتفاً أو أضف رمز الدولة.',
+          ),
           icon: const Icon(Icons.call_outlined, color: AppColors.darkGreen),
         ),
         IconButton(
           tooltip: 'واتساب',
           onPressed: () => _open(
-            'https://wa.me/${digits.replaceAll('+', '')}',
-            'تعذر فتح واتساب.',
+            EgyptPhone.whatsAppMe(phone)!,
+            fallback: EgyptPhone.whatsAppApi(phone),
+            error: 'تعذر فتح واتساب.',
           ),
           icon: const Icon(Icons.chat_outlined, color: AppColors.green),
         ),
@@ -39,8 +42,15 @@ class CustomerContactActions extends StatelessWidget {
     );
   }
 
-  Future<void> _open(String url, String error) async {
-    final opened = await openExternalUrl(url);
+  Future<void> _open(
+    String url, {
+    required String? fallback,
+    required String error,
+  }) async {
+    var opened = await openExternalUrl(url);
+    if (!opened && fallback != null) {
+      opened = await openExternalUrl(fallback);
+    }
     if (!opened && sl.isRegistered<AppAlertCubit>()) {
       sl<AppAlertCubit>().error(error);
     }

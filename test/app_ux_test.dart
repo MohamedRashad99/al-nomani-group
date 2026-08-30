@@ -1,4 +1,5 @@
 import 'package:al_nomani_group/core/theme/app_colors.dart';
+import 'package:al_nomani_group/core/utils/egypt_phone.dart';
 import 'package:al_nomani_group/features/app/app_alert_cubit.dart';
 import 'package:al_nomani_group/features/app/app_alert_host.dart';
 import 'package:al_nomani_group/features/app/startup_splash.dart';
@@ -92,5 +93,19 @@ void main() {
     );
     expect(find.byTooltip('اتصال'), findsOneWidget);
     expect(find.byTooltip('واتساب'), findsOneWidget);
+  });
+
+  test('egyptian phones normalize to +20 for call and whatsapp', () {
+    expect(EgyptPhone.e164Digits('01234567890'), '201234567890');
+    expect(EgyptPhone.e164Digits('1234567890'), '201234567890');
+    expect(EgyptPhone.e164Digits('+201234567890'), '201234567890');
+    expect(EgyptPhone.telUri('01234567890'), 'tel:+201234567890');
+    expect(EgyptPhone.whatsAppMe('01234567890'), 'https://wa.me/201234567890');
+    expect(
+      EgyptPhone.whatsAppApi('01234567890'),
+      'https://api.whatsapp.com/send?phone=201234567890',
+    );
+    expect(EgyptPhone.e164Digits(''), isNull);
+    expect(EgyptPhone.telUri(null), isNull);
   });
 }
