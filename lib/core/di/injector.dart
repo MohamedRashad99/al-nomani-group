@@ -22,6 +22,7 @@ import '../../domain/services/conflict_resolution_service.dart';
 import '../../domain/services/dashboard_service.dart';
 import '../../domain/services/entity_link_inspector.dart';
 import '../../domain/services/import_service.dart';
+import '../../domain/services/inventory_analytics.dart';
 import '../../domain/services/inventory_service.dart';
 import '../../domain/services/outstanding_service.dart';
 import '../../domain/services/purchase_service.dart';
@@ -111,6 +112,7 @@ Future<void> configureDependencies({
   );
   sl.registerLazySingleton(() => ImportService(sl(), sl()));
   sl.registerLazySingleton(() => DashboardService(sl()));
+  sl.registerLazySingleton(() => InventoryAnalytics(sl()));
   sl.registerLazySingleton(() => BackupExportService(sl()));
   sl.registerLazySingleton(() => ArabicWorkbookBuilder(sl()));
   sl.registerLazySingleton(() => ReportExportService(sl()));

@@ -4,9 +4,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/utils/arabic_format.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
+import '../../domain/services/inventory_measure.dart';
 import '../../domain/services/inventory_service.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
@@ -66,7 +68,9 @@ class _InventoryPageState extends State<InventoryPage> {
                       child: ListTile(
                         leading: ProductThumb(product: p),
                         title: Text(p.name),
-                        subtitle: Text('${S.currentStock}: ${p.currentStock}'),
+                        subtitle: Text(
+                          '${S.currentStock}: ${InventoryMeasure.fromProduct(p).packagesLabel} • ${InventoryMeasure.fromProduct(p).actualLabel}',
+                        ),
                         trailing: !canMove
                             ? null
                             : Wrap(
@@ -100,13 +104,14 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Future<void> _move(Product product, String type) async {
-    final stock = Quantity.parse(product.currentStock);
+    final measure = InventoryMeasure.fromProduct(product);
     final quantity = await showQuantitySheet(
       context: context,
       title: type == 'stock_in' ? S.stockIn : S.stockOut,
-      helperText: '${S.currentStock}: ${product.currentStock}',
+      helperText:
+          '${S.currentStock}: ${measure.packagesLabel} • ${measure.actualLabel}',
       max: type == 'stock_out'
-          ? (stock.isPositive ? stock : Quantity.zero())
+          ? (measure.packages.isPositive ? measure.packages : Quantity.zero())
           : null,
     );
     if (quantity == null || !mounted) return;
@@ -145,8 +150,19 @@ class _InventoryPageState extends State<InventoryPage> {
               if (rows.isEmpty) const ListTile(title: Text(S.empty)),
               for (final m in rows)
                 ListTile(
-                  title: Text('${m.type} ${m.quantity}'),
-                  subtitle: Text('${m.previousStock} → ${m.newStock}'),
+                  title: Text('${ArabicFormat.movementType(m.type)} ${m.quantity} ${m.unit}'),
+                  subtitle: Text(
+                    [
+                      '${m.previousStock} → ${m.newStock}',
+                      if (m.actualQuantity != null &&
+                          m.actualQuantity!.isNotEmpty &&
+                          m.unitOfMeasure != null)
+                        InventoryMeasure.formatQuantity(
+                          Quantity.parse(m.actualQuantity!),
+                          ProductUnit.fromCode(m.unitOfMeasure!),
+                        ),
+                    ].join(' • '),
+                  ),
                   trailing: Text(m.createdAt.toLocal().toString()),
                 ),
             ],

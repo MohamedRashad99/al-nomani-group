@@ -56,7 +56,7 @@ class _ProductImagesEditorState extends State<ProductImagesEditor> {
         bytes: bytes,
       );
       widget.onChanged([...widget.images, image]);
-      if (camera && widget.onSuggestion != null && mounted) {
+      if (widget.onSuggestion != null && mounted) {
         await _suggest();
         return;
       }
@@ -253,7 +253,11 @@ class _AiReviewSheetState extends State<_AiReviewSheet> {
     text: widget.suggestion.brand ?? '',
   );
   late final TextEditingController _pack = TextEditingController(
-    text: widget.suggestion.packSize ?? '',
+    text: widget.suggestion.packSize ??
+        [
+          widget.suggestion.packageSize,
+          widget.suggestion.unitOfMeasure,
+        ].whereType<String>().where((part) => part.isNotEmpty).join(' '),
   );
   late final TextEditingController _description = TextEditingController(
     text: widget.suggestion.description ?? widget.suggestion.visibleText ?? '',
@@ -326,7 +330,11 @@ class _AiReviewSheetState extends State<_AiReviewSheet> {
                 name: _name.text.trim(),
                 brand: _brand.text.trim(),
                 packSize: _pack.text.trim(),
+                packageSize: widget.suggestion.packageSize,
+                unitOfMeasure: widget.suggestion.unitOfMeasure,
+                packageType: widget.suggestion.packageType,
                 description: _description.text.trim(),
+                visibleText: widget.suggestion.visibleText,
                 confidence: widget.suggestion.confidence,
               ),
             ),

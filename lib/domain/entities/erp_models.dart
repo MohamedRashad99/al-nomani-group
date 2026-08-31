@@ -41,6 +41,11 @@ class Product {
     this.brand,
     this.description,
     this.packSize,
+    this.packageSize,
+    this.unitOfMeasure,
+    this.packageType,
+    this.reorderPoint,
+    this.safetyStock,
     required this.purchasePrice,
     required this.sellingPrice,
     required this.currentStock,
@@ -63,6 +68,11 @@ class Product {
   final String? brand;
   final String? description;
   final String? packSize;
+  final String? packageSize;
+  final String? unitOfMeasure;
+  final String? packageType;
+  final String? reorderPoint;
+  final String? safetyStock;
   final String purchasePrice;
   final String sellingPrice;
   final String currentStock;
@@ -81,7 +91,13 @@ class Product {
     String? currentStock,
     String? unit,
     String? packSize,
+    String? packageSize,
+    String? unitOfMeasure,
+    String? packageType,
+    String? reorderPoint,
+    String? safetyStock,
     String? customUnitLabel,
+    String? minimumStock,
     int? version,
     DateTime? updatedAt,
     String? deviceId,
@@ -96,10 +112,15 @@ class Product {
       brand: brand,
       description: description,
       packSize: packSize ?? this.packSize,
+      packageSize: packageSize ?? this.packageSize,
+      unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
+      packageType: packageType ?? this.packageType,
+      reorderPoint: reorderPoint ?? this.reorderPoint,
+      safetyStock: safetyStock ?? this.safetyStock,
       purchasePrice: purchasePrice,
       sellingPrice: sellingPrice,
       currentStock: currentStock ?? this.currentStock,
-      minimumStock: minimumStock,
+      minimumStock: minimumStock ?? this.minimumStock,
       unit: unit ?? this.unit,
       customUnitLabel: customUnitLabel ?? this.customUnitLabel,
       isActive: isActive,
@@ -120,6 +141,11 @@ class Product {
     'brand': brand,
     'description': description,
     'pack_size': packSize,
+    'package_size': packageSize,
+    'unit_of_measure': unitOfMeasure,
+    'package_type': packageType,
+    'reorder_point': reorderPoint,
+    'safety_stock': safetyStock,
     'purchase_price': purchasePrice,
     'selling_price': sellingPrice,
     'current_stock': currentStock,
@@ -473,6 +499,8 @@ class InventoryMovement {
     this.referenceType,
     this.referenceId,
     this.notes,
+    this.actualQuantity,
+    this.unitOfMeasure,
     required this.createdBy,
     required this.deviceId,
     required this.createdAt,
@@ -488,6 +516,8 @@ class InventoryMovement {
   final String? referenceType;
   final String? referenceId;
   final String? notes;
+  final String? actualQuantity;
+  final String? unitOfMeasure;
   final String createdBy;
   final String deviceId;
   final DateTime createdAt;
@@ -503,6 +533,8 @@ class InventoryMovement {
     'reference_type': referenceType,
     'reference_id': referenceId,
     'notes': notes,
+    'actual_quantity': actualQuantity,
+    'unit_of_measure': unitOfMeasure,
     'created_by': createdBy,
     'device_id': deviceId,
     'created_at': createdAt.toIso8601String(),

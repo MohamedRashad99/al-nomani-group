@@ -8,6 +8,8 @@ import '../../core/utils/breakpoints.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
+import '../../domain/services/inventory_analytics.dart';
+import '../../domain/services/inventory_measure.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
@@ -76,9 +78,8 @@ class _ProductsPageState extends State<ProductsPage> {
                           subtitle: Text(
                             [
                               p.sku,
-                              if (p.packSize != null && p.packSize!.isNotEmpty)
-                                p.packSize,
-                              '${p.currentStock} ${p.unit}',
+                              InventoryMeasure.fromProduct(p).packagesLabel,
+                              InventoryMeasure.fromProduct(p).actualLabel,
                             ].join(' • '),
                           ),
                           trailing: MoneyText(Money.parse(p.sellingPrice)),
@@ -112,7 +113,11 @@ class _ProductsPageState extends State<ProductsPage> {
                               DataCell(ProductThumb(product: p, size: 36)),
                               DataCell(Text(p.name)),
                               DataCell(Text(p.sku)),
-                              DataCell(Text(p.currentStock)),
+                              DataCell(
+                                Text(
+                                  InventoryMeasure.fromProduct(p).actualLabel,
+                                ),
+                              ),
                               DataCell(MoneyText(Money.parse(p.sellingPrice))),
                             ],
                           ),
@@ -138,8 +143,18 @@ class _ProductsPageState extends State<ProductsPage> {
     final sell = TextEditingController(text: product?.sellingPrice ?? '');
     final stock = TextEditingController(text: product?.currentStock ?? '');
     final min = TextEditingController(text: product?.minimumStock ?? '');
-    final unit = TextEditingController(text: product?.unit ?? '');
-    final packSize = TextEditingController(text: product?.packSize ?? '');
+    final existingMeasure = product == null
+        ? null
+        : InventoryMeasure.fromProduct(product);
+    final packSizeValue = TextEditingController(
+      text: existingMeasure?.packageSize.toDisplay() ?? '',
+    );
+    var unitOfMeasure =
+        product?.unitOfMeasure ?? existingMeasure?.unitOfMeasure.code ?? 'ml';
+    var packageType =
+        product?.packageType ?? existingMeasure?.packageType ?? PackageTypes.bottle;
+    final reorder = TextEditingController(text: product?.reorderPoint ?? '');
+    final safety = TextEditingController(text: product?.safetyStock ?? '');
     var images = [...product?.images ?? const <ProductImage>[]];
     var categoryId = product?.categoryId;
     final categories = CatalogCategories.all;
@@ -190,15 +205,34 @@ class _ProductsPageState extends State<ProductsPage> {
                         if ((suggestion.brand ?? '').isNotEmpty) {
                           brand.text = suggestion.brand!;
                         }
-                        if ((suggestion.packSize ?? '').isNotEmpty) {
-                          packSize.text = suggestion.packSize!;
-                        }
                         if ((suggestion.description ?? '').isNotEmpty) {
                           description.text = suggestion.description!;
+                        }
+                        final hint = PackingParser.parse(
+                          suggestion.packSize,
+                        );
+                        if ((suggestion.packageSize ?? '').isNotEmpty) {
+                          packSizeValue.text = suggestion.packageSize!;
+                        } else if (hint != null) {
+                          packSizeValue.text = hint.size.toDisplay();
+                        }
+                        if ((suggestion.unitOfMeasure ?? '').isNotEmpty) {
+                          unitOfMeasure = ProductUnit.fromCode(
+                            suggestion.unitOfMeasure!,
+                          ).code;
+                        } else if (hint != null) {
+                          unitOfMeasure = hint.unit.code;
+                        }
+                        if ((suggestion.packageType ?? '').isNotEmpty) {
+                          packageType = suggestion.packageType!;
+                        } else if (hint?.packageType != null) {
+                          packageType = hint!.packageType!;
                         }
                       });
                     },
                   ),
+                  if (product != null)
+                    _ProductInsightCard(product: product),
                   AmountField(
                     controller: purchase,
                     label: S.purchasePrice,
@@ -211,10 +245,12 @@ class _ProductsPageState extends State<ProductsPage> {
                     AmountField(
                       controller: stock,
                       label: S.currentStock,
+                      helperText: 'عدد العبوات',
                     ),
                   AmountField(
                     controller: min,
                     label: S.minimumStock,
+                    helperText: 'حد أدنى بعدد العبوات',
                   ),
                   SearchableSelectField<String?>(
                     label: S.category,
@@ -229,13 +265,48 @@ class _ProductsPageState extends State<ProductsPage> {
                     ],
                     onChanged: (v) => setS(() => categoryId = v),
                   ),
-                  TextField(
-                    controller: packSize,
-                    decoration: const InputDecoration(labelText: S.packSize),
+                  AmountField(
+                    controller: packSizeValue,
+                    label: S.packageSize,
+                    helperText: 'مثال: 250',
                   ),
-                  TextField(
-                    controller: unit,
-                    decoration: const InputDecoration(labelText: S.unit),
+                  SearchableSelectField<String>(
+                    label: S.unitOfMeasure,
+                    value: unitOfMeasure,
+                    allowCustom: false,
+                    options: [
+                      for (final unit in ProductUnit.measurable)
+                        SearchableOption(
+                          value: unit.code,
+                          label: '${unit.symbol} — ${unit.arabicLabel}',
+                        ),
+                    ],
+                    onChanged: (v) => setS(() => unitOfMeasure = v ?? 'ml'),
+                  ),
+                  SearchableSelectField<String>(
+                    label: S.packageType,
+                    value: packageType,
+                    options: [
+                      for (final type in PackageTypes.all)
+                        SearchableOption(value: type, label: type),
+                    ],
+                    onChanged: (v) =>
+                        setS(() => packageType = v ?? PackageTypes.bottle),
+                    onCustomText: (text) {
+                      if (text.trim().isNotEmpty) {
+                        setS(() => packageType = text.trim());
+                      }
+                    },
+                  ),
+                  AmountField(
+                    controller: reorder,
+                    label: S.reorderPoint,
+                    helperText: 'بنفس وحدة الكمية الظاهرة مثل 10 لتر — اختياري',
+                  ),
+                  AmountField(
+                    controller: safety,
+                    label: S.safetyStock,
+                    helperText: 'بنفس وحدة الكمية الظاهرة — اختياري',
                   ),
                   const SizedBox(height: 12),
                   if (error != null)
@@ -261,7 +332,11 @@ class _ProductsPageState extends State<ProductsPage> {
                                   categoryId: categoryId,
                                   brand: brand.text,
                                   description: description.text,
-                                  packSize: packSize.text,
+                                  packageSize: packSizeValue.text,
+                                  unitOfMeasure: unitOfMeasure,
+                                  packageType: packageType,
+                                  reorderPoint: reorder.text,
+                                  safetyStock: safety.text,
                                   purchasePrice: Money.parse(
                                     purchase.text.isEmpty ? '0' : purchase.text,
                                   ),
@@ -274,7 +349,7 @@ class _ProductsPageState extends State<ProductsPage> {
                                   minimumStock: Quantity.parse(
                                     min.text.isEmpty ? '0' : min.text,
                                   ),
-                                  unit: unit.text,
+                                  unit: packageType,
                                   images: images,
                                 );
                                 await sl<SyncEngine>()
@@ -356,6 +431,78 @@ class _ProductsPageState extends State<ProductsPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProductInsightCard extends StatelessWidget {
+  const _ProductInsightCard({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ProductInsight>(
+      future: sl<InventoryAnalytics>().insightFor(product),
+      builder: (context, snapshot) {
+        final insight = snapshot.data;
+        final measure = insight?.measure ?? InventoryMeasure.fromProduct(product);
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'تحليل المخزون',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                _InsightLine('المخزون الحالي', measure.packagesLabel),
+                _InsightLine('الكمية المتبقية', measure.actualLabel),
+                _InsightLine(
+                  'المباع',
+                  insight?.soldLabel ?? '…',
+                ),
+                _InsightLine(
+                  'المشترى',
+                  insight?.purchasedLabel ?? '…',
+                ),
+                _InsightLine(
+                  'المرتجع',
+                  insight?.returnedLabel ?? '…',
+                ),
+                if (insight?.needsReorder == true)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text('الحالة: يحتاج إعادة طلب'),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _InsightLine extends StatelessWidget {
+  const _InsightLine(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 }

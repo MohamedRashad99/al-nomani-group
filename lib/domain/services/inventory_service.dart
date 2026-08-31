@@ -6,6 +6,7 @@ import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
+import 'inventory_measure.dart';
 
 class InventoryService {
   InventoryService({
@@ -74,6 +75,8 @@ class InventoryService {
     if (next.isNegative && !allowNegative) {
       throw const ValidationException('المخزون غير كافٍ.');
     }
+    final measure = InventoryMeasure.fromProduct(product);
+    final actualDelta = measure.actualOf(signed.isNegative ? -signed : signed);
     final now = DateTime.now().toUtc();
     final movementId = newId();
     final deviceId = await _devices.deviceId();
@@ -85,17 +88,23 @@ class InventoryService {
         deviceId: deviceId,
       ),
     );
+    final actualNote = 'فعلي ${InventoryMeasure.formatQuantity(actualDelta, measure.unitOfMeasure)}';
+    final combinedNotes = notes == null || notes.trim().isEmpty
+        ? actualNote
+        : '${notes.trim()} • $actualNote';
     final movement = InventoryMovement(
       id: movementId,
       productId: productId,
       type: type,
       quantity: quantity.toStorage(),
-      unit: product.unit,
+      unit: measure.packageType,
       previousStock: previous.toStorage(),
       newStock: next.toStorage(),
       referenceType: referenceType,
       referenceId: referenceId,
-      notes: notes,
+      notes: combinedNotes,
+      actualQuantity: actualDelta.toStorage(),
+      unitOfMeasure: measure.unitOfMeasure.code,
       createdBy: session.userId,
       deviceId: deviceId,
       createdAt: now,

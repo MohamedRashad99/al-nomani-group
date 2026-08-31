@@ -28,6 +28,11 @@ abstract final class S {
   static const selectSupplier = 'اختر المورد';
   static const supplierName = 'اسم المورد';
   static const packSize = 'الحجم / العبوة';
+  static const packageSize = 'حجم العبوة';
+  static const unitOfMeasure = 'وحدة القياس';
+  static const packageType = 'نوع العبوة';
+  static const reorderPoint = 'نقطة إعادة الطلب';
+  static const safetyStock = 'مخزون الأمان';
   static const deleteProduct = 'حذف المنتج';
   static const deleteCustomer = 'حذف العميل';
   static const preview = 'معاينة';

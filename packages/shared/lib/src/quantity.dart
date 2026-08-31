@@ -49,6 +49,18 @@ class Quantity implements Comparable<Quantity> {
   Quantity operator -(Quantity other) => Quantity._(milli - other.milli);
   Quantity operator -() => Quantity._(-milli);
 
+  /// Scale-preserving multiply: `100 packages * 250 ml = 25000 ml`.
+  Quantity operator *(Quantity other) =>
+      Quantity._((milli * other.milli) ~/ BigInt.from(1000));
+
+  String toDisplay() {
+    final stored = toStorage();
+    if (stored.endsWith('.000')) {
+      return stored.substring(0, stored.length - 4);
+    }
+    return stored.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
   @override
   int compareTo(Quantity other) => milli.compareTo(other.milli);
 

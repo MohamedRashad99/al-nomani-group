@@ -80,6 +80,11 @@ class CatalogService {
     String? brand,
     String? description,
     String? packSize,
+    String? packageSize,
+    String? unitOfMeasure,
+    String? packageType,
+    String? reorderPoint,
+    String? safetyStock,
     required Money purchasePrice,
     required Money sellingPrice,
     required Quantity currentStock,
@@ -100,9 +105,25 @@ class CatalogService {
     if (name.trim().isEmpty || sku.trim().isEmpty) {
       throw const ValidationException('اسم المنتج والرمز مطلوبان.');
     }
-    if (unit.trim().isEmpty) {
-      throw const ValidationException('الوحدة مطلوبة.');
+    final type = (packageType ?? unit).trim();
+    if (type.isEmpty) {
+      throw const ValidationException('نوع العبوة مطلوب.');
     }
+    Quantity? parsedSize;
+    if ((packageSize ?? '').trim().isNotEmpty) {
+      try {
+        parsedSize = Quantity.parse(packageSize!.trim());
+      } catch (_) {
+        throw const ValidationException('حجم العبوة غير صالح.');
+      }
+      if (!parsedSize.isPositive) {
+        throw const ValidationException('حجم العبوة يجب أن يكون أكبر من صفر.');
+      }
+    }
+    final uomCode = (unitOfMeasure ?? '').trim();
+    final displayPack = parsedSize == null
+        ? (packSize?.trim().isEmpty == true ? existing?.packSize : packSize?.trim())
+        : '${parsedSize.toDisplay()} ${ProductUnit.fromCode(uomCode.isEmpty ? (existing?.unitOfMeasure ?? 'pcs') : uomCode).symbol}';
     final now = DateTime.now().toUtc();
     final deviceId = await _devices.deviceId();
     final productId = id ?? newId();
@@ -113,12 +134,23 @@ class CatalogService {
       categoryId: categoryId,
       brand: brand,
       description: description,
-      packSize: packSize?.trim().isEmpty == true ? null : packSize?.trim(),
+      packSize: displayPack,
+      packageSize: parsedSize?.toStorage() ?? existing?.packageSize,
+      unitOfMeasure: uomCode.isEmpty
+          ? existing?.unitOfMeasure
+          : ProductUnit.fromCode(uomCode).code,
+      packageType: type,
+      reorderPoint: reorderPoint == null
+          ? existing?.reorderPoint
+          : (reorderPoint.trim().isEmpty ? null : reorderPoint.trim()),
+      safetyStock: safetyStock == null
+          ? existing?.safetyStock
+          : (safetyStock.trim().isEmpty ? null : safetyStock.trim()),
       purchasePrice: purchasePrice.toStorage(),
       sellingPrice: sellingPrice.toStorage(),
       currentStock: existing?.currentStock ?? currentStock.toStorage(),
       minimumStock: minimumStock.toStorage(),
-      unit: unit.trim(),
+      unit: type,
       customUnitLabel: customUnitLabel,
       isActive: isActive,
       version: (existing?.version ?? 0) + 1,

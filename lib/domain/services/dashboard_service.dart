@@ -3,6 +3,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import '../../data/remote/erp_store.dart';
 import '../entities/erp_models.dart';
 import '../operational_status.dart';
+import 'inventory_measure.dart';
 
 class DashboardRank {
   const DashboardRank({
@@ -63,6 +64,10 @@ class DashboardSnapshot {
   final List<DashboardInsight> slowMoving;
   final List<DashboardInsight> expectedShortages;
   final List<DashboardInsight> expectedPurchases;
+  final List<DashboardInsight> consumption;
+  final List<DashboardInsight> fastMovingToday;
+  final List<DashboardInsight> fastMovingWeek;
+  final List<DashboardInsight> reorderAlerts;
 
   const DashboardSnapshot({
     required this.todaySales,
@@ -90,6 +95,10 @@ class DashboardSnapshot {
     this.slowMoving = const [],
     this.expectedShortages = const [],
     this.expectedPurchases = const [],
+    this.consumption = const [],
+    this.fastMovingToday = const [],
+    this.fastMovingWeek = const [],
+    this.reorderAlerts = const [],
   });
 }
 
@@ -126,6 +135,8 @@ class DashboardService {
       snapshot.recentMovements.map((row) => row.id).join(),
       snapshot.fastMoving.map((row) => row.id).join(),
       snapshot.expectedShortages.map((row) => row.id).join(),
+      snapshot.consumption.map((row) => '${row.id}:${row.detail}').join(),
+      snapshot.reorderAlerts.map((row) => row.id).join(),
     ].join('|');
   }
 
@@ -185,10 +196,10 @@ class DashboardService {
     var low = 0;
     var out = 0;
     for (final p in products) {
-      final stock = Quantity.parse(p.currentStock);
-      if (!stock.isPositive) {
+      final measure = InventoryMeasure.fromProduct(p);
+      if (measure.isOutOfStock) {
         out++;
-      } else if (stock <= Quantity.parse(p.minimumStock)) {
+      } else if (measure.isLowStock) {
         low++;
       }
     }
@@ -271,67 +282,126 @@ class DashboardService {
 
     final lowStockProducts =
         products.where((product) {
-          final stock = Quantity.parse(product.currentStock);
-          return stock <= Quantity.parse(product.minimumStock);
+          final measure = InventoryMeasure.fromProduct(product);
+          return measure.isLowStock || measure.needsReorder;
         }).toList()..sort(
-          (a, b) => Quantity.parse(
-            a.currentStock,
-          ).compareTo(Quantity.parse(b.currentStock)),
+          (a, b) => InventoryMeasure.fromProduct(
+            a,
+          ).actual.compareTo(InventoryMeasure.fromProduct(b).actual),
         );
     final outOfStockProducts =
         products
-            .where((product) => !Quantity.parse(product.currentStock).isPositive)
+            .where((product) => InventoryMeasure.fromProduct(product).isOutOfStock)
             .toList();
 
-    final start30 = startToday.subtract(const Duration(days: 30));
-    final salesLast30 = {
-      for (final sale in sales)
-        if (!sale.soldAt.isBefore(start30)) sale.id,
-    };
-    final qty30 = <String, Quantity>{};
-    for (final item in saleItems) {
-      if (!salesLast30.contains(item.saleId)) continue;
-      final qty = Quantity.parse(item.quantity);
-      qty30.update(
-        item.productId,
-        (value) => value + qty,
-        ifAbsent: () => qty,
-      );
+    Quantity qtyOf(String raw) {
+      try {
+        return Quantity.parse(raw);
+      } catch (_) {
+        return Quantity.zero();
+      }
     }
-    final rankedQty = qty30.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+
+    Map<String, Quantity> soldIn(DateTime from) {
+      final ids = {
+        for (final sale in sales)
+          if (!sale.soldAt.isBefore(from)) sale.id,
+      };
+      final qty = <String, Quantity>{};
+      for (final item in saleItems) {
+        if (!ids.contains(item.saleId)) continue;
+        final amount = qtyOf(item.quantity);
+        qty.update(
+          item.productId,
+          (value) => value + amount,
+          ifAbsent: () => amount,
+        );
+      }
+      return qty;
+    }
+
+    List<DashboardInsight> rankMoving(
+      Map<String, Quantity> qty, {
+      required String period,
+      int take = 5,
+    }) {
+      final ranked = qty.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final out = <DashboardInsight>[];
+      for (final entry in ranked) {
+        final product = productById[entry.key];
+        if (product == null) continue;
+        out.add(
+          DashboardInsight(
+            id: entry.key,
+            name: product.name,
+            detail:
+                'تم بيع ${InventoryMeasure.fromProduct(product).formatActual(entry.value)} $period',
+          ),
+        );
+        if (out.length >= take) break;
+      }
+      return out;
+    }
+
+    final start30 = startToday.subtract(const Duration(days: 30));
+    final qtyToday = soldIn(startToday);
+    final qtyWeek = soldIn(startWeek);
+    final qtyMonth = soldIn(startMonth);
+    final qty30 = soldIn(start30);
+
     DashboardInsight insightFor(String id, String detail) => DashboardInsight(
       id: id,
       name: productById[id]?.name ?? 'منتج',
       detail: detail,
     );
-    final fastMoving = [
-      for (final entry in rankedQty.take(5))
-        insightFor(entry.key, 'مبيع ${entry.value.toStorage()} خلال 30 يوماً'),
-    ];
+    final fastMovingToday = rankMoving(qtyToday, period: 'اليوم');
+    final fastMovingWeek = rankMoving(qtyWeek, period: 'هذا الأسبوع');
+    final fastMoving = rankMoving(qtyMonth, period: 'هذا الشهر');
     final slowMoving = [
       for (final product in products)
         if (!qty30.containsKey(product.id) &&
-            Quantity.parse(product.currentStock).isPositive)
-          insightFor(product.id, 'بدون حركة بيع خلال 30 يوماً'),
+            InventoryMeasure.fromProduct(product).packages.isPositive)
+          insightFor(
+            product.id,
+            'بدون حركة بيع • ${InventoryMeasure.fromProduct(product).actualLabel}',
+          ),
     ].take(5).toList();
+    final consumption = [
+      for (final entry in (qtyMonth.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value))).take(6))
+        insightFor(
+          entry.key,
+          'تم بيع ${InventoryMeasure.fromProduct(productById[entry.key]!).formatActual(entry.value)} من المنتج',
+        ),
+    ];
     final expectedShortages = <DashboardInsight>[];
     final expectedPurchases = <DashboardInsight>[];
+    final reorderAlerts = <DashboardInsight>[];
     for (final product in products) {
+      final measure = InventoryMeasure.fromProduct(product);
+      if (measure.needsReorder) {
+        reorderAlerts.add(
+          insightFor(
+            product.id,
+            '${measure.remainingLabel} • الحد ${measure.formatActual(measure.minimumPackages)}',
+          ),
+        );
+      }
       final sold = qty30[product.id];
       if (sold == null || sold.isZero) continue;
       final daily = sold.milli ~/ BigInt.from(30);
       if (daily <= BigInt.zero) continue;
-      final stock = Quantity.parse(product.currentStock);
-      final daysLeft = stock.milli ~/ daily;
+      final daysLeft = measure.packages.milli ~/ daily;
       if (daysLeft <= BigInt.from(14)) {
-        final row = insightFor(
-          product.id,
-          'يتوقع النفاد خلال ${daysLeft.toString()} يوماً',
+        expectedShortages.add(
+          insightFor(
+            product.id,
+            'يتوقع النفاد خلال ${daysLeft.toString()} يوماً • ${measure.actualLabel}',
+          ),
         );
-        expectedShortages.add(row);
         expectedPurchases.add(
-          insightFor(product.id, 'يحتاج شراء قبل نفاد المخزون'),
+          insightFor(product.id, 'يحتاج شراء قبل نفاد ${measure.actualLabel}'),
         );
       }
     }
@@ -364,6 +434,10 @@ class DashboardService {
       slowMoving: slowMoving,
       expectedShortages: expectedShortages.take(5).toList(),
       expectedPurchases: expectedPurchases.take(5).toList(),
+      consumption: consumption,
+      fastMovingToday: fastMovingToday,
+      fastMovingWeek: fastMovingWeek,
+      reorderAlerts: reorderAlerts.take(6).toList(),
     );
   }
 }

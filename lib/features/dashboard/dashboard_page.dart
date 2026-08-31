@@ -12,6 +12,7 @@ import '../../core/utils/arabic_format.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/services/dashboard_service.dart';
+import '../../domain/services/inventory_measure.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
@@ -719,7 +720,7 @@ class _SmartInsightsPanel extends StatelessWidget {
                 DashboardInsight(
                   id: product.id,
                   name: product.name,
-                  detail: 'المتبقي ${product.currentStock}',
+                  detail: InventoryMeasure.fromProduct(product).remainingLabel,
                 ),
             ],
           ),
@@ -731,12 +732,27 @@ class _SmartInsightsPanel extends StatelessWidget {
                 DashboardInsight(
                   id: product.id,
                   name: product.name,
-                  detail: 'المخزون صفر',
+                  detail: 'الكمية = 0',
                 ),
             ],
           ),
           _InsightGroup(
-            title: 'الأسرع حركة / الأكثر مبيعاً',
+            title: 'تنبيه إعادة الطلب',
+            empty: 'لا توجد أصناف تحتاج إعادة طلب',
+            items: snapshot.reorderAlerts,
+          ),
+          _InsightGroup(
+            title: 'الأسرع حركة اليوم',
+            empty: 'لا توجد مبيعات اليوم',
+            items: snapshot.fastMovingToday,
+          ),
+          _InsightGroup(
+            title: 'الأسرع حركة هذا الأسبوع',
+            empty: 'لا توجد حركة بيع هذا الأسبوع',
+            items: snapshot.fastMovingWeek,
+          ),
+          _InsightGroup(
+            title: 'الأسرع حركة / الأكثر مبيعاً هذا الشهر',
             empty: 'لا توجد حركة بيع كافية',
             items: snapshot.fastMoving,
           ),
@@ -744,6 +760,11 @@ class _SmartInsightsPanel extends StatelessWidget {
             title: 'البطيء حركة',
             empty: 'لا توجد أصناف راكدة ظاهرة',
             items: snapshot.slowMoving,
+          ),
+          _InsightGroup(
+            title: 'استهلاك المخزون',
+            empty: 'لا يوجد استهلاك مسجّل هذا الشهر',
+            items: snapshot.consumption,
           ),
           _InsightGroup(
             title: 'نفاد متوقع',
@@ -1066,12 +1087,12 @@ class _LowStockPanel extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                       backgroundColor:
-                          Quantity.parse(product.currentStock).isZero
+                          InventoryMeasure.fromProduct(product).isOutOfStock
                           ? const Color(0xFFFFEBEE)
                           : const Color(0xFFFFF3E0),
                       child: Icon(
                         Icons.inventory_2_outlined,
-                        color: Quantity.parse(product.currentStock).isZero
+                        color: InventoryMeasure.fromProduct(product).isOutOfStock
                             ? AppColors.danger
                             : AppColors.orange,
                       ),
@@ -1081,9 +1102,11 @@ class _LowStockPanel extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text('الحد الأدنى ${product.minimumStock}'),
+                    subtitle: Text(
+                      InventoryMeasure.fromProduct(product).remainingLabel,
+                    ),
                     trailing: Text(
-                      product.currentStock,
+                      InventoryMeasure.fromProduct(product).packagesLabel,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),

@@ -3,6 +3,7 @@ import 'package:al_nomani_shared/al_nomani_shared.dart';
 import '../../data/remote/erp_store.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/operational_status.dart';
+import '../../domain/services/inventory_measure.dart';
 
 class ArabicWorkbookBuilder {
   ArabicWorkbookBuilder(this._store);
@@ -178,6 +179,7 @@ class ArabicWorkbookBuilder {
           'سعر الشراء',
           'سعر البيع',
           'المخزون الحالي',
+          'الكمية الفعلية',
           'الوحدة',
           'نشط',
         ],
@@ -190,6 +192,7 @@ class ArabicWorkbookBuilder {
             product.purchasePrice,
             product.sellingPrice,
             product.currentStock,
+            InventoryMeasure.fromProduct(product).actualLabel,
             product.unit,
             product.isActive,
           ],

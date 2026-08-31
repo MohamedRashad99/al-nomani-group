@@ -31,5 +31,13 @@ void main() {
         '0.500',
       );
     });
+
+    test('multiplies package count by package size', () {
+      expect(
+        (Quantity.parse('100') * Quantity.parse('250')).toDisplay(),
+        '25000',
+      );
+      expect((Quantity.parse('20') * Quantity.parse('50')).toDisplay(), '1000');
+    });
   });
 }

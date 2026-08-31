@@ -11,6 +11,7 @@ import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/models/sale_draft.dart';
 import '../../domain/services/catalog_service.dart';
+import '../../domain/services/inventory_measure.dart';
 import '../../domain/services/sale_service.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
@@ -528,7 +529,7 @@ class _NewSalePageState extends State<NewSalePage> {
                                 value: product.id,
                                 label: product.name,
                                 subtitle:
-                                    '${product.sku} • متوفر ${product.currentStock}',
+                                    '${product.sku} • ${InventoryMeasure.fromProduct(product).packagesLabel} • ${InventoryMeasure.fromProduct(product).actualLabel}',
                                 searchText:
                                     '${product.sku} ${product.brand ?? ''}',
                               ),
@@ -718,7 +719,8 @@ class _NewSalePageState extends State<NewSalePage> {
     return showQuantitySheet(
       context: context,
       title: product.name,
-      helperText: 'المتوفر ${product.currentStock}',
+      helperText:
+          'المتوفر ${InventoryMeasure.fromProduct(product).packagesLabel} • ${InventoryMeasure.fromProduct(product).actualLabel}',
       max: available.isPositive ? available : Quantity.zero(),
     );
   }

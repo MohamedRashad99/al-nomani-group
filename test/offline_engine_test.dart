@@ -13,6 +13,7 @@ import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/services/catalog_service.dart';
 import 'package:al_nomani_group/domain/services/collection_service.dart';
 import 'package:al_nomani_group/domain/services/dashboard_service.dart';
+import 'package:al_nomani_group/domain/services/inventory_service.dart';
 import 'package:al_nomani_group/domain/services/outstanding_service.dart';
 import 'package:al_nomani_group/domain/services/purchase_service.dart';
 import 'package:al_nomani_group/domain/services/sale_service.dart';
@@ -765,6 +766,35 @@ void main() {
   test('new products default to an empty images list', () async {
     final store = await readyStore();
     expect(store.products['p-npk']!.images, isEmpty);
+  });
+
+  test('inventory apply records actual quantity from package size', () async {
+    final store = await readyStore();
+    await sl<CatalogService>().upsertProduct(
+      session: admin(),
+      id: 'p-imidacloprid',
+      name: 'إيميداكلوبريد',
+      sku: 'IMI',
+      purchasePrice: Money.parse('5.500'),
+      sellingPrice: Money.parse('5.500'),
+      currentStock: Quantity.parse('20'),
+      minimumStock: Quantity.parse('1'),
+      unit: 'عبوة',
+      packageSize: '250',
+      unitOfMeasure: 'ml',
+      packageType: 'عبوة',
+    );
+    await sl<InventoryService>().apply(
+      session: admin(),
+      productId: 'p-imidacloprid',
+      quantity: Quantity.parse('2'),
+      type: 'sale',
+    );
+    expect(store.products['p-imidacloprid']!.currentStock, '18.000');
+    final movement = store.movements.values.firstWhere((row) => row.type == 'sale');
+    expect(movement.actualQuantity, '500.000');
+    expect(movement.unitOfMeasure, 'ml');
+    expect(movement.unit, 'عبوة');
   });
 
   test('purchase return, payment, and receipt stay on the supplier ledger', () async {
