@@ -10,9 +10,11 @@ import '../../core/utils/arabic_format.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
 import '../../domain/models/sale_draft.dart';
+import '../../domain/models/sale_unit.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/inventory_measure.dart';
 import '../../domain/services/sale_service.dart';
+import '../../domain/services/sale_unit_conversion.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -20,8 +22,8 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
-import '../../shared/widgets/quantity_sheet.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/unit_quantity_sheet.dart';
 
 enum _SalePeriod { all, today, week, month }
 
@@ -541,18 +543,12 @@ class _NewSalePageState extends State<NewSalePage> {
                             }
                             final picked = selected;
                             if (picked == null) return;
-                            final reserved = _lines
-                                .where((line) => line.productId == picked.id)
-                                .fold(
-                                  Quantity.zero(),
-                                  (sum, line) => sum + line.quantity,
-                                );
-                            final quantity = await _askQuantity(
+                            final breakdown = await _askQuantity(
                               picked,
-                              reserved: reserved,
+                              reserved: _reservedFor(picked.id),
                             );
-                            if (quantity == null) return;
-                            _addProduct(picked, quantity);
+                            if (breakdown == null) return;
+                            _addProduct(picked, breakdown);
                           },
                         ),
                       );
@@ -660,22 +656,19 @@ class _NewSalePageState extends State<NewSalePage> {
     );
   }
 
-  void _addProduct(Product product, Quantity quantity) {
-    final existingQuantity = _lines
-        .where((line) => line.productId == product.id)
-        .fold(Quantity.zero(), (sum, line) => sum + line.quantity);
-    if (existingQuantity + quantity > Quantity.parse(product.currentStock)) {
+  void _addProduct(Product product, SaleQuantityBreakdown breakdown) {
+    final reserved = _reservedFor(product.id);
+    if (reserved + breakdown.packageQuantity > _stockOf(product)) {
       _message(S.insufficientStock);
       return;
     }
     setState(() {
       _products[product.id] = product;
       _lines.add(
-        SaleLineDraft(
+        SaleLineDraft.fromBreakdown(
           productId: product.id,
-          quantity: quantity,
           unit: product.unit,
-          unitPrice: Money.parse(product.sellingPrice),
+          breakdown: breakdown,
         ),
       );
       _syncPaidWithMode();
@@ -683,45 +676,59 @@ class _NewSalePageState extends State<NewSalePage> {
   }
 
   Future<void> _editLine(int index) async {
-    final product = _products[_lines[index].productId];
+    final current = _lines[index];
+    final product = _products[current.productId];
     if (product == null) return;
-    final reserved = _lines
-        .asMap()
-        .entries
-        .where(
-          (entry) =>
-              entry.key != index && entry.value.productId == product.id,
-        )
-        .fold(Quantity.zero(), (sum, entry) => sum + entry.value.quantity);
-    final quantity = await _askQuantity(product, reserved: reserved);
-    if (quantity == null) return;
-    if (reserved + quantity > Quantity.parse(product.currentStock)) {
+    final reserved = _reservedFor(product.id, skipIndex: index);
+    final breakdown = await _askQuantity(
+      product,
+      reserved: reserved,
+      current: current,
+    );
+    if (breakdown == null) return;
+    if (reserved + breakdown.packageQuantity > _stockOf(product)) {
       _message(S.insufficientStock);
       return;
     }
     setState(() {
-      _lines[index] = SaleLineDraft(
+      _lines[index] = SaleLineDraft.fromBreakdown(
         productId: product.id,
-        quantity: quantity,
         unit: product.unit,
-        unitPrice: _lines[index].unitPrice,
+        breakdown: breakdown,
       );
       _syncPaidWithMode();
     });
   }
 
-  Future<Quantity?> _askQuantity(
+  /// Packages of [productId] already on the invoice, so the same product can be
+  /// added twice without oversetting the stock.
+  Quantity _reservedFor(String productId, {int? skipIndex}) {
+    var reserved = Quantity.zero();
+    for (var index = 0; index < _lines.length; index++) {
+      if (index == skipIndex) continue;
+      if (_lines[index].productId != productId) continue;
+      reserved = reserved + _lines[index].convertedPackageQuantity;
+    }
+    return reserved;
+  }
+
+  Quantity _stockOf(Product product) =>
+      InventoryMeasure.fromProduct(product).packages;
+
+  Future<SaleQuantityBreakdown?> _askQuantity(
     Product product, {
     required Quantity reserved,
+    SaleLineDraft? current,
   }) async {
-    final stock = Quantity.parse(product.currentStock);
-    final available = stock - reserved;
-    return showQuantitySheet(
+    final available = _stockOf(product) - reserved;
+    return showUnitQuantitySheet(
       context: context,
       title: product.name,
-      helperText:
-          'المتوفر ${InventoryMeasure.fromProduct(product).packagesLabel} • ${InventoryMeasure.fromProduct(product).actualLabel}',
-      max: available.isPositive ? available : Quantity.zero(),
+      converter: SaleUnitConverter.forProduct(
+        product,
+        unitPrice: current?.unitPrice,
+      ),
+      availablePackages: available.isPositive ? available : Quantity.zero(),
     );
   }
 
@@ -833,7 +840,7 @@ class _SaleLineTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(product?.name ?? 'منتج'),
       subtitle: Text(
-        '${line.quantity.toStorage()} × ${line.unitPrice.toDisplay()} ${Money.currencySymbol}',
+        '${line.quantityLabel} × ${line.unitPrice.toDisplay()} ${Money.currencySymbol}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -964,7 +971,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                               'منتج غير متاح',
                         ),
                         subtitle: Text(
-                          '${item.quantity} × ${item.unitPrice} ${Money.currencySymbol}',
+                          '${_itemQuantityLabel(item)} × ${item.unitPrice} ${Money.currencySymbol}',
                         ),
                         trailing: MoneyText(Money.parse(item.lineTotal)),
                       ),
@@ -1062,6 +1069,15 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
       if (mounted) sl<AppAlertCubit>().error(error.toString());
     }
   }
+}
+
+/// Invoices saved before multi-unit selling read back as package sales, so
+/// they keep showing the plain package quantity they always showed.
+String _itemQuantityLabel(SaleItem item) {
+  if (SaleUnitKind.fromStorage(item.selectedUnit) == SaleUnitKind.package) {
+    return item.quantity;
+  }
+  return '${item.inputQuantity} ${item.inputUnit} • ${item.quantity} ${item.unit}';
 }
 
 class _DetailRow extends StatelessWidget {

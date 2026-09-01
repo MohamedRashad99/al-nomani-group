@@ -23,17 +23,21 @@ class FirebaseBootstrap {
         return false;
       }
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: FirebaseOptions(
-            apiKey: apiKey,
-            appId: appId,
-            messagingSenderId: json['messagingSenderId'] as String? ?? '',
-            projectId: projectId,
-            authDomain: json['authDomain'] as String?,
-            storageBucket: json['storageBucket'] as String?,
-            measurementId: json['measurementId'] as String?,
-          ),
-        );
+        if (kIsWeb) {
+          await Firebase.initializeApp(
+            options: FirebaseOptions(
+              apiKey: apiKey,
+              appId: appId,
+              messagingSenderId: json['messagingSenderId'] as String? ?? '',
+              projectId: projectId,
+              authDomain: json['authDomain'] as String?,
+              storageBucket: json['storageBucket'] as String?,
+              measurementId: json['measurementId'] as String?,
+            ),
+          );
+        } else {
+          await Firebase.initializeApp();
+        }
       }
       if (kIsWeb) {
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);

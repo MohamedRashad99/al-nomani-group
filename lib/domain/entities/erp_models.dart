@@ -401,6 +401,10 @@ class Sale {
 }
 
 class SaleItem {
+  /// [quantity] is the package quantity stock and money are calculated from,
+  /// even when the seller typed grams. [selectedUnit], [inputQuantity] and
+  /// [inputUnit] are optional: invoices saved before multi-unit selling have
+  /// none of them and read back as a package sale of [quantity].
   const SaleItem({
     required this.id,
     required this.saleId,
@@ -409,10 +413,15 @@ class SaleItem {
     required this.unit,
     required this.unitPrice,
     required this.lineTotal,
+    String? selectedUnit,
+    String? inputQuantity,
+    String? inputUnit,
     this.version = 1,
     this.deviceId,
     required this.createdAt,
-  });
+  }) : _selectedUnit = selectedUnit,
+       _inputQuantity = inputQuantity,
+       _inputUnit = inputUnit;
 
   final String id;
   final String saleId;
@@ -421,9 +430,24 @@ class SaleItem {
   final String unit;
   final String unitPrice;
   final String lineTotal;
+  final String? _selectedUnit;
+  final String? _inputQuantity;
+  final String? _inputUnit;
   final int version;
   final String? deviceId;
   final DateTime createdAt;
+
+  /// `package` or `subUnit` — see `SaleUnitKind`.
+  String get selectedUnit => _selectedUnit ?? 'package';
+
+  /// What the seller typed, in [inputUnit] (`250` grams).
+  String get inputQuantity => _inputQuantity ?? quantity;
+
+  /// Unit label of [inputQuantity] (`جم`), or the package type.
+  String get inputUnit => _inputUnit ?? unit;
+
+  /// The typed quantity converted to packages (`0.5`).
+  String get convertedPackageQuantity => quantity;
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -433,6 +457,9 @@ class SaleItem {
     'unit': unit,
     'unit_price': unitPrice,
     'line_total': lineTotal,
+    'selected_unit': selectedUnit,
+    'input_quantity': inputQuantity,
+    'input_unit': inputUnit,
     'version': version,
     'device_id': deviceId,
     'created_at': createdAt.toIso8601String(),
