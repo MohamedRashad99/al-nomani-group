@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drift/drift.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -268,6 +269,19 @@ class FirebaseSyncService {
     return fallback;
   }
 
+  DateTime _updatedAt(Map<String, dynamic> data) {
+    for (final key in const ['updated_at', 'updatedAt']) {
+      final value = data[key];
+      if (value is Timestamp) return value.toDate().toUtc();
+      if (value is DateTime) return value.toUtc();
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed.toUtc();
+      }
+    }
+    return _date(data, const ['created_at', 'createdAt']);
+  }
+
   DateTime _date(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {
       final value = data[key];
@@ -278,7 +292,7 @@ class FirebaseSyncService {
         if (parsed != null) return parsed.toUtc();
       }
     }
-    return DateTime.now().toUtc();
+    return EgyptTime.nowUtc();
   }
 
   int _versionOf(Map<String, dynamic> data) {
@@ -292,7 +306,6 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
-      final now = DateTime.now().toUtc();
       await db
           .into(db.customers)
           .insertOnConflictUpdate(
@@ -307,7 +320,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -319,7 +332,6 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
-      final now = DateTime.now().toUtc();
       await db
           .into(db.productCategories)
           .insertOnConflictUpdate(
@@ -331,7 +343,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -355,7 +367,6 @@ class FirebaseSyncService {
           await (db.delete(db.products)..where((t) => t.id.equals(oldId))).go();
         },
       );
-      final now = DateTime.now().toUtc();
       await db
           .into(db.products)
           .insertOnConflictUpdate(
@@ -376,7 +387,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -403,7 +414,6 @@ class FirebaseSyncService {
           await (db.delete(db.sales)..where((t) => t.id.equals(oldId))).go();
         },
       );
-      final now = DateTime.now().toUtc();
       await db
           .into(db.sales)
           .insertOnConflictUpdate(
@@ -423,7 +433,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -460,7 +470,6 @@ class FirebaseSyncService {
     for (final data in docs) {
       final id = _text(data, const ['id', 'entityId']);
       if (id.isEmpty) continue;
-      final now = DateTime.now().toUtc();
       await db
           .into(db.collections)
           .insertOnConflictUpdate(
@@ -478,7 +487,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -506,7 +515,6 @@ class FirebaseSyncService {
           },
         );
       }
-      final now = DateTime.now().toUtc();
       await db
           .into(db.customerAccounts)
           .insertOnConflictUpdate(
@@ -519,7 +527,7 @@ class FirebaseSyncService {
               version: Value(_versionOf(data)),
               deviceId: Value(_text(data, const ['deviceId', 'device_id'])),
               createdAt: Value(_date(data, const ['created_at', 'createdAt'])),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }
@@ -599,7 +607,6 @@ class FirebaseSyncService {
       existing ??= await (db.select(
         db.users,
       )..where((t) => t.username.equals(username))).getSingleOrNull();
-      final now = DateTime.now().toUtc();
       await db
           .into(db.users)
           .insertOnConflictUpdate(
@@ -626,7 +633,7 @@ class FirebaseSyncService {
               createdAt: Value(
                 existing?.createdAt ?? _date(data, const ['created_at', 'createdAt']),
               ),
-              updatedAt: Value(now),
+              updatedAt: Value(_updatedAt(data)),
             ),
           );
     }

@@ -16,9 +16,18 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_period_filter.dart';
+import '../../shared/widgets/transaction_timestamp.dart';
 
-class CollectionsPage extends StatelessWidget {
+class CollectionsPage extends StatefulWidget {
   const CollectionsPage({super.key});
+
+  @override
+  State<CollectionsPage> createState() => _CollectionsPageState();
+}
+
+class _CollectionsPageState extends State<CollectionsPage> {
+  TransactionPeriod _period = TransactionPeriod.all;
 
   @override
   Widget build(BuildContext context) {
@@ -38,22 +47,54 @@ class CollectionsPage extends StatelessWidget {
       child: StreamBuilder<List<Collection>>(
         stream: sl<CollectionService>().watch(),
         builder: (context, snap) {
-          final items = snap.data ?? const <Collection>[];
+          final items = (snap.data ?? const <Collection>[])
+              .where((c) => TransactionPeriodFilter.includes(c.collectedAt, _period))
+              .toList();
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (items.isEmpty) return const Center(child: Text(S.empty));
-          return ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (_, i) {
-              final c = items[i];
-              return ListTile(
-                title: MoneyText(Money.parse(c.amount)),
-                subtitle: Text(
-                  '${ArabicFormat.paymentMethod(c.paymentMethod)} • ${ArabicFormat.dateTime(c.collectedAt)}',
+          return Column(
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    for (final period in TransactionPeriod.values)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 8),
+                        child: FilterChip(
+                          selected: _period == period,
+                          label: Text(TransactionPeriodFilter.label(period)),
+                          onSelected: (_) => setState(() => _period = period),
+                        ),
+                      ),
+                  ],
                 ),
-              );
-            },
+              ),
+              Expanded(
+                child: items.isEmpty
+                    ? const Center(child: Text(S.empty))
+                    : ListView.builder(
+                        itemCount: items.length,
+                        itemBuilder: (_, i) {
+                          final c = items[i];
+                          return ListTile(
+                            title: MoneyText(Money.parse(c.amount)),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ArabicFormat.paymentMethod(c.paymentMethod),
+                                ),
+                                TransactionTimestamp(dateTime: c.collectedAt),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),

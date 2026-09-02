@@ -13,6 +13,7 @@ import '../../domain/services/inventory_service.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/transaction_timestamp.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/product_thumb.dart';
 import '../../shared/widgets/quantity_sheet.dart';
@@ -163,7 +164,7 @@ class _InventoryPageState extends State<InventoryPage> {
                         ),
                     ].join(' • '),
                   ),
-                  trailing: Text(m.createdAt.toLocal().toString()),
+                  trailing: TransactionTimestamp(dateTime: m.createdAt),
                 ),
             ],
           );

@@ -18,6 +18,7 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_period_filter.dart';
 
 class SuppliersPage extends StatefulWidget {
   const SuppliersPage({super.key});
@@ -337,41 +338,7 @@ class SupplierDetailPage extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 16),
-              Text(
-                S.purchases,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              StreamBuilder<List<PurchaseListEntry>>(
-                stream: sl<PurchaseService>().watchEntries().map(
-                  (rows) => [
-                    for (final row in rows)
-                      if (row.purchase.supplierId == supplierId) row,
-                  ],
-                ),
-                builder: (context, snap) {
-                  final rows = snap.data ?? const <PurchaseListEntry>[];
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (rows.isEmpty) return const Text(S.empty);
-                  return Column(
-                    children: [
-                      for (final row in rows)
-                        ListTile(
-                          title: Text(row.purchase.purchaseNumber),
-                          subtitle: Text(
-                            ArabicFormat.dateTime(row.purchase.purchasedAt),
-                          ),
-                          trailing: MoneyText(
-                            Money.parse(row.purchase.subtotal),
-                          ),
-                          onTap: () =>
-                              context.push('/purchases/${row.purchase.id}'),
-                        ),
-                    ],
-                  );
-                },
-              ),
+              _SupplierPurchasesList(supplierId: supplierId),
               const SizedBox(height: 16),
               Text(S.statement, style: Theme.of(context).textTheme.titleMedium),
               StreamBuilder(
@@ -387,7 +354,7 @@ class SupplierDetailPage extends StatelessWidget {
                       for (final tx in txs)
                         ListTile(
                           title: Text(_txLabel(tx.type)),
-                          subtitle: Text(ArabicFormat.dateTime(tx.createdAt)),
+                          subtitle: Text(ArabicFormat.transactionDateTime(tx.createdAt)),
                           trailing: MoneyText(Money.parse(tx.amount)),
                         ),
                     ],
@@ -572,5 +539,77 @@ class SupplierDetailPage extends StatelessWidget {
       if (!context.mounted) return;
       sl<AppAlertCubit>().error(error.toString());
     }
+  }
+}
+
+class _SupplierPurchasesList extends StatefulWidget {
+  const _SupplierPurchasesList({required this.supplierId});
+
+  final String supplierId;
+
+  @override
+  State<_SupplierPurchasesList> createState() => _SupplierPurchasesListState();
+}
+
+class _SupplierPurchasesListState extends State<_SupplierPurchasesList> {
+  TransactionPeriod _period = TransactionPeriod.all;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(S.purchases, style: Theme.of(context).textTheme.titleMedium),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final period in TransactionPeriod.values)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 8, top: 8),
+                  child: FilterChip(
+                    selected: _period == period,
+                    label: Text(TransactionPeriodFilter.label(period)),
+                    onSelected: (_) => setState(() => _period = period),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        StreamBuilder<List<PurchaseListEntry>>(
+          stream: sl<PurchaseService>().watchEntries().map(
+            (rows) => [
+              for (final row in rows)
+                if (row.purchase.supplierId == widget.supplierId &&
+                    TransactionPeriodFilter.includes(
+                      row.purchase.purchasedAt,
+                      _period,
+                    ))
+                  row,
+            ],
+          ),
+          builder: (context, snap) {
+            final rows = snap.data ?? const <PurchaseListEntry>[];
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (rows.isEmpty) return const Text(S.empty);
+            return Column(
+              children: [
+                for (final row in rows)
+                  ListTile(
+                    title: Text(row.purchase.purchaseNumber),
+                    subtitle: Text(
+                      ArabicFormat.transactionDateTime(row.purchase.purchasedAt),
+                    ),
+                    trailing: MoneyText(Money.parse(row.purchase.subtotal)),
+                    onTap: () => context.push('/purchases/${row.purchase.id}'),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
   }
 }

@@ -45,7 +45,7 @@ class AccountService {
       );
     }
     final next = current + signed;
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final txId = newId();
     await _store.putAccount(
       account.copyWith(

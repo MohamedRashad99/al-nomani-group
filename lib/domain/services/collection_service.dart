@@ -40,7 +40,7 @@ class CollectionService {
     if (!amount.isPositive) {
       throw const ValidationException('مبلغ التحصيل غير صالح.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final id = newId();
     final at = collectedAt?.toUtc() ?? now;

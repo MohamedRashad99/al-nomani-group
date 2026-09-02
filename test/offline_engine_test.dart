@@ -17,6 +17,7 @@ import 'package:al_nomani_group/domain/services/inventory_service.dart';
 import 'package:al_nomani_group/domain/services/outstanding_service.dart';
 import 'package:al_nomani_group/domain/services/purchase_service.dart';
 import 'package:al_nomani_group/domain/services/sale_service.dart';
+import 'package:al_nomani_group/domain/services/sale_unit_conversion.dart';
 import 'package:al_nomani_group/domain/services/seed_service.dart';
 import 'package:al_nomani_group/domain/services/supplier_service.dart';
 import 'package:al_nomani_group/domain/services/user_admin_service.dart';
@@ -382,6 +383,105 @@ void main() {
       ),
       throwsA(isA<Exception>()),
     );
+  });
+
+  test('a sub unit sale deducts the converted package quantity', () async {
+    final store = await readyStore();
+    await sl<CatalogService>().upsertProduct(
+      session: admin(),
+      id: 'p-sugar',
+      name: 'سكر',
+      sku: 'SUG',
+      purchasePrice: Money.parse('150'),
+      sellingPrice: Money.parse('250'),
+      currentStock: Quantity.parse('18'),
+      minimumStock: Quantity.parse('1'),
+      unit: 'عبوة',
+      packageSize: '500',
+      unitOfMeasure: 'g',
+      packageType: 'عبوة',
+    );
+    final product = (await store.getProduct('p-sugar'))!;
+    final converter = SaleUnitConverter.forProduct(product);
+    final gramOption =
+        converter.options.firstWhere((option) => !option.isPackage);
+    final breakdown = converter
+        .evaluate(
+          option: gramOption,
+          rawInput: '250',
+          availablePackages: Quantity.parse('999999'),
+        )
+        .breakdown!;
+
+    final result = await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft.fromBreakdown(
+            productId: 'p-sugar',
+            unit: 'عبوة',
+            breakdown: breakdown,
+          ),
+        ],
+      ),
+    );
+
+    expect(result.subtotal.toDisplay(), '125.000');
+    final after = (await store.getProduct('p-sugar'))!;
+    expect(Quantity.parse(after.currentStock).toDisplay(), '17.5');
+    final items = await store.listSaleItems(saleId: result.saleId);
+    expect(items.single.quantity, '0.500');
+    expect(items.single.selectedUnit, 'subUnit');
+    expect(items.single.inputQuantity, '250.000');
+    expect(items.single.inputUnit, 'جم');
+    expect(items.single.lineTotal, '125.000');
+  });
+
+  test('cancelling a sub unit sale restores the fractional stock', () async {
+    final store = await readyStore();
+    await sl<CatalogService>().upsertProduct(
+      session: admin(),
+      id: 'p-sugar',
+      name: 'سكر',
+      sku: 'SUG',
+      purchasePrice: Money.parse('150'),
+      sellingPrice: Money.parse('250'),
+      currentStock: Quantity.parse('18'),
+      minimumStock: Quantity.parse('1'),
+      unit: 'عبوة',
+      packageSize: '500',
+      unitOfMeasure: 'g',
+      packageType: 'عبوة',
+    );
+    final product = (await store.getProduct('p-sugar'))!;
+    final converter = SaleUnitConverter.forProduct(product);
+    final kgOption = converter.options.lastWhere((option) => !option.isPackage);
+    final breakdown = converter
+        .evaluate(
+          option: kgOption,
+          rawInput: '0.25',
+          availablePackages: Quantity.parse('999999'),
+        )
+        .breakdown!;
+    final result = await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft.fromBreakdown(
+            productId: 'p-sugar',
+            unit: 'عبوة',
+            breakdown: breakdown,
+          ),
+        ],
+      ),
+    );
+    await sl<SaleService>().cancel(admin(), result.saleId, 'مرتجع');
+    final after = (await store.getProduct('p-sugar'))!;
+    expect(Quantity.parse(after.currentStock).toDisplay(), '18');
   });
 
   test('customer balance is derived from account transactions', () async {

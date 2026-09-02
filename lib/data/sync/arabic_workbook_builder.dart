@@ -263,7 +263,15 @@ class ArabicWorkbookBuilder {
         suppliers.map((row) => [row.name, row.phone ?? '', row.area ?? '']),
       ),
       'المشتريات': table(
-        ['رقم الفاتورة', 'المورد', 'الحالة', 'الإجمالي', 'المدفوع', 'المتبقي'],
+        [
+          'رقم الفاتورة',
+          'المورد',
+          'الحالة',
+          'الإجمالي',
+          'المدفوع',
+          'المتبقي',
+          'التاريخ',
+        ],
         purchases.map(
           (row) => [
             row.purchaseNumber,
@@ -272,6 +280,7 @@ class ArabicWorkbookBuilder {
             row.subtotal,
             row.paidAmount,
             row.remainingAmount,
+            row.purchasedAt,
           ],
         ),
       ),

@@ -158,7 +158,7 @@ class InventoryAnalytics {
     List<SaleItem> items,
     String productId,
   ) {
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final start = DateTime.utc(now.year, now.month, 1);
     final ids = {
       for (final sale in sales)

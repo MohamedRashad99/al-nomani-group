@@ -141,12 +141,16 @@ class DashboardService {
   }
 
   Future<DashboardSnapshot> load() async {
-    final now = DateTime.now();
-    final startToday = DateTime(now.year, now.month, now.day).toUtc();
+    final now = EgyptTime.nowUtc();
+    final startToday = EgyptTime.startOfTodayCairo();
+    final cairoToday = EgyptTime.toCairo(startToday);
     final startWeek = startToday.subtract(
-      Duration(days: startToday.weekday % 7),
+      Duration(days: cairoToday.weekday % 7),
     );
-    final startMonth = DateTime.utc(now.year, now.month, 1);
+    final cairoNow = EgyptTime.toCairo(now);
+    final startMonth = EgyptTime.startOfDayCairo(
+      DateTime.utc(cairoNow.year, cairoNow.month, 1),
+    );
     final startYesterday = startToday.subtract(const Duration(days: 1));
 
     final allSalesFuture = _store.listSales();

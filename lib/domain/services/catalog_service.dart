@@ -124,7 +124,7 @@ class CatalogService {
     final displayPack = parsedSize == null
         ? (packSize?.trim().isEmpty == true ? existing?.packSize : packSize?.trim())
         : '${parsedSize.toDisplay()} ${ProductUnit.fromCode(uomCode.isEmpty ? (existing?.unitOfMeasure ?? 'pcs') : uomCode).symbol}';
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final productId = id ?? newId();
     final product = Product(
@@ -270,7 +270,7 @@ class CatalogService {
     if (name.trim().isEmpty) {
       throw const ValidationException('اسم العميل مطلوب.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final customerId = id ?? newId();
     final nextLink = linkedSupplierId ?? existing?.linkedSupplierId;
@@ -335,7 +335,7 @@ class CatalogService {
             version: previous.version + 1,
             deviceId: previous.deviceId,
             createdAt: previous.createdAt,
-            updatedAt: DateTime.now().toUtc(),
+            updatedAt: EgyptTime.nowUtc(),
             isDeleted: previous.isDeleted,
           ),
         );
@@ -358,7 +358,7 @@ class CatalogService {
           version: next.version + 1,
           deviceId: next.deviceId,
           createdAt: next.createdAt,
-          updatedAt: DateTime.now().toUtc(),
+          updatedAt: EgyptTime.nowUtc(),
           isDeleted: next.isDeleted,
         ),
       );

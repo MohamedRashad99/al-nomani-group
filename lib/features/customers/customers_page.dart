@@ -312,7 +312,7 @@ class CustomerStatementPage extends StatelessWidget {
                   title: Text(_accountType(tx.type)),
                   subtitle: Text(
                     [
-                      ArabicFormat.dateTime(tx.createdAt),
+                      ArabicFormat.transactionDateTime(tx.createdAt),
                       if (tx.notes?.isNotEmpty == true) tx.notes!,
                     ].join(' • '),
                   ),

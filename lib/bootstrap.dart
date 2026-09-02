@@ -7,6 +7,7 @@ import 'core/config/app_config.dart';
 import 'core/di/injector.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/utils/app_reload.dart';
+import 'core/utils/egypt_time.dart';
 import 'data/remote/device_id_store.dart';
 import 'data/remote/erp_store.dart';
 import 'data/remote/firestore_erp_store.dart';
@@ -16,6 +17,7 @@ import 'features/auth/auth_cubit.dart';
 
 Future<void> bootstrap({ErpStore? store}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EgyptTime.initialize();
   final config = await AppConfig.load();
   await configureDependencies(config: config, store: store);
 

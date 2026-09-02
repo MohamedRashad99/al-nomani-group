@@ -141,7 +141,7 @@ class SaleService {
       throw const ValidationException('المبلغ المدفوع أكبر من الإجمالي.');
     }
 
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final saleId = newId();
     final saleNumber = await _nextSaleNumber();
@@ -242,7 +242,7 @@ class SaleService {
     if (sale.status == 'cancelled') {
       throw const ValidationException('الفاتورة ملغاة مسبقاً.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final items = await _store.listSaleItems(saleId: saleId);
     for (final item in items) {

@@ -46,7 +46,7 @@ class SupplierAccountService {
       );
     }
     final next = current + signed;
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     await _store.putSupplierAccount(
       account.copyWith(
         cachedBalance: next.toStorage(),

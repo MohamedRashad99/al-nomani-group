@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:al_nomani_shared/al_nomani_shared.dart';
+
 import '../../data/remote/erp_store.dart';
 
 class BackupExportService {
@@ -15,7 +17,7 @@ class BackupExportService {
     final suppliers = await _store.listSuppliers();
     final purchases = await _store.listPurchases();
     return jsonEncode({
-      'exported_at': DateTime.now().toUtc().toIso8601String(),
+      'exported_at': EgyptTime.nowUtc().toIso8601String(),
       'products': [for (final row in products) row.toMap()],
       'customers': [for (final row in customers) row.toMap()],
       'sales': [for (final row in sales) row.toMap()],

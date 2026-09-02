@@ -36,13 +36,8 @@ class AppConfig {
   String get visibleBuildLabel =>
       buildLabel.isNotEmpty ? buildLabel : egyptBuildLabel();
 
-  static String egyptBuildLabel([DateTime? now]) {
-    final egypt = (now ?? DateTime.now().toUtc()).toUtc().add(
-      const Duration(hours: 3),
-    );
-    String two(int value) => value.toString().padLeft(2, '0');
-    return 'v1:${two(egypt.day)}${two(egypt.month)}${two(egypt.year % 100)}:${two(egypt.hour)}:${two(egypt.minute)}:${two(egypt.second)}';
-  }
+  static String egyptBuildLabel([DateTime? now]) =>
+      EgyptTime.buildLabel(now ?? EgyptTime.nowUtc());
 
   bool get isDevelopment => environment != 'production';
 

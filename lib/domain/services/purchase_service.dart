@@ -145,7 +145,7 @@ class PurchaseService {
     if (draft.paidAmount.isNegative || draft.paidAmount > draft.subtotal) {
       throw const ValidationException('المبلغ المدفوع غير صالح.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final purchaseId = newId();
     final number = await _nextNumber();
@@ -241,7 +241,7 @@ class PurchaseService {
     if (purchase.status == 'cancelled') {
       throw const ValidationException('الفاتورة ملغاة مسبقاً.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final items = await _store.listPurchaseItems(purchaseId: purchaseId);
     for (final item in items) {
@@ -342,7 +342,7 @@ class PurchaseService {
       throw const ValidationException('لا يمكن إرجاع هذه الفاتورة.');
     }
     final items = await _store.listPurchaseItems(purchaseId: purchaseId);
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     var credit = Money.zero();
     var anyReturned = false;

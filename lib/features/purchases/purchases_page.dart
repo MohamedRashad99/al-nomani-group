@@ -13,6 +13,7 @@ import '../../domain/models/purchase_draft.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/purchase_service.dart';
 import '../../domain/services/supplier_service.dart';
+import '../../shared/widgets/transaction_timestamp.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -357,7 +358,16 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
             children: [
               ListTile(
                 title: Text(purchase.purchaseNumber),
-                subtitle: Text(details.supplier?.name ?? 'مورد غير متاح'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(details.supplier?.name ?? 'مورد غير متاح'),
+                    TransactionTimestamp(
+                      dateTime: purchase.purchasedAt,
+                      style: TransactionTimestampStyle.inline,
+                    ),
+                  ],
+                ),
                 trailing: Text(ArabicFormat.status(purchase.status)),
               ),
               for (final item in details.items)

@@ -28,7 +28,7 @@ class ReportBranding {
       companyName: S.appName,
       systemName: S.appSubtitle,
       administratorName: session.displayName,
-      generatedAt: DateTime.now(),
+      generatedAt: EgyptTime.nowUtc(),
     );
   }
 
@@ -37,11 +37,7 @@ class ReportBranding {
   final String administratorName;
   final DateTime generatedAt;
 
-  String get stamp {
-    final egypt = generatedAt.toUtc().add(const Duration(hours: 3));
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${two(egypt.day)}/${two(egypt.month)}/${egypt.year}  ${two(egypt.hour)}:${two(egypt.minute)}:${two(egypt.second)}';
-  }
+  String get stamp => EgyptTime.formatDateTime(generatedAt);
 
   List<List<Object?>> coverRows() {
     return [

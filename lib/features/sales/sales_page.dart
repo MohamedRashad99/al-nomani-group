@@ -23,9 +23,8 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_period_filter.dart';
 import '../../shared/widgets/unit_quantity_sheet.dart';
-
-enum _SalePeriod { all, today, week, month }
 
 enum _PaymentFilter { all, cash, credit, partial }
 
@@ -42,7 +41,7 @@ class _SalesPageState extends State<SalesPage> {
   final _search = TextEditingController();
   late final Stream<List<SaleListEntry>> _stream =
       sl<SaleService>().watchEntries();
-  _SalePeriod _period = _SalePeriod.all;
+  TransactionPeriod _period = TransactionPeriod.all;
   _PaymentFilter _payment = _PaymentFilter.all;
   bool _showCancelled = false;
 
@@ -53,18 +52,10 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   List<SaleListEntry> _filtered(List<SaleListEntry> entries) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final from = switch (_period) {
-      _SalePeriod.all => null,
-      _SalePeriod.today => today,
-      _SalePeriod.week => today.subtract(const Duration(days: 7)),
-      _SalePeriod.month => DateTime(now.year, now.month, 1),
-    };
     final query = _search.text.trim().toLowerCase();
     return entries.where((entry) {
       if (!_showCancelled && entry.sale.status == 'cancelled') return false;
-      if (from != null && entry.sale.soldAt.toLocal().isBefore(from)) {
+      if (!TransactionPeriodFilter.includes(entry.sale.soldAt, _period)) {
         return false;
       }
       if (_payment != _PaymentFilter.all &&
@@ -160,11 +151,11 @@ class _SalesFilters extends StatelessWidget {
   });
 
   final TextEditingController search;
-  final _SalePeriod period;
+  final TransactionPeriod period;
   final _PaymentFilter payment;
   final bool showCancelled;
   final VoidCallback onChanged;
-  final ValueChanged<_SalePeriod> onPeriodChanged;
+  final ValueChanged<TransactionPeriod> onPeriodChanged;
   final ValueChanged<_PaymentFilter> onPaymentChanged;
   final ValueChanged<bool> onCancelledChanged;
 
@@ -189,14 +180,12 @@ class _SalesFilters extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _FilterMenu<_SalePeriod>(
+                  _FilterMenu<TransactionPeriod>(
                     value: period,
                     icon: Icons.calendar_today_outlined,
-                    labels: const {
-                      _SalePeriod.all: 'كل التواريخ',
-                      _SalePeriod.today: 'اليوم',
-                      _SalePeriod.week: 'آخر ٧ أيام',
-                      _SalePeriod.month: 'هذا الشهر',
+                    labels: {
+                      for (final p in TransactionPeriod.values)
+                        p: TransactionPeriodFilter.label(p),
                     },
                     onSelected: onPeriodChanged,
                   ),
@@ -293,7 +282,7 @@ class _SalesCards extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${entry.sale.saleNumber} • ${ArabicFormat.dateTime(entry.sale.soldAt)}',
+                    '${entry.sale.saleNumber} • ${ArabicFormat.transactionDateTime(entry.sale.soldAt)}',
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
@@ -353,7 +342,7 @@ class _SalesTable extends StatelessWidget {
                     cells: [
                       DataCell(Text(entry.sale.saleNumber)),
                       DataCell(Text(entry.customerName)),
-                      DataCell(Text(ArabicFormat.dateTime(entry.sale.soldAt))),
+                      DataCell(Text(ArabicFormat.transactionDateTime(entry.sale.soldAt))),
                       DataCell(Text(ArabicFormat.number(entry.itemCount))),
                       DataCell(_SaleStatusChip(entry: entry)),
                       DataCell(MoneyText(Money.parse(entry.sale.subtotal))),
@@ -944,7 +933,15 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                     ),
                     _DetailRow(
                       label: 'التاريخ',
-                      value: ArabicFormat.dateTime(sale.soldAt),
+                      value: ArabicFormat.transactionDate(sale.soldAt),
+                    ),
+                    _DetailRow(
+                      label: 'الوقت',
+                      value: ArabicFormat.transactionTime(sale.soldAt),
+                    ),
+                    _DetailRow(
+                      label: 'تاريخ التسجيل',
+                      value: ArabicFormat.transactionDateTime(sale.createdAt),
                     ),
                     _DetailRow(
                       label: 'الحالة',

@@ -28,7 +28,7 @@ class AuditService {
         entityId: entityId,
         oldValue: oldValue == null ? null : jsonEncode(oldValue),
         newValue: newValue == null ? null : jsonEncode(newValue),
-        createdAt: DateTime.now().toUtc(),
+        createdAt: EgyptTime.nowUtc(),
       ),
     );
   }

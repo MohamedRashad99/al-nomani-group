@@ -17,7 +17,7 @@ class SeedService {
 
   Future<void> ensureDemoAdminIdentity() async {
     final users = await _store.listUsers();
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final hiddenIds = await _softDeleteDuplicateAdmins(users, deviceId, now);
     final existing = UserIdentity.pickByUsername(

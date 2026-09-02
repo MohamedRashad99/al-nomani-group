@@ -70,7 +70,7 @@ class SupplierService {
     if (name.trim().isEmpty) {
       throw const ValidationException('اسم المورد مطلوب.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final supplierId = id ?? newId();
     final existing = id == null ? null : await _store.getSupplier(id);
@@ -140,7 +140,7 @@ class SupplierService {
             version: previous.version + 1,
             deviceId: previous.deviceId,
             createdAt: previous.createdAt,
-            updatedAt: DateTime.now().toUtc(),
+            updatedAt: EgyptTime.nowUtc(),
             isDeleted: previous.isDeleted,
           ),
         );
@@ -163,7 +163,7 @@ class SupplierService {
           version: next.version + 1,
           deviceId: next.deviceId,
           createdAt: next.createdAt,
-          updatedAt: DateTime.now().toUtc(),
+          updatedAt: EgyptTime.nowUtc(),
           isDeleted: next.isDeleted,
         ),
       );
@@ -286,7 +286,7 @@ class SupplierService {
 
   Future<SupplierAging> aging(String supplierId) async {
     final purchases = await _store.listPurchases(supplierId: supplierId);
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     var d0 = Money.zero();
     var d30 = Money.zero();
     var d60 = Money.zero();

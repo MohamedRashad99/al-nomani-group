@@ -1208,7 +1208,7 @@ class _RecentActivity extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '${sale.saleNumber} • ${ArabicFormat.dateTime(sale.soldAt)}',
+                      '${sale.saleNumber} • ${ArabicFormat.transactionDateTime(sale.soldAt)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1232,7 +1232,7 @@ class _RecentActivity extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      ArabicFormat.dateTime(collection.collectedAt),
+                      ArabicFormat.transactionDateTime(collection.collectedAt),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -77,7 +77,7 @@ class InventoryService {
     }
     final measure = InventoryMeasure.fromProduct(product);
     final actualDelta = measure.actualOf(signed.isNegative ? -signed : signed);
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final movementId = newId();
     final deviceId = await _devices.deviceId();
     await _store.putProduct(

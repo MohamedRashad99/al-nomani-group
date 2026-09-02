@@ -1,3 +1,4 @@
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:intl/intl.dart';
 
 abstract final class ArabicFormat {
@@ -6,11 +7,22 @@ abstract final class ArabicFormat {
   static final _day = DateFormat('E', 'ar');
   static final _number = NumberFormat.decimalPattern('ar');
 
-  static String date(DateTime value) => _date.format(value.toLocal());
+  static String date(DateTime value) => _date.format(EgyptTime.toCairo(value));
 
-  static String dateTime(DateTime value) => _dateTime.format(value.toLocal());
+  static String dateTime(DateTime value) =>
+      _dateTime.format(EgyptTime.toCairo(value));
 
-  static String day(DateTime value) => _day.format(value.toLocal());
+  static String day(DateTime value) => _day.format(EgyptTime.toCairo(value));
+
+  /// Transaction date in Cairo: `01/09/2026`.
+  static String transactionDate(DateTime value) => EgyptTime.formatDate(value);
+
+  /// Transaction time in Cairo: `03:45 PM`.
+  static String transactionTime(DateTime value) => EgyptTime.formatTime(value);
+
+  /// Single-line Cairo stamp: `01/09/2026 - 03:45 PM`.
+  static String transactionDateTime(DateTime value) =>
+      EgyptTime.formatDateTime(value);
 
   static String number(num value) => _number.format(value);
 

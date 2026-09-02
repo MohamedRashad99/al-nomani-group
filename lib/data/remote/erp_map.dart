@@ -1,4 +1,6 @@
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/erp_models.dart';
 
@@ -41,7 +43,12 @@ DateTime mapDate(Map<String, dynamic> data, List<String> keys) {
       if (parsed != null) return parsed.toUtc();
     }
   }
-  return DateTime.now().toUtc();
+  if (kDebugMode) {
+    debugPrint(
+      'mapDate: missing ${keys.join("|")}, defaulting to EgyptTime.nowUtc()',
+    );
+  }
+  return EgyptTime.nowUtc();
 }
 
 DateTime? mapDateOrNull(Map<String, dynamic> data, List<String> keys) {
@@ -59,7 +66,7 @@ DateTime? mapDateOrNull(Map<String, dynamic> data, List<String> keys) {
 }
 
 Product productFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Product(
     id: id,
     name: mapText(data, const ['name'], 'منتج'),
@@ -100,7 +107,7 @@ List<ProductImage> _imagesFrom(Object? raw) {
 }
 
 Customer customerFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Customer(
     id: id,
     name: mapText(data, const ['name'], 'عميل'),
@@ -120,7 +127,7 @@ Customer customerFromMap(Map<String, dynamic> data, String id) {
 }
 
 CustomerAccount accountFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return CustomerAccount(
     id: id,
     customerId: mapText(data, const ['customer_id', 'customerId']),
@@ -150,7 +157,7 @@ CustomerAccountTransaction accountTxFromMap(Map<String, dynamic> data, String id
 }
 
 Sale saleFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Sale(
     id: id,
     customerId: mapText(data, const ['customer_id', 'customerId']),
@@ -193,7 +200,7 @@ SaleItem saleItemFromMap(Map<String, dynamic> data, String id) {
 }
 
 Collection collectionFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Collection(
     id: id,
     customerId: mapText(data, const ['customer_id', 'customerId']),
@@ -233,7 +240,7 @@ InventoryMovement movementFromMap(Map<String, dynamic> data, String id) {
 }
 
 AppUser userFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return AppUser(
     id: id,
     username: mapText(data, const ['username']),
@@ -265,7 +272,7 @@ AuditLog auditFromMap(Map<String, dynamic> data, String id) {
 }
 
 Supplier supplierFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Supplier(
     id: id,
     name: mapText(data, const ['name'], 'مورد'),
@@ -285,7 +292,7 @@ Supplier supplierFromMap(Map<String, dynamic> data, String id) {
 }
 
 SupplierAccount supplierAccountFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return SupplierAccount(
     id: id,
     supplierId: mapText(data, const ['supplier_id', 'supplierId']),
@@ -315,7 +322,7 @@ SupplierAccountTransaction supplierTxFromMap(Map<String, dynamic> data, String i
 }
 
 Purchase purchaseFromMap(Map<String, dynamic> data, String id) {
-  final now = DateTime.now().toUtc();
+  final now = EgyptTime.nowUtc();
   return Purchase(
     id: id,
     supplierId: mapText(data, const ['supplier_id', 'supplierId']),

@@ -170,7 +170,7 @@ class AuthService {
     String password, {
     AppUser? existing,
   }) async {
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final user = data['user'] as Map<String, dynamic>? ?? data;
     final serverId = user['id'] as String? ?? newId();

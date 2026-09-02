@@ -56,7 +56,7 @@ class UserAdminService {
     if (trimmedUsername.isEmpty) {
       throw const ValidationException('اسم المستخدم مطلوب.');
     }
-    final now = DateTime.now().toUtc();
+    final now = EgyptTime.nowUtc();
     final deviceId = await _devices.deviceId();
     final userId = id ?? newId();
     final existing = id == null ? null : await _store.getUser(id);

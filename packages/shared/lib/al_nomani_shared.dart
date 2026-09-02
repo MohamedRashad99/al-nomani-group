@@ -1,6 +1,7 @@
 library;
 
 export 'src/app_versions.dart';
+export 'src/egypt_time.dart';
 export 'src/ids.dart';
 export 'src/money.dart';
 export 'src/permissions.dart';

@@ -9,6 +9,7 @@ import '../../core/config/app_config.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/arabic_format.dart';
 import '../../core/utils/file_download.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -58,15 +59,21 @@ class _BackupView extends StatelessWidget {
                 ),
                 _tile(
                   S.lastSync,
-                  h.lastSuccessfulSync?.toLocal().toString() ?? '—',
+                  h.lastSuccessfulSync == null
+                      ? '—'
+                      : ArabicFormat.transactionDateTime(h.lastSuccessfulSync!),
                 ),
                 _tile(
                   S.nextSync,
-                  h.nextScheduledSync?.toLocal().toString() ?? '—',
+                  h.nextScheduledSync == null
+                      ? '—'
+                      : ArabicFormat.transactionDateTime(h.nextScheduledSync!),
                 ),
                 _tile(
                   S.lastFullBackup,
-                  h.lastFullBackup?.toLocal().toString() ?? '—',
+                  h.lastFullBackup == null
+                      ? '—'
+                      : ArabicFormat.transactionDateTime(h.lastFullBackup!),
                 ),
                 _tile(S.pendingOps, '${h.pending}'),
                 _tile(S.failedOps, '${h.failed}'),

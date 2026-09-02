@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/utils/arabic_format.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../domain/entities/erp_models.dart';
@@ -19,6 +20,7 @@ import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/product_images_editor.dart';
 import '../../shared/widgets/product_thumb.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_timestamp.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -231,8 +233,19 @@ class _ProductsPageState extends State<ProductsPage> {
                       });
                     },
                   ),
-                  if (product != null)
+                  if (product != null) ...[
                     _ProductInsightCard(product: product),
+                    const SizedBox(height: 8),
+                    TransactionTimestamp(
+                      dateTime: product.createdAt,
+                      style: TransactionTimestampStyle.stacked,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'آخر تحديث: ${ArabicFormat.transactionDateTime(product.updatedAt)}',
+                      style: Theme.of(ctx).textTheme.bodySmall,
+                    ),
+                  ],
                   AmountField(
                     controller: purchase,
                     label: S.purchasePrice,
