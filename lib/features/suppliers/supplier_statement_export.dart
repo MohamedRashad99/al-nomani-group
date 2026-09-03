@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';

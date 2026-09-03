@@ -1,6 +1,5 @@
 import 'package:al_nomani_group/data/remote/erp_map.dart';
 import 'package:al_nomani_group/domain/entities/erp_models.dart';
-import 'package:al_nomani_group/domain/models/sale_draft.dart';
 import 'package:al_nomani_group/domain/models/sale_unit.dart';
 import 'package:al_nomani_group/domain/services/sale_unit_conversion.dart';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
@@ -32,9 +31,6 @@ Product _product({
 }
 
 extension _ConverterHelpers on SaleUnitConverter {
-  SaleUnitOption get packageOption =>
-      options.firstWhere((option) => option.isPackage);
-
   List<SaleUnitOption> get subUnitOptions =>
       options.where((option) => !option.isPackage).toList();
 

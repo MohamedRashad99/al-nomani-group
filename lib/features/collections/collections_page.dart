@@ -16,6 +16,7 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_audit_footer.dart';
 import '../../shared/widgets/transaction_period_filter.dart';
 import '../../shared/widgets/transaction_timestamp.dart';
 
@@ -90,6 +91,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
                                 TransactionTimestamp(dateTime: c.collectedAt),
                               ],
                             ),
+                            onTap: () => _showDetails(context, c),
                           );
                         },
                       ),
@@ -97,6 +99,57 @@ class _CollectionsPageState extends State<CollectionsPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  static Future<void> _showDetails(
+    BuildContext context,
+    Collection collection,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(S.collections, style: Theme.of(ctx).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(S.collectionAmount),
+              trailing: MoneyText(Money.parse(collection.amount)),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(S.paymentMethod),
+              trailing: Text(
+                ArabicFormat.paymentMethod(collection.paymentMethod),
+              ),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('تاريخ التحصيل'),
+              trailing: Text(
+                ArabicFormat.transactionDateTime(collection.collectedAt),
+              ),
+            ),
+            if ((collection.notes ?? '').trim().isNotEmpty)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(S.notes),
+                subtitle: Text(collection.notes!.trim()),
+              ),
+            TransactionAuditFooter(
+              createdAt: collection.createdAt,
+              updatedAt: collection.updatedAt,
+              createdBy: collection.createdBy,
+            ),
+          ],
+        ),
       ),
     );
   }

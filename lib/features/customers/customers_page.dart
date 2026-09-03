@@ -11,6 +11,7 @@ import '../../domain/entities/erp_models.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/outstanding_service.dart';
 import '../../domain/services/supplier_service.dart';
+import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -193,6 +194,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                     .maybeSyncAfterLocalWrite();
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
+                              sl<AppAlertCubit>().success('تم حفظ بيانات العميل.');
                             } catch (e) {
                               if (ctx.mounted) {
                                 setS(() {
@@ -200,6 +202,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                   error = e.toString();
                                 });
                               }
+                              sl<AppAlertCubit>().error(e.toString());
                             }
                           },
                     child: saving
@@ -255,6 +258,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                     .maybeSyncAfterLocalWrite();
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
+                              sl<AppAlertCubit>().success('تم حذف العميل.');
                             } catch (e) {
                               if (ctx.mounted) {
                                 setS(() {
@@ -262,6 +266,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                   error = e.toString();
                                 });
                               }
+                              sl<AppAlertCubit>().error(e.toString());
                             }
                             },
                       child: const Text(S.deleteCustomer),

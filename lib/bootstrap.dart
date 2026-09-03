@@ -7,7 +7,6 @@ import 'core/config/app_config.dart';
 import 'core/di/injector.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/utils/app_reload.dart';
-import 'core/utils/egypt_time.dart';
 import 'data/remote/device_id_store.dart';
 import 'data/remote/erp_store.dart';
 import 'data/remote/firestore_erp_store.dart';
