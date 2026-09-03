@@ -35,7 +35,12 @@ Future<void> bootstrap({ErpStore? store}) async {
 Future<void> _warmBackend(String buildLabel) async {
   try {
     await _attachFirebase();
-    await sl<SeedService>().ensureDemoAdminIdentity();
+    // DATA SAFETY: never drop/recreate DB, bulk-delete Firestore, or rewrite IDs.
+    // Seed/demo admin only when explicitly allowed (never in production config).
+    final config = sl<AppConfig>();
+    if (config.allowSeed) {
+      await sl<SeedService>().ensureDemoAdminIdentity();
+    }
     unawaited(sl<SyncEngine>().maybeRunScheduled());
   } catch (_) {}
   unawaited(ensureCurrentWebBuild(buildLabel));

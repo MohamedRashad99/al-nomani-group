@@ -22,7 +22,9 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/destructive_action_guard.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/transaction_audit_footer.dart';
 import '../../shared/widgets/transaction_period_filter.dart';
 import '../../shared/widgets/unit_quantity_sheet.dart';
 
@@ -940,18 +942,9 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                       value: ArabicFormat.transactionTime(sale.soldAt),
                     ),
                     _DetailRow(
-                      label: 'تاريخ التسجيل',
-                      value: ArabicFormat.transactionDateTime(sale.createdAt),
-                    ),
-                    _DetailRow(
                       label: 'الحالة',
                       value: ArabicFormat.status(sale.status),
                     ),
-                    if (sale.cancelReason != null)
-                      _DetailRow(
-                        label: 'سبب الإلغاء',
-                        value: sale.cancelReason!,
-                      ),
                   ],
                 ),
               ),
@@ -996,15 +989,31 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                   ],
                 ),
               ),
+              TransactionAuditFooter(
+                createdAt: sale.createdAt,
+                updatedAt: sale.updatedAt,
+                createdBy: sale.createdBy,
+                cancelledAt: sale.cancelledAt,
+                cancelledBy: sale.cancelledBy,
+                cancelReason: sale.cancelReason,
+              ),
               if (sale.status != 'cancelled' &&
                   session?.can(AppPermission.salesCancel) == true) ...[
                 const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _cancel,
-                  icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('إلغاء البيع وعكس الحركات'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
+                BusyGuarded(
+                  builder: (context, busy) => OutlinedButton.icon(
+                    onPressed: busy ? null : _cancel,
+                    icon: busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cancel_outlined),
+                    label: const Text('إلغاء البيع وعكس الحركات'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                    ),
                   ),
                 ),
               ],
@@ -1016,55 +1025,28 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
   }
 
   Future<void> _cancel() async {
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    await DestructiveActionGuard.runWithReason(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد إلغاء البيع'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'سيُعاد المخزون. إن وُجدت تحصيلات لاحقة فلن تُرد، ويُعكس المتبقي غير المسدد فقط.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reason,
-              decoration: const InputDecoration(labelText: 'سبب الإلغاء'),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(S.back),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('إلغاء البيع'),
-          ),
-        ],
-      ),
+      title: 'تأكيد إلغاء البيع',
+      message:
+          'سيُعاد المخزون. إن وُجدت تحصيلات لاحقة فلن تُرد، ويُعكس المتبقي غير المسدد فقط.',
+      confirmLabel: 'إلغاء البيع',
+      reasonLabel: 'سبب الإلغاء',
+      successMessage: 'تم إلغاء البيع وعكس حركاته.',
+      action: (reason) async {
+        await sl<SaleService>().cancel(
+          context.read<AuthCubit>().state.session!,
+          widget.saleId,
+          reason,
+        );
+        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      },
+      onSuccess: () {
+        if (mounted) {
+          setState(() => _future = sl<SaleService>().loadDetails(widget.saleId));
+        }
+      },
     );
-    final text = reason.text.trim();
-    reason.dispose();
-    if (confirmed != true || text.isEmpty || !mounted) return;
-    try {
-      await sl<SaleService>().cancel(
-        context.read<AuthCubit>().state.session!,
-        widget.saleId,
-        text,
-      );
-      await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      if (mounted) {
-        sl<AppAlertCubit>().success('تم إلغاء البيع وعكس حركاته.');
-        setState(() => _future = sl<SaleService>().loadDetails(widget.saleId));
-      }
-    } catch (error) {
-      if (mounted) sl<AppAlertCubit>().error(error.toString());
-    }
   }
 }
 

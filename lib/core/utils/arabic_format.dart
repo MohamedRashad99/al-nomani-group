@@ -24,6 +24,9 @@ abstract final class ArabicFormat {
   static String transactionDateTime(DateTime value) =>
       EgyptTime.formatDateTime(value);
 
+  static String compactId(String id) =>
+      id.length <= 8 ? id : '${id.substring(0, 8)}…';
+
   static String number(num value) => _number.format(value);
 
   static String paymentMethod(String code) => switch (code) {

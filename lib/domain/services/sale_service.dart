@@ -235,6 +235,9 @@ class SaleService {
     if (!session.can(AppPermission.salesCancel)) {
       throw const PermissionException();
     }
+    if (reason.trim().isEmpty) {
+      throw const ValidationException('سبب الإلغاء مطلوب.');
+    }
     final sale = await _store.getSale(saleId);
     if (sale == null || sale.isDeleted) {
       throw const ValidationException('الفاتورة غير موجودة.');
@@ -311,7 +314,7 @@ class SaleService {
         createdBy: sale.createdBy,
         cancelledAt: now,
         cancelledBy: session.userId,
-        cancelReason: reason,
+        cancelReason: reason.trim(),
         version: sale.version + 1,
         deviceId: deviceId,
         createdAt: sale.createdAt,

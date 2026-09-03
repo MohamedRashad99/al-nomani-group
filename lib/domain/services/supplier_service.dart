@@ -32,6 +32,96 @@ class SupplierService {
     return _store.watchSuppliers().map((items) => _filter(items, query));
   }
 
+  Stream<List<SupplierListEntry>> watchEntries(String query) async* {
+    await for (final suppliers in watch(query)) {
+      yield await _enrichEntries(suppliers);
+    }
+  }
+
+  Future<List<SupplierListEntry>> _enrichEntries(List<Supplier> suppliers) async {
+    if (suppliers.isEmpty) return const [];
+    final accounts = await _store.listSupplierAccounts();
+    final accountBySupplier = {
+      for (final account in accounts) account.supplierId: account,
+    };
+    final purchases = await _store.listPurchases();
+    final txs = await _store.listSupplierTx();
+    return [
+      for (final supplier in suppliers)
+        SupplierListEntry(
+          supplier: supplier,
+          totals: _totalsFromCache(
+            supplierId: supplier.id,
+            purchases: purchases,
+            txs: txs,
+            account: accountBySupplier[supplier.id],
+          ),
+        ),
+    ];
+  }
+
+  SupplierTotals _totalsFromCache({
+    required String supplierId,
+    required List<Purchase> purchases,
+    required List<SupplierAccountTransaction> txs,
+    SupplierAccount? account,
+  }) {
+    var purchaseTotal = Money.zero();
+    var paymentTotal = Money.zero();
+    for (final purchase in purchases) {
+      if (purchase.supplierId != supplierId || purchase.status == 'cancelled') {
+        continue;
+      }
+      purchaseTotal += Money.parse(purchase.subtotal);
+    }
+    for (final tx in txs) {
+      if (tx.supplierId != supplierId) continue;
+      if (tx.type == 'payment' ||
+          tx.type == 'receipt' ||
+          tx.type == 'purchase_return') {
+        final signed = Money.parse(tx.amount);
+        paymentTotal += signed.isNegative ? -signed : signed;
+      }
+    }
+    return SupplierTotals(
+      purchases: purchaseTotal,
+      payments: paymentTotal,
+      outstanding: Money.parse(account?.cachedBalance ?? '0'),
+    );
+  }
+
+  Future<SupplierPortfolioSummary> portfolioSummary() async {
+    final suppliers = await _store.listSuppliers();
+    final accounts = await _store.listSupplierAccounts();
+    final purchases = await _store.listPurchases();
+    final txs = await _store.listSupplierTx();
+    final accountBySupplier = {
+      for (final account in accounts) account.supplierId: account,
+    };
+    var outstanding = Money.zero();
+    var payments = Money.zero();
+    var activeCount = 0;
+    for (final supplier in suppliers) {
+      if (supplier.isDeleted) continue;
+      if (SupplierListEntry.isActiveSupplier(supplier)) activeCount++;
+      final totals = _totalsFromCache(
+        supplierId: supplier.id,
+        purchases: purchases,
+        txs: txs,
+        account: accountBySupplier[supplier.id],
+      );
+      if (totals.outstanding.isPositive) {
+        outstanding += totals.outstanding;
+      }
+      payments += totals.payments;
+    }
+    return SupplierPortfolioSummary(
+      totalOutstanding: outstanding,
+      totalPayments: payments,
+      activeSuppliers: activeCount,
+    );
+  }
+
   Future<List<Supplier>> search(String query) async =>
       _filter(await _store.listSuppliers(), query);
 
@@ -58,6 +148,8 @@ class SupplierService {
     String? area,
     String? notes,
     String? linkedCustomerId,
+    String goodsType = '',
+    String? status,
     bool isActive = true,
   }) async {
     final isCreate = id == null;
@@ -75,6 +167,7 @@ class SupplierService {
     final supplierId = id ?? newId();
     final existing = id == null ? null : await _store.getSupplier(id);
     final nextLink = linkedCustomerId ?? existing?.linkedCustomerId;
+    final resolvedStatus = status ?? existing?.status ?? (isActive ? 'active' : 'closed');
     final supplier = Supplier(
       id: supplierId,
       name: name.trim(),
@@ -83,7 +176,9 @@ class SupplierService {
       area: area,
       notes: notes,
       linkedCustomerId: nextLink?.trim().isEmpty == true ? null : nextLink,
-      isActive: isActive,
+      goodsType: goodsType.trim(),
+      status: resolvedStatus,
+      isActive: isActive && resolvedStatus != 'closed',
       version: (existing?.version ?? 0) + 1,
       deviceId: deviceId,
       createdAt: existing?.createdAt ?? now,
@@ -338,4 +433,37 @@ class SupplierAging {
   final Money d31to60;
   final Money d61to90;
   final Money over90;
+}
+
+class SupplierListEntry {
+  const SupplierListEntry({required this.supplier, required this.totals});
+
+  final Supplier supplier;
+  final SupplierTotals totals;
+
+  static bool isActiveSupplier(Supplier supplier) {
+    if (supplier.isDeleted) return false;
+    if (supplier.status == 'closed') return false;
+    return supplier.isActive;
+  }
+
+  String get statusLabel => switch (supplier.status) {
+    'suspended' => 'معلق',
+    'closed' => 'مغلق',
+    _ => supplier.isActive ? 'نشط' : 'مغلق',
+  };
+
+  bool get isActive => isActiveSupplier(supplier);
+}
+
+class SupplierPortfolioSummary {
+  const SupplierPortfolioSummary({
+    required this.totalOutstanding,
+    required this.totalPayments,
+    required this.activeSuppliers,
+  });
+
+  final Money totalOutstanding;
+  final Money totalPayments;
+  final int activeSuppliers;
 }

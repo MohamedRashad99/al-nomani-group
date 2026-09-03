@@ -78,7 +78,10 @@ GoRouter createRouter(AuthCubit auth) {
       ),
       GoRoute(
         path: '/purchases',
-        builder: (_, _) => const SuppliersPage(),
+        redirect: (context, state) {
+          if (state.uri.path == '/purchases') return '/suppliers';
+          return null;
+        },
         routes: [
           GoRoute(
             path: 'new',

@@ -234,6 +234,9 @@ class PurchaseService {
     if (!session.can(AppPermission.purchasesCancel)) {
       throw const PermissionException();
     }
+    if (reason.trim().isEmpty) {
+      throw const ValidationException('سبب الإلغاء مطلوب.');
+    }
     final purchase = await _store.getPurchase(purchaseId);
     if (purchase == null || purchase.isDeleted) {
       throw const ValidationException('فاتورة الشراء غير موجودة.');

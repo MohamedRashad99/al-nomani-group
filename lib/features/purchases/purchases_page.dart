@@ -13,7 +13,8 @@ import '../../domain/models/purchase_draft.dart';
 import '../../domain/services/catalog_service.dart';
 import '../../domain/services/purchase_service.dart';
 import '../../domain/services/supplier_service.dart';
-import '../../shared/widgets/transaction_timestamp.dart';
+import '../../shared/widgets/destructive_action_guard.dart';
+import '../../shared/widgets/transaction_audit_footer.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -358,16 +359,7 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
             children: [
               ListTile(
                 title: Text(purchase.purchaseNumber),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(details.supplier?.name ?? 'مورد غير متاح'),
-                    TransactionTimestamp(
-                      dateTime: purchase.purchasedAt,
-                      style: TransactionTimestampStyle.inline,
-                    ),
-                  ],
-                ),
+                subtitle: Text(details.supplier?.name ?? 'مورد غير متاح'),
                 trailing: Text(ArabicFormat.status(purchase.status)),
               ),
               for (final item in details.items)
@@ -393,14 +385,34 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                 amount: Money.parse(purchase.remainingAmount),
                 emphasized: true,
               ),
+              _DetailMetaRow(
+                label: 'تاريخ الشراء',
+                value: ArabicFormat.transactionDateTime(purchase.purchasedAt),
+              ),
+              TransactionAuditFooter(
+                createdAt: purchase.createdAt,
+                updatedAt: purchase.updatedAt,
+                createdBy: purchase.createdBy,
+                cancelledAt: purchase.cancelledAt,
+                cancelledBy: purchase.cancelledBy,
+                cancelReason: purchase.cancelReason,
+              ),
               if (purchase.status != 'cancelled' &&
                   purchase.status != 'returned' &&
                   session?.can(AppPermission.purchasesCreate) == true) ...[
                 const SizedBox(height: 12),
-                FilledButton.tonalIcon(
-                  onPressed: () => _return(details),
-                  icon: const Icon(Icons.undo_outlined),
-                  label: const Text('مرتجع شراء'),
+                BusyGuarded(
+                  builder: (context, busy) => FilledButton.tonalIcon(
+                    onPressed: busy ? null : () => _return(details),
+                    icon: busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.undo_outlined),
+                    label: const Text('مرتجع شراء'),
+                  ),
                 ),
               ],
               if (purchase.status != 'cancelled' &&
@@ -408,12 +420,20 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                   purchase.status != 'partial' &&
                   session?.can(AppPermission.purchasesCancel) == true) ...[
                 const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _cancel,
-                  icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('إلغاء الشراء وعكس الحركات'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
+                BusyGuarded(
+                  builder: (context, busy) => OutlinedButton.icon(
+                    onPressed: busy ? null : _cancel,
+                    icon: busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cancel_outlined),
+                    label: const Text('إلغاء الشراء وعكس الحركات'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                    ),
                   ),
                 ),
               ],
@@ -433,40 +453,28 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
       sl<AppAlertCubit>().warning('لا توجد كميات قابلة للمرتجع.');
       return;
     }
-    final confirmed = await showDialog<bool>(
+    await DestructiveActionGuard.run(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('مرتجع شراء'),
-        content: Text(
+      title: 'مرتجع شراء',
+      message:
           'سيتم إرجاع الكميات المتبقية (${remainingLines.length} بند) وعكس المخزون مع قيد دائن للمورد. تبقى الفاتورة الأصلية للمراجعة.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(S.back),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('تأكيد المرتجع'),
-          ),
-        ],
-      ),
+      confirmLabel: 'تأكيد المرتجع',
+      successMessage: 'تم تسجيل مرتجع الشراء.',
+      action: () async {
+        await sl<PurchaseService>().returnLines(
+          context.read<AuthCubit>().state.session!,
+          widget.purchaseId,
+        );
+        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      },
+      onSuccess: () {
+        if (mounted) {
+          setState(
+            () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
+          );
+        }
+      },
     );
-    if (confirmed != true || !mounted) return;
-    try {
-      await sl<PurchaseService>().returnLines(
-        context.read<AuthCubit>().state.session!,
-        widget.purchaseId,
-      );
-      await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      if (!mounted) return;
-      sl<AppAlertCubit>().success('تم تسجيل مرتجع الشراء.');
-      setState(
-        () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
-      );
-    } catch (error) {
-      sl<AppAlertCubit>().error(error.toString());
-    }
   }
 
   Quantity _remaining(PurchaseItem item) {
@@ -476,57 +484,49 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
   }
 
   Future<void> _cancel() async {
-    final reason = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    await DestructiveActionGuard.runWithReason(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد إلغاء الشراء'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'سيُخرج المخزون ويُعكس حساب المورد إن كان الرصيد كافياً.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reason,
-              decoration: const InputDecoration(labelText: 'سبب الإلغاء'),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(S.back),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('إلغاء الشراء'),
-          ),
+      title: 'تأكيد إلغاء الشراء',
+      message: 'سيُخرج المخزون ويُعكس حساب المورد إن كان الرصيد كافياً.',
+      confirmLabel: 'إلغاء الشراء',
+      reasonLabel: 'سبب الإلغاء',
+      successMessage: 'تم إلغاء الشراء وعكس حركاته.',
+      action: (reason) async {
+        await sl<PurchaseService>().cancel(
+          context.read<AuthCubit>().state.session!,
+          widget.purchaseId,
+          reason,
+        );
+        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      },
+      onSuccess: () {
+        if (mounted) {
+          setState(
+            () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
+          );
+        }
+      },
+    );
+  }
+}
+
+class _DetailMetaRow extends StatelessWidget {
+  const _DetailMetaRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text('$label: ', style: Theme.of(context).textTheme.bodySmall),
+          Expanded(child: Text(value)),
         ],
       ),
     );
-    final text = reason.text.trim();
-    reason.dispose();
-    if (confirmed != true || text.isEmpty || !mounted) return;
-    try {
-      await sl<PurchaseService>().cancel(
-        context.read<AuthCubit>().state.session!,
-        widget.purchaseId,
-        text,
-      );
-      await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      if (mounted) {
-        sl<AppAlertCubit>().success('تم إلغاء الشراء وعكس حركاته.');
-        setState(
-          () => _future = sl<PurchaseService>().loadDetails(widget.purchaseId),
-        );
-      }
-    } catch (error) {
-      if (mounted) sl<AppAlertCubit>().error(error.toString());
-    }
   }
 }
 

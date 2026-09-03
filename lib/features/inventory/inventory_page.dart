@@ -13,6 +13,7 @@ import '../../domain/services/inventory_service.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
+import '../../shared/widgets/destructive_action_guard.dart';
 import '../../shared/widgets/transaction_timestamp.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/product_thumb.dart';
@@ -74,22 +75,28 @@ class _InventoryPageState extends State<InventoryPage> {
                         ),
                         trailing: !canMove
                             ? null
-                            : Wrap(
-                                spacing: 4,
-                                children: [
-                                  IconButton(
-                                    tooltip: S.stockIn,
-                                    onPressed: () => _move(p, 'stock_in'),
-                                    icon: const Icon(Icons.add_circle_outline),
-                                  ),
-                                  IconButton(
-                                    tooltip: S.stockOut,
-                                    onPressed: () => _move(p, 'stock_out'),
-                                    icon: const Icon(
-                                      Icons.remove_circle_outline,
+                            : BusyGuarded(
+                                builder: (context, busy) => Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    IconButton(
+                                      tooltip: S.stockIn,
+                                      onPressed: busy ? null : () => _move(p, 'stock_in'),
+                                      icon: busy
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            )
+                                          : const Icon(Icons.add_circle_outline),
                                     ),
-                                  ),
-                                ],
+                                    IconButton(
+                                      tooltip: S.stockOut,
+                                      onPressed: busy ? null : () => _move(p, 'stock_out'),
+                                      icon: const Icon(Icons.remove_circle_outline),
+                                    ),
+                                  ],
+                                ),
                               ),
                         onTap: () => _showMovements(p),
                       ),

@@ -273,6 +273,8 @@ AuditLog auditFromMap(Map<String, dynamic> data, String id) {
 
 Supplier supplierFromMap(Map<String, dynamic> data, String id) {
   final now = EgyptTime.nowUtc();
+  final isActive = mapBool(data, const ['is_active', 'isActive']);
+  final statusRaw = mapTextOrNull(data, const ['status']);
   return Supplier(
     id: id,
     name: mapText(data, const ['name'], 'مورد'),
@@ -281,7 +283,9 @@ Supplier supplierFromMap(Map<String, dynamic> data, String id) {
     area: mapTextOrNull(data, const ['area']),
     notes: mapTextOrNull(data, const ['notes']),
     linkedCustomerId: mapTextOrNull(data, const ['linked_customer_id', 'linkedCustomerId']),
-    isActive: mapBool(data, const ['is_active', 'isActive']),
+    goodsType: mapText(data, const ['goods_type', 'goodsType'], ''),
+    status: statusRaw ?? (isActive ? 'active' : 'closed'),
+    isActive: isActive,
     version: mapVersion(data),
     deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
     createdAt: mapDate(data, const ['created_at', 'createdAt']),

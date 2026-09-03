@@ -680,6 +680,8 @@ class Supplier {
     this.area,
     this.notes,
     this.linkedCustomerId,
+    this.goodsType = '',
+    this.status = 'active',
     this.isActive = true,
     this.version = 1,
     this.deviceId,
@@ -695,6 +697,8 @@ class Supplier {
   final String? area;
   final String? notes;
   final String? linkedCustomerId;
+  final String goodsType;
+  final String status;
   final bool isActive;
   final int version;
   final String? deviceId;
@@ -710,6 +714,8 @@ class Supplier {
     'area': area,
     'notes': notes,
     'linked_customer_id': linkedCustomerId,
+    'goods_type': goodsType,
+    'status': status,
     'is_active': isActive,
     'version': version,
     'device_id': deviceId,

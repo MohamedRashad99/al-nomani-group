@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:al_nomani_group/core/errors/app_exception.dart';
 import 'package:al_nomani_group/app.dart';
 import 'package:al_nomani_group/core/config/app_config.dart';
 import 'package:al_nomani_group/core/di/injector.dart';
@@ -275,6 +276,30 @@ void main() {
     expect(account.cachedBalance, '0.000');
     final dashboard = await sl<DashboardService>().load();
     expect(dashboard.todaySales.isZero, isTrue);
+  });
+
+  test('sale cancel without reason throws validation error', () async {
+    await readyStore();
+    final session = admin();
+    final result = await sl<SaleService>().create(
+      session,
+      SaleDraft(
+        customerId: 'c-salem',
+        paidAmount: Money.zero(),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-npk',
+            quantity: Quantity.parse('1'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10.500'),
+          ),
+        ],
+      ),
+    );
+    expect(
+      () => sl<SaleService>().cancel(session, result.saleId, '   '),
+      throwsA(isA<ValidationException>()),
+    );
   });
 
   test('cancel after collection reverses unpaid remainder only', () async {

@@ -68,6 +68,7 @@ class DashboardSnapshot {
   final List<DashboardInsight> fastMovingToday;
   final List<DashboardInsight> fastMovingWeek;
   final List<DashboardInsight> reorderAlerts;
+  final bool isComplete;
 
   const DashboardSnapshot({
     required this.todaySales,
@@ -99,7 +100,32 @@ class DashboardSnapshot {
     this.fastMovingToday = const [],
     this.fastMovingWeek = const [],
     this.reorderAlerts = const [],
+    this.isComplete = true,
   });
+
+  static DashboardSnapshot empty({bool isComplete = false}) => DashboardSnapshot(
+    todaySales: Money.zero(),
+    weeklySales: Money.zero(),
+    monthlySales: Money.zero(),
+    outstandingDebt: Money.zero(),
+    customersWithDebt: 0,
+    todayCollections: Money.zero(),
+    monthlyCollections: Money.zero(),
+    totalProducts: 0,
+    lowStock: 0,
+    outOfStock: 0,
+    recentSales: const [],
+    recentCollections: const [],
+    recentMovements: const [],
+    topProducts: const [],
+    topCustomers: const [],
+    lowStockProducts: const [],
+    salesTrend: const [],
+    todaySalesChangePercent: 0,
+    customerNames: const {},
+    productNames: const {},
+    isComplete: isComplete,
+  );
 }
 
 class DashboardService {
@@ -108,14 +134,21 @@ class DashboardService {
   String? _lastFingerprint;
 
   Stream<DashboardSnapshot> watch() async* {
-    final first = await load();
-    _lastFingerprint = _fingerprint(first);
-    yield first;
+    final tier1 = await loadTier1();
+    _lastFingerprint = _fingerprint(tier1);
+    yield tier1;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final full = await load();
+    final key = _fingerprint(full);
+    if (key != _lastFingerprint) {
+      _lastFingerprint = key;
+      yield full;
+    }
     await for (final _ in _store.watchChanges()) {
       final next = await load();
-      final key = _fingerprint(next);
-      if (key == _lastFingerprint) continue;
-      _lastFingerprint = key;
+      final nextKey = _fingerprint(next);
+      if (nextKey == _lastFingerprint) continue;
+      _lastFingerprint = nextKey;
       yield next;
     }
   }
@@ -138,6 +171,75 @@ class DashboardService {
       snapshot.consumption.map((row) => '${row.id}:${row.detail}').join(),
       snapshot.reorderAlerts.map((row) => row.id).join(),
     ].join('|');
+  }
+
+  Future<DashboardSnapshot> loadTier1() async {
+    final now = EgyptTime.nowUtc();
+    final startToday = EgyptTime.startOfTodayCairo();
+    final cairoNow = EgyptTime.toCairo(now);
+    final startMonth = EgyptTime.startOfDayCairo(
+      DateTime.utc(cairoNow.year, cairoNow.month, 1),
+    );
+
+    final allSales = await _store.listSales();
+    final collectionsRaw = await _store.listCollections();
+    final products = await _store.listProducts();
+
+    final sales = [
+      for (final sale in allSales)
+        if (OperationalStatus.isActiveSale(sale)) sale,
+    ];
+    final collections = [
+      for (final row in collectionsRaw)
+        if (OperationalStatus.isActiveCollection(row)) row,
+    ];
+
+    Money sumSales(DateTime from) => sales
+        .where((s) => s.soldAt.isAfter(from) || s.soldAt.isAtSameMomentAs(from))
+        .fold(Money.zero(), (m, s) => m + Money.parse(s.subtotal));
+
+    Money sumCol(DateTime from) => collections
+        .where(
+          (c) =>
+              c.collectedAt.isAfter(from) ||
+              c.collectedAt.isAtSameMomentAs(from),
+        )
+        .fold(Money.zero(), (m, c) => m + Money.parse(c.amount));
+
+    var low = 0;
+    var out = 0;
+    for (final p in products) {
+      final measure = InventoryMeasure.fromProduct(p);
+      if (measure.isOutOfStock) {
+        out++;
+      } else if (measure.isLowStock) {
+        low++;
+      }
+    }
+
+    return DashboardSnapshot(
+      todaySales: sumSales(startToday),
+      weeklySales: Money.zero(),
+      monthlySales: sumSales(startMonth),
+      outstandingDebt: Money.zero(),
+      customersWithDebt: 0,
+      todayCollections: sumCol(startToday),
+      monthlyCollections: sumCol(startMonth),
+      totalProducts: products.length,
+      lowStock: low,
+      outOfStock: out,
+      recentSales: const [],
+      recentCollections: const [],
+      recentMovements: const [],
+      topProducts: const [],
+      topCustomers: const [],
+      lowStockProducts: const [],
+      salesTrend: const [],
+      todaySalesChangePercent: 0,
+      customerNames: const {},
+      productNames: {for (final product in products) product.id: product.name},
+      isComplete: false,
+    );
   }
 
   Future<DashboardSnapshot> load() async {
