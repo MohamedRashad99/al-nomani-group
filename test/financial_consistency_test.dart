@@ -406,4 +406,51 @@ void main() {
     await sl<SupplierService>().delete(session: session, id: supplierId);
     expect(await sl<SupplierService>().get(supplierId), isNull);
   });
+
+  test('supplier archive hides vendor without deleting invoices or ledger', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد أرشفة',
+    );
+    final created = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-a',
+            quantity: Quantity.parse('1'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10'),
+          ),
+        ],
+      ),
+    );
+    final blocked = await sl<SupplierService>().inspectDelete(supplierId);
+    expect(blocked.canDelete, isFalse);
+    expect(blocked.canArchive, isTrue);
+    expect(blocked.activePurchases, 1);
+    expect(blocked.invoices, isNotEmpty);
+
+    await sl<SupplierService>().archive(session: session, id: supplierId);
+    final archived = await sl<SupplierService>().get(supplierId);
+    expect(archived, isNotNull);
+    expect(SupplierListEntry.isActiveSupplier(archived!), isFalse);
+
+    final purchases = await store.listPurchases(supplierId: supplierId);
+    expect(purchases.any((row) => row.id == created.purchaseId), isTrue);
+
+    expect(
+      () => sl<SupplierService>().delete(session: session, id: supplierId),
+      throwsA(isA<ValidationException>()),
+    );
+
+    final after = await sl<SupplierService>().inspectDelete(supplierId);
+    expect(after.alreadyClosed, isTrue);
+    expect(after.canArchive, isFalse);
+    expect(after.canDelete, isFalse);
+  });
 }

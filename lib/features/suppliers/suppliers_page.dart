@@ -27,6 +27,7 @@ import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/quantity_sheet.dart';
 import '../../shared/widgets/searchable_select.dart';
 import 'supplier_cycle_sheets.dart';
+import 'supplier_removal_dialog.dart';
 import 'supplier_statement_export.dart';
 
 class SuppliersPage extends StatefulWidget {
@@ -41,6 +42,7 @@ class SuppliersPage extends StatefulWidget {
 class _SuppliersPageState extends State<SuppliersPage> {
   String _query = '';
   bool _openedDeepLink = false;
+  bool _showClosed = false;
 
   @override
   void initState() {
@@ -93,6 +95,16 @@ class _SuppliersPageState extends State<SuppliersPage> {
                     onChanged: (v) => setState(() => _query = v),
                   ),
                 ),
+                IconButton(
+                  tooltip: _showClosed ? 'إخفاء المؤرشفين' : 'إظهار المؤرشفين',
+                  isSelected: _showClosed,
+                  onPressed: () => setState(() => _showClosed = !_showClosed),
+                  icon: Icon(
+                    _showClosed
+                        ? Icons.inventory_2
+                        : Icons.inventory_2_outlined,
+                  ),
+                ),
                 if (session.can(AppPermission.suppliersCreate)) ...[
                   const SizedBox(width: 8),
                   FilledButton.icon(
@@ -112,20 +124,34 @@ class _SuppliersPageState extends State<SuppliersPage> {
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (entries.isEmpty) {
+                final visible = [
+                  for (final entry in entries)
+                    if (_showClosed || entry.isActive) entry,
+                ];
+                if (visible.isEmpty) {
+                  if (entries.isNotEmpty && !_showClosed) {
+                    return BrandedEmptyState(
+                      title: S.empty,
+                      message: 'يوجد موردون مؤرشفون. فعّل «المؤرشفون» لإظهارهم.',
+                      action: TextButton(
+                        onPressed: () => setState(() => _showClosed = true),
+                        child: const Text('إظهار المؤرشفين'),
+                      ),
+                    );
+                  }
                   return const BrandedEmptyState(title: S.empty);
                 }
                 return LayoutBuilder(
                   builder: (context, constraints) {
                     if (constraints.maxWidth >= 960) {
                       return _SupplierTable(
-                        entries: entries,
+                        entries: visible,
                         session: session,
                         onEdit: _editSupplier,
                       );
                     }
                     return _SupplierCards(
-                      entries: entries,
+                      entries: visible,
                       session: session,
                       onEdit: _editSupplier,
                     );
@@ -525,7 +551,7 @@ class _QuickActions extends StatelessWidget {
           ),
         if (session.can(AppPermission.suppliersDelete))
           IconButton(
-            tooltip: S.cancel,
+            tooltip: 'حذف أو أرشفة',
             onPressed: () => SupplierDashboardActions.deleteSupplier(context, entry.supplier),
             icon: const Icon(Icons.delete_outline, color: AppColors.danger),
           ),
@@ -849,32 +875,66 @@ abstract final class SupplierDashboardActions {
   }
 
   static Future<void> deleteSupplier(BuildContext context, Supplier supplier) async {
-    final inspection = await sl<SupplierService>().inspectDelete(supplier.id);
-    if (!context.mounted) return;
-    if (!inspection.canDelete) {
-      sl<AppAlertCubit>().error(
-        'لا يمكن حذف ${supplier.name} الآن:\n${inspection.blockers.join('\n')}',
+    late final SupplierDeleteInspection inspection;
+    try {
+      inspection = await sl<AppBusyCubit>().guard(
+        () => sl<SupplierService>().inspectDelete(supplier.id),
       );
+    } catch (error) {
+      sl<AppAlertCubit>().error(error.toString());
       return;
     }
-    final archiveNote = inspection.archivedPurchases > 0
-        ? '\nستبقى ${inspection.archivedPurchases} فاتورة ملغاة في الأرشيف دون حذف بياناتها.'
-        : '';
-    await DestructiveActionGuard.run(
+    if (!context.mounted) return;
+    final choice = await showSupplierRemovalDialog(
       context: context,
-      title: 'حذف المورد',
-      message:
-          'الرصيد صفر ولا توجد فواتير مفتوحة. يُحذف سجل المورد فقط.$archiveNote',
-      confirmLabel: 'حذف',
-      successMessage: 'تم حذف المورد.',
-      action: () async {
-        await sl<SupplierService>().delete(
-          session: context.read<AuthCubit>().state.session!,
-          id: supplier.id,
-        );
-        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
-      },
+      inspection: inspection,
     );
+    if (!context.mounted) return;
+    switch (choice.kind) {
+      case SupplierRemovalKind.dismiss:
+        return;
+      case SupplierRemovalKind.openInvoice:
+        final purchaseId = choice.purchaseId;
+        if (purchaseId != null) context.push('/purchases/$purchaseId');
+        return;
+      case SupplierRemovalKind.statement:
+        await showStatement(context, supplier);
+        return;
+      case SupplierRemovalKind.settle:
+        await SupplierCycleSheets.settleInvoice(context, supplier);
+        return;
+      case SupplierRemovalKind.archive:
+        await DestructiveActionGuard.run(
+          context: context,
+          title: 'أرشفة ${supplier.name}',
+          message:
+              'سيُخفى المورد من القائمة النشطة فقط. الفواتير والقيود والرصيد تبقى كما هي ولا تُسوّى تلقائياً.',
+          confirmLabel: 'أرشفة',
+          successMessage: 'تم أرشفة المورد.',
+          action: () async {
+            await sl<SupplierService>().archive(
+              session: context.read<AuthCubit>().state.session!,
+              id: supplier.id,
+            );
+          },
+        );
+        return;
+      case SupplierRemovalKind.delete:
+        await DestructiveActionGuard.run(
+          context: context,
+          title: 'حذف المورد',
+          message:
+              'الرصيد صفر ولا توجد فواتير مفتوحة. يُحذف سجل المورد فقط. السجلات الملغاة تبقى في الأرشيف.',
+          confirmLabel: 'حذف نهائي',
+          successMessage: 'تم حذف المورد.',
+          action: () async {
+            await sl<SupplierService>().delete(
+              session: context.read<AuthCubit>().state.session!,
+              id: supplier.id,
+            );
+          },
+        );
+    }
   }
 }
 

@@ -266,6 +266,7 @@ class SupplierService {
   }
 
   Future<SupplierDeleteInspection> inspectDelete(String id) async {
+    final supplier = await _store.getSupplier(id);
     final purchases = await _store.listPurchases(supplierId: id);
     final active = [
       for (final purchase in purchases)
@@ -273,24 +274,98 @@ class SupplierService {
     ];
     final account = await _store.getAccountBySupplier(id);
     final balance = Money.parse(account?.cachedBalance ?? '0');
+    final invoices = [
+      for (final purchase in active)
+        SupplierInvoiceLink(
+          id: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          status: purchase.status,
+          remaining: Money.parse(purchase.remainingAmount),
+        ),
+    ];
     final blockers = <String>[];
-    if (active.isNotEmpty) {
-      blockers.add(
-        'يوجد ${active.length} فاتورة غير ملغاة. سوِّ المتبقي أو ألغِ الفواتير أولاً.',
+    final steps = <String>[];
+    if (invoices.isNotEmpty) {
+      blockers.add('يوجد ${invoices.length} فاتورة غير ملغاة.');
+      steps.add(
+        'افتح الفاتورة من القائمة ثم سوِّ المتبقي أو سجّل مرتجعاً أو إلغاءً بسبب واضح.',
       );
     }
     if (!balance.isZero) {
       blockers.add(
-        'رصيد الحساب ${balance.toDisplay()} ${Money.currencySymbol}. سجّل دفعة أو قيد تصحيح حتى يصبح الرصيد صفراً.',
+        'رصيد الحساب ${balance.toDisplay()} ${Money.currencySymbol}.',
+      );
+      steps.add(
+        'سجّل دفعة أو قيد تصحيح من كشف الحساب حتى يصبح الرصيد صفراً.',
       );
     }
+    if (blockers.isEmpty) {
+      steps.add('يمكن حذف سجل المورد. الفواتير الملغاة والقيود تبقى في الأرشيف.');
+    } else {
+      steps.add(
+        'لإخفاء المورد من القائمة النشطة دون المساس بالفواتير، استخدم الأرشفة.',
+      );
+    }
+    final alreadyClosed =
+        supplier != null && !SupplierListEntry.isActiveSupplier(supplier);
     return SupplierDeleteInspection(
+      supplierName: supplier?.name ?? 'المورد',
       canDelete: blockers.isEmpty,
+      canArchive: !alreadyClosed,
+      alreadyClosed: alreadyClosed,
       blockers: blockers,
+      steps: steps,
+      invoices: invoices,
       activePurchases: active.length,
       archivedPurchases: purchases.length - active.length,
       balance: balance,
     );
+  }
+
+  /// Hides the supplier from the active list. Invoices and ledger rows stay.
+  Future<void> archive({
+    required AppSession session,
+    required String id,
+  }) async {
+    if (!session.can(AppPermission.suppliersUpdate) &&
+        !session.can(AppPermission.suppliersDelete)) {
+      throw const PermissionException();
+    }
+    final existing = await _store.getSupplier(id);
+    if (existing == null || existing.isDeleted) {
+      throw const ValidationException('المورد غير موجود.');
+    }
+    if (!SupplierListEntry.isActiveSupplier(existing)) {
+      throw const ValidationException('المورد مؤرشف مسبقاً.');
+    }
+    final now = EgyptTime.nowUtc();
+    final deviceId = await _devices.deviceId();
+    await _store.putSupplier(
+      Supplier(
+        id: existing.id,
+        name: existing.name,
+        phone: existing.phone,
+        address: existing.address,
+        area: existing.area,
+        notes: existing.notes,
+        linkedCustomerId: existing.linkedCustomerId,
+        goodsType: existing.goodsType,
+        status: 'closed',
+        isActive: false,
+        version: existing.version + 1,
+        deviceId: deviceId,
+        createdAt: existing.createdAt,
+        updatedAt: now,
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.archive',
+      entityType: 'supplier',
+      entityId: id,
+    );
+    await _sync.maybeSyncAfterLocalWrite();
   }
 
   Future<void> delete({
@@ -648,20 +723,62 @@ class SupplierListEntry {
   bool get isActive => isActiveSupplier(supplier);
 }
 
+class SupplierInvoiceLink {
+  const SupplierInvoiceLink({
+    required this.id,
+    required this.purchaseNumber,
+    required this.status,
+    required this.remaining,
+  });
+
+  final String id;
+  final String purchaseNumber;
+  final String status;
+  final Money remaining;
+
+  String get title {
+    final number = purchaseNumber.trim().isEmpty ? id : purchaseNumber;
+    if (remaining.isZero) return '$number · مسوّاة';
+    return '$number · متبقي ${remaining.toDisplay()} ${Money.currencySymbol}';
+  }
+
+  String get route => '/purchases/$id';
+}
+
 class SupplierDeleteInspection {
   const SupplierDeleteInspection({
+    required this.supplierName,
     required this.canDelete,
+    required this.canArchive,
+    required this.alreadyClosed,
     required this.blockers,
+    required this.steps,
+    required this.invoices,
     required this.activePurchases,
     required this.archivedPurchases,
     required this.balance,
   });
 
+  final String supplierName;
   final bool canDelete;
+  final bool canArchive;
+  final bool alreadyClosed;
   final List<String> blockers;
+  final List<String> steps;
+  final List<SupplierInvoiceLink> invoices;
   final int activePurchases;
   final int archivedPurchases;
   final Money balance;
+
+  String get summary {
+    if (canDelete) {
+      return 'يمكن حذف سجل $supplierName. الفواتير الملغاة والقيود تبقى في الأرشيف.';
+    }
+    if (alreadyClosed) {
+      return '$supplierName مؤرشف مسبقاً. الحذف النهائي يتطلب تسوية أو إلغاء الفواتير المفتوحة.';
+    }
+    return 'لا يمكن حذف $supplierName الآن لأن له ارتباطات مالية نشطة.';
+  }
 }
 
 class SupplierPortfolioSummary {
