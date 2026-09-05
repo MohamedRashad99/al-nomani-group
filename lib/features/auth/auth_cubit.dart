@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/errors/app_exception.dart';
 import '../../core/l10n/app_strings.dart';
-import '../../data/sync/sync_engine.dart';
 import '../../domain/services/auth_service.dart';
 import '../../domain/session.dart';
 
@@ -36,9 +35,9 @@ class AuthState extends Equatable {
 }
 
 class AuthCubit extends Cubit<AuthState> {
-  AuthCubit(this._auth, this._sync) : super(const AuthState());
+  AuthCubit(this._auth, {this.onAuthenticated}) : super(const AuthState());
   final AuthService _auth;
-  final SyncEngine _sync;
+  final Future<void> Function(AppSession session)? onAuthenticated;
 
   Future<void> restore() async {
     emit(state.copyWith(loading: true));
@@ -62,13 +61,10 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  Future<void> _recordSession(AppSession session) {
-    return _sync.recordAuthenticatedSession(
-      userId: session.userId,
-      username: session.username,
-      displayName: session.displayName,
-      roleId: session.roleName,
-    );
+  Future<void> _recordSession(AppSession session) async {
+    final hook = onAuthenticated;
+    if (hook == null) return;
+    await hook(session);
   }
 
   Future<void> logout() async {

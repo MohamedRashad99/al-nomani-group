@@ -16,6 +16,7 @@ import 'features/app/app_alert_cubit.dart';
 import 'features/app/app_alert_host.dart';
 import 'features/app/app_busy_cubit.dart';
 import 'features/app/startup_splash.dart';
+import 'features/app/mobile_update_host.dart';
 import 'features/app/update_banner.dart';
 import 'features/auth/auth_cubit.dart';
 
@@ -162,11 +163,13 @@ class _AlNomaniAppState extends State<AlNomaniApp> with WidgetsBindingObserver {
           return Directionality(
             textDirection: TextDirection.rtl,
             child: AppAlertHost(
-              child: Column(
-                children: [
-                  const UpdateBanner(),
-                  Expanded(child: child ?? const SizedBox.shrink()),
-                ],
+              child: MobileUpdateHost(
+                child: Column(
+                  children: [
+                    const UpdateBanner(),
+                    Expanded(child: child ?? const SizedBox.shrink()),
+                  ],
+                ),
               ),
             ),
           );

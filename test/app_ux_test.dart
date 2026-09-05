@@ -52,7 +52,10 @@ void main() {
     );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     expect(scaffold.backgroundColor, AppColors.darkGreen);
-    expect(StartupSplashView.displayDuration, const Duration(seconds: 2));
+    expect(
+      StartupSplashView.displayDuration,
+      const Duration(milliseconds: 800),
+    );
     expect(find.byKey(const Key('splash-seeds')), findsOneWidget);
     expect(find.text('مجموعة النعماني'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 400));

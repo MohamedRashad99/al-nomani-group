@@ -1,4 +1,5 @@
 import 'package:al_nomani_group/core/config/app_config.dart';
+import 'package:al_nomani_group/core/errors/app_exception.dart';
 import 'package:al_nomani_group/core/di/injector.dart';
 import 'package:al_nomani_group/data/remote/memory_erp_store.dart';
 import 'package:al_nomani_group/domain/models/purchase_draft.dart';
@@ -247,5 +248,162 @@ void main() {
       Quantity.parse(before) + Quantity.parse('7'),
     );
     expect(store.movements.values.any((m) => m.productId == 'p-a'), isTrue);
+  });
+
+  test('supplier invoice settle reduces remaining and payable', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد تسوية',
+    );
+    final created = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-a',
+            quantity: Quantity.parse('3'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10'),
+          ),
+        ],
+      ),
+    );
+    await sl<PurchaseService>().settle(
+      session: session,
+      purchaseId: created.purchaseId,
+      amount: Money.parse('10'),
+      notes: 'دفعة جزئية',
+    );
+    final purchase = store.purchases[created.purchaseId]!;
+    expect(Money.parse(purchase.remainingAmount), Money.parse('20'));
+    final account = store.supplierAccounts.values.firstWhere(
+      (row) => row.supplierId == supplierId,
+    );
+    expect(Money.parse(account.cachedBalance), Money.parse('20'));
+  });
+
+  test('supplier invoice adjust posts compensating stock and ledger', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد تعديل',
+    );
+    final created = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-a',
+            quantity: Quantity.parse('2'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10'),
+          ),
+        ],
+      ),
+    );
+    final item = store.purchaseItems.values.firstWhere(
+      (row) => row.purchaseId == created.purchaseId,
+    );
+    await sl<PurchaseService>().adjustLines(
+      session: session,
+      purchaseId: created.purchaseId,
+      lines: [
+        PurchaseLineDraft(
+          itemId: item.id,
+          productId: 'p-a',
+          quantity: Quantity.parse('3'),
+          unit: 'كغ',
+          unitPrice: Money.parse('10'),
+        ),
+      ],
+    );
+    expect(
+      Quantity.parse(store.products['p-a']!.currentStock),
+      Quantity.parse('103'),
+    );
+    final account = store.supplierAccounts.values.firstWhere(
+      (row) => row.supplierId == supplierId,
+    );
+    expect(Money.parse(account.cachedBalance), Money.parse('30'));
+    expect(store.supplierTx.length, greaterThan(1));
+  });
+
+  test('supplier payment reverse restores payable', () async {
+    final store = await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد عكس',
+    );
+    await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-a',
+            quantity: Quantity.parse('2'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10'),
+          ),
+        ],
+      ),
+    );
+    await sl<SupplierService>().recordPayment(
+      session: session,
+      supplierId: supplierId,
+      amount: Money.parse('10'),
+    );
+    final payment = store.supplierTx.values.firstWhere(
+      (tx) => tx.type == 'payment',
+    );
+    await sl<SupplierService>().reverseTransaction(
+      session: session,
+      transactionId: payment.id,
+      reason: 'إدخال خاطئ',
+    );
+    final account = store.supplierAccounts.values.firstWhere(
+      (row) => row.supplierId == supplierId,
+    );
+    expect(Money.parse(account.cachedBalance), Money.parse('20'));
+  });
+
+  test('supplier delete is blocked until invoices are cancelled and settled', () async {
+    await readyStore();
+    final session = admin();
+    final supplierId = await sl<SupplierService>().upsert(
+      session: session,
+      name: 'مورد حذف',
+    );
+    final created = await sl<PurchaseService>().create(
+      session,
+      PurchaseDraft(
+        supplierId: supplierId,
+        paidAmount: Money.zero(),
+        lines: [
+          PurchaseLineDraft(
+            productId: 'p-a',
+            quantity: Quantity.parse('1'),
+            unit: 'كغ',
+            unitPrice: Money.parse('10'),
+          ),
+        ],
+      ),
+    );
+    expect(
+      () => sl<SupplierService>().delete(session: session, id: supplierId),
+      throwsA(isA<ValidationException>()),
+    );
+    await sl<PurchaseService>().cancel(session, created.purchaseId, 'لإتاحة الحذف');
+    await sl<SupplierService>().delete(session: session, id: supplierId);
+    expect(await sl<SupplierService>().get(supplierId), isNull);
   });
 }

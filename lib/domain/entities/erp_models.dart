@@ -801,6 +801,23 @@ class SupplierAccountTransaction {
   final String deviceId;
   final DateTime createdAt;
 
+  SupplierAccountTransaction copyWith({String? notes}) {
+    return SupplierAccountTransaction(
+      id: id,
+      accountId: accountId,
+      supplierId: supplierId,
+      type: type,
+      amount: amount,
+      runningBalance: runningBalance,
+      referenceType: referenceType,
+      referenceId: referenceId,
+      notes: notes ?? this.notes,
+      createdBy: createdBy,
+      deviceId: deviceId,
+      createdAt: createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'account_id': accountId,

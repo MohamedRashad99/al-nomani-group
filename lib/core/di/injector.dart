@@ -180,6 +180,16 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(AppAlertCubit.new);
   sl.registerLazySingleton(ProductImageService.new);
   sl.registerLazySingleton(ProductAiService.new);
-  sl.registerLazySingleton(() => AuthCubit(sl(), sl()));
+  sl.registerLazySingleton(
+    () => AuthCubit(
+      sl(),
+      onAuthenticated: (session) => sl<SyncEngine>().recordAuthenticatedSession(
+        userId: session.userId,
+        username: session.username,
+        displayName: session.displayName,
+        roleId: session.roleName,
+      ),
+    ),
+  );
   sl.registerFactory(() => BackupCubit(sl(), sl(), sl()));
 }

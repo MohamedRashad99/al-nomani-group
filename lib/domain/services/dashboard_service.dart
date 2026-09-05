@@ -144,6 +144,7 @@ class DashboardService {
       _lastFingerprint = key;
       yield full;
     }
+    await Future<void>.delayed(const Duration(milliseconds: 800));
     await for (final _ in _store.watchChanges()) {
       final next = await load();
       final nextKey = _fingerprint(next);
@@ -181,9 +182,12 @@ class DashboardService {
       DateTime.utc(cairoNow.year, cairoNow.month, 1),
     );
 
-    final allSales = await _store.listSales();
-    final collectionsRaw = await _store.listCollections();
-    final products = await _store.listProducts();
+    final allSalesFuture = _store.listSales();
+    final collectionsFuture = _store.listCollections();
+    final productsFuture = _store.listProducts();
+    final allSales = await allSalesFuture;
+    final collectionsRaw = await collectionsFuture;
+    final products = await productsFuture;
 
     final sales = [
       for (final sale in allSales)

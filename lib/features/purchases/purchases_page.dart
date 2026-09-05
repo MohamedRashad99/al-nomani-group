@@ -23,6 +23,7 @@ import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/quantity_sheet.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../suppliers/supplier_cycle_sheets.dart';
 
 enum _PayMode { cash, credit }
 
@@ -397,6 +398,28 @@ class _PurchaseDetailPageState extends State<PurchaseDetailPage> {
                 cancelledBy: purchase.cancelledBy,
                 cancelReason: purchase.cancelReason,
               ),
+              if (purchase.status != 'cancelled' &&
+                  purchase.status != 'returned' &&
+                  details.supplier != null &&
+                  (session?.can(AppPermission.purchasesCreate) == true ||
+                      session?.can(AppPermission.suppliersUpdate) == true)) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () =>
+                      SupplierCycleSheets.editInvoice(context, details.supplier!),
+                  icon: const Icon(Icons.edit_note_outlined),
+                  label: const Text('تعديل البنود'),
+                ),
+                if (Money.parse(purchase.remainingAmount).isPositive)
+                  FilledButton.tonalIcon(
+                    onPressed: () => SupplierCycleSheets.settleInvoice(
+                      context,
+                      details.supplier!,
+                    ),
+                    icon: const Icon(Icons.task_alt_outlined),
+                    label: const Text('تسوية المتبقي'),
+                  ),
+              ],
               if (purchase.status != 'cancelled' &&
                   purchase.status != 'returned' &&
                   session?.can(AppPermission.purchasesCreate) == true) ...[

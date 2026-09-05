@@ -448,6 +448,338 @@ class PurchaseService {
     );
   }
 
+  Future<void> updateNotes({
+    required AppSession session,
+    required String purchaseId,
+    String? notes,
+  }) async {
+    if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.suppliersUpdate)) {
+      throw const PermissionException();
+    }
+    final purchase = await _store.getPurchase(purchaseId);
+    if (purchase == null || purchase.isDeleted) {
+      throw const ValidationException('فاتورة الشراء غير موجودة.');
+    }
+    if (purchase.status == 'cancelled') {
+      throw const ValidationException(
+        'لا يمكن تعديل فاتورة ملغاة. استخدم فاتورة جديدة إذا لزم التصحيح.',
+      );
+    }
+    final deviceId = await _devices.deviceId();
+    await _store.putPurchase(
+      Purchase(
+        id: purchase.id,
+        supplierId: purchase.supplierId,
+        purchaseNumber: purchase.purchaseNumber,
+        status: purchase.status,
+        subtotal: purchase.subtotal,
+        paidAmount: purchase.paidAmount,
+        remainingAmount: purchase.remainingAmount,
+        notes: notes,
+        purchasedAt: purchase.purchasedAt,
+        createdBy: purchase.createdBy,
+        cancelledAt: purchase.cancelledAt,
+        cancelledBy: purchase.cancelledBy,
+        cancelReason: purchase.cancelReason,
+        version: purchase.version + 1,
+        deviceId: deviceId,
+        createdAt: purchase.createdAt,
+        updatedAt: EgyptTime.nowUtc(),
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'purchase.update_notes',
+      entityType: 'purchase',
+      entityId: purchaseId,
+      oldValue: {'notes': purchase.notes},
+      newValue: {'notes': notes},
+    );
+  }
+
+  Future<void> settle({
+    required AppSession session,
+    required String purchaseId,
+    required Money amount,
+    String? notes,
+  }) async {
+    if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.suppliersUpdate)) {
+      throw const PermissionException();
+    }
+    if (!amount.isPositive) {
+      throw const ValidationException('مبلغ التسوية يجب أن يكون أكبر من صفر.');
+    }
+    final purchase = await _store.getPurchase(purchaseId);
+    if (purchase == null || purchase.isDeleted) {
+      throw const ValidationException('فاتورة الشراء غير موجودة.');
+    }
+    if (purchase.status == 'cancelled') {
+      throw const ValidationException(
+        'لا يمكن تسوية فاتورة ملغاة. ألغِ التسوية من كشف الحساب إن وُجد دفع مرتبط.',
+      );
+    }
+    final remaining = Money.parse(purchase.remainingAmount);
+    if (!remaining.isPositive) {
+      throw const ValidationException('هذه الفاتورة مسددة بالكامل.');
+    }
+    if (amount > remaining) {
+      throw ValidationException(
+        'المبلغ أكبر من المتبقي (${remaining.toDisplay()}).',
+      );
+    }
+    final deviceId = await _devices.deviceId();
+    final now = EgyptTime.nowUtc();
+    await _accounts.post(
+      supplierId: purchase.supplierId,
+      type: 'payment',
+      amount: amount,
+      createdBy: session.userId,
+      deviceId: deviceId,
+      referenceType: 'purchase_settlement',
+      referenceId: purchaseId,
+      notes: notes,
+    );
+    final nextPaid = Money.parse(purchase.paidAmount) + amount;
+    final nextRemaining = remaining - amount;
+    await _store.putPurchase(
+      Purchase(
+        id: purchase.id,
+        supplierId: purchase.supplierId,
+        purchaseNumber: purchase.purchaseNumber,
+        status: purchase.status,
+        subtotal: purchase.subtotal,
+        paidAmount: nextPaid.toStorage(),
+        remainingAmount: nextRemaining.toStorage(),
+        notes: purchase.notes,
+        purchasedAt: purchase.purchasedAt,
+        createdBy: purchase.createdBy,
+        cancelledAt: purchase.cancelledAt,
+        cancelledBy: purchase.cancelledBy,
+        cancelReason: purchase.cancelReason,
+        version: purchase.version + 1,
+        deviceId: deviceId,
+        createdAt: purchase.createdAt,
+        updatedAt: now,
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'purchase.settle',
+      entityType: 'purchase',
+      entityId: purchaseId,
+      newValue: {
+        'amount': amount.toStorage(),
+        'remaining': nextRemaining.toStorage(),
+      },
+    );
+  }
+
+  /// Adjusts lines by posting compensating stock and ledger entries.
+  /// Existing purchase and transaction IDs are never rewritten.
+  Future<void> adjustLines({
+    required AppSession session,
+    required String purchaseId,
+    required List<PurchaseLineDraft> lines,
+    String? notes,
+  }) async {
+    if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.suppliersUpdate)) {
+      throw const PermissionException();
+    }
+    if (lines.isEmpty) {
+      throw const ValidationException(
+        'لا يمكن تفريغ الفاتورة. استخدم الإلغاء أو المرتجع.',
+      );
+    }
+    final purchase = await _store.getPurchase(purchaseId);
+    if (purchase == null || purchase.isDeleted) {
+      throw const ValidationException('فاتورة الشراء غير موجودة.');
+    }
+    if (purchase.status == 'cancelled') {
+      throw const ValidationException(
+        'لا يمكن تعديل فاتورة ملغاة حتى لا تُفسد القيود التاريخية.',
+      );
+    }
+    if (purchase.status == 'returned') {
+      throw const ValidationException(
+        'فاتورة مرتجعة بالكامل. سجّل فاتورة جديدة أو قيد تصحيح في الكشف.',
+      );
+    }
+    final existing = await _store.listPurchaseItems(purchaseId: purchaseId);
+    final byId = {for (final item in existing) item.id: item};
+    for (final line in lines) {
+      if (!line.quantity.isPositive) {
+        throw const ValidationException('الكمية غير صالحة.');
+      }
+      if (line.itemId != null) {
+        final item = byId[line.itemId];
+        if (item == null) {
+          throw const ValidationException('بند الفاتورة غير موجود.');
+        }
+        final returned = Quantity.parse(item.returnedQuantity);
+        if (line.quantity < returned) {
+          throw ValidationException(
+            'لا يمكن خفض الكمية دون كمية المرتجع (${returned.toDisplay()}).',
+          );
+        }
+      }
+    }
+    final now = EgyptTime.nowUtc();
+    final deviceId = await _devices.deviceId();
+    var moneyDelta = Money.zero();
+    final keptIds = <String>{};
+
+    for (final line in lines) {
+      final previous = line.itemId == null ? null : byId[line.itemId];
+      final oldQty = previous == null
+          ? Quantity.zero()
+          : Quantity.parse(previous.quantity);
+      final oldTotal = previous == null
+          ? Money.zero()
+          : Money.parse(previous.lineTotal);
+      final qtyDelta = line.quantity - oldQty;
+      moneyDelta += line.lineTotal - oldTotal;
+      if (!qtyDelta.isZero) {
+        await _inventory.apply(
+          session: session,
+          productId: line.productId,
+          quantity: qtyDelta.isNegative ? -qtyDelta : qtyDelta,
+          type: qtyDelta.isNegative ? 'purchase_return' : 'purchase',
+          notes: notes ?? 'تعديل فاتورة ${purchase.purchaseNumber}',
+          referenceType: 'purchase_adjust',
+          referenceId: purchaseId,
+        );
+      }
+      final itemId = previous?.id ?? newId();
+      keptIds.add(itemId);
+      await _store.putPurchaseItem(
+        PurchaseItem(
+          id: itemId,
+          purchaseId: purchaseId,
+          productId: line.productId,
+          quantity: line.quantity.toStorage(),
+          unit: line.unit,
+          unitPrice: line.unitPrice.toStorage(),
+          lineTotal: line.lineTotal.toStorage(),
+          returnedQuantity: previous?.returnedQuantity ?? '0',
+          version: (previous?.version ?? 0) + 1,
+          deviceId: deviceId,
+          createdAt: previous?.createdAt ?? now,
+        ),
+      );
+    }
+
+    for (final item in existing) {
+      if (keptIds.contains(item.id)) continue;
+      final returned = Quantity.parse(item.returnedQuantity);
+      if (returned.isPositive) {
+        throw const ValidationException(
+          'لا يمكن حذف بند عليه مرتجع. أبقِ الكمية مساوية للمرتجع على الأقل.',
+        );
+      }
+      final qty = Quantity.parse(item.quantity);
+      if (qty.isPositive) {
+        await _inventory.apply(
+          session: session,
+          productId: item.productId,
+          quantity: qty,
+          type: 'purchase_return',
+          notes: notes ?? 'حذف بند من ${purchase.purchaseNumber}',
+          referenceType: 'purchase_adjust',
+          referenceId: purchaseId,
+        );
+      }
+      moneyDelta -= Money.parse(item.lineTotal);
+      await _store.putPurchaseItem(
+        PurchaseItem(
+          id: item.id,
+          purchaseId: item.purchaseId,
+          productId: item.productId,
+          quantity: '0',
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          lineTotal: Money.zero().toStorage(),
+          returnedQuantity: item.returnedQuantity,
+          version: item.version + 1,
+          deviceId: deviceId,
+          createdAt: item.createdAt,
+        ),
+      );
+    }
+
+    if (!moneyDelta.isZero) {
+      if (moneyDelta.isPositive) {
+        await _accounts.post(
+          supplierId: purchase.supplierId,
+          type: 'purchase',
+          amount: moneyDelta,
+          createdBy: session.userId,
+          deviceId: deviceId,
+          referenceType: 'purchase_adjust',
+          referenceId: purchaseId,
+          notes: notes ?? 'زيادة قيمة فاتورة ${purchase.purchaseNumber}',
+        );
+      } else {
+        await _accounts.post(
+          supplierId: purchase.supplierId,
+          type: 'purchase_return',
+          amount: -moneyDelta,
+          createdBy: session.userId,
+          deviceId: deviceId,
+          referenceType: 'purchase_adjust',
+          referenceId: purchaseId,
+          notes: notes ?? 'تخفيض قيمة فاتورة ${purchase.purchaseNumber}',
+          allowNegative: true,
+        );
+      }
+    }
+
+    final nextSubtotal = lines.fold(
+      Money.zero(),
+      (sum, line) => sum + line.lineTotal,
+    );
+    final paid = Money.parse(purchase.paidAmount);
+    var remaining = nextSubtotal - paid;
+    if (remaining.isNegative) remaining = Money.zero();
+    await _store.putPurchase(
+      Purchase(
+        id: purchase.id,
+        supplierId: purchase.supplierId,
+        purchaseNumber: purchase.purchaseNumber,
+        status: purchase.status,
+        subtotal: nextSubtotal.toStorage(),
+        paidAmount: purchase.paidAmount,
+        remainingAmount: remaining.toStorage(),
+        notes: notes ?? purchase.notes,
+        purchasedAt: purchase.purchasedAt,
+        createdBy: purchase.createdBy,
+        cancelledAt: purchase.cancelledAt,
+        cancelledBy: purchase.cancelledBy,
+        cancelReason: purchase.cancelReason,
+        version: purchase.version + 1,
+        deviceId: deviceId,
+        createdAt: purchase.createdAt,
+        updatedAt: now,
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'purchase.adjust',
+      entityType: 'purchase',
+      entityId: purchaseId,
+      oldValue: {'subtotal': purchase.subtotal},
+      newValue: {
+        'subtotal': nextSubtotal.toStorage(),
+        'delta': moneyDelta.toStorage(),
+      },
+    );
+  }
+
   Future<String> _nextNumber() async {
     final count = (await _store.listPurchases()).length;
     return 'P-${(count + 1).toString().padLeft(6, '0')}';

@@ -26,6 +26,7 @@ import '../../shared/widgets/destructive_action_guard.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/quantity_sheet.dart';
 import '../../shared/widgets/searchable_select.dart';
+import 'supplier_cycle_sheets.dart';
 import 'supplier_statement_export.dart';
 
 class SuppliersPage extends StatefulWidget {
@@ -488,12 +489,23 @@ class _QuickActions extends StatelessWidget {
             label: const Text('فاتورة'),
           ),
         if (session.can(AppPermission.purchasesCreate) ||
-            session.can(AppPermission.suppliersUpdate))
+            session.can(AppPermission.suppliersUpdate)) ...[
           TextButton.icon(
             onPressed: () => SupplierDashboardActions.showPayment(context, entry.supplier),
             icon: const Icon(Icons.payments_outlined, size: 18),
             label: const Text('دفع'),
           ),
+          TextButton.icon(
+            onPressed: () => SupplierCycleSheets.settleInvoice(context, entry.supplier),
+            icon: const Icon(Icons.task_alt_outlined, size: 18),
+            label: const Text('تسوية'),
+          ),
+          TextButton.icon(
+            onPressed: () => SupplierCycleSheets.editInvoice(context, entry.supplier),
+            icon: const Icon(Icons.edit_note_outlined, size: 18),
+            label: const Text('تعديل فاتورة'),
+          ),
+        ],
         if (session.can(AppPermission.purchasesCreate))
           TextButton.icon(
             onPressed: () => SupplierDashboardActions.showReturn(context, entry.supplier),
@@ -837,10 +849,22 @@ abstract final class SupplierDashboardActions {
   }
 
   static Future<void> deleteSupplier(BuildContext context, Supplier supplier) async {
+    final inspection = await sl<SupplierService>().inspectDelete(supplier.id);
+    if (!context.mounted) return;
+    if (!inspection.canDelete) {
+      sl<AppAlertCubit>().error(
+        'لا يمكن حذف ${supplier.name} الآن:\n${inspection.blockers.join('\n')}',
+      );
+      return;
+    }
+    final archiveNote = inspection.archivedPurchases > 0
+        ? '\nستبقى ${inspection.archivedPurchases} فاتورة ملغاة في الأرشيف دون حذف بياناتها.'
+        : '';
     await DestructiveActionGuard.run(
       context: context,
       title: 'حذف المورد',
-      message: 'يُحذف المورد فقط إن لم تكن له مشتريات أو رصيد مستحق.',
+      message:
+          'الرصيد صفر ولا توجد فواتير مفتوحة. يُحذف سجل المورد فقط.$archiveNote',
       confirmLabel: 'حذف',
       successMessage: 'تم حذف المورد.',
       action: () async {
@@ -902,6 +926,11 @@ class _SupplierStatementSheet extends StatelessWidget {
                     icon: const Icon(Icons.chat_outlined),
                   ),
                 IconButton(
+                  tooltip: 'قيد تصحيح',
+                  onPressed: () => SupplierCycleSheets.addCorrection(context, supplier),
+                  icon: const Icon(Icons.add_box_outlined),
+                ),
+                IconButton(
                   tooltip: 'تصدير PDF',
                   onPressed: () async {
                     try {
@@ -951,6 +980,8 @@ class _SupplierStatementSheet extends StatelessWidget {
                             DataColumn(label: Text('مدين'), numeric: true),
                             DataColumn(label: Text('دائن'), numeric: true),
                             DataColumn(label: Text('الرصيد'), numeric: true),
+                            DataColumn(label: Text('ملاحظة')),
+                            DataColumn(label: Text('إجراء')),
                           ],
                           rows: [
                             for (final tx in txs) ...[
@@ -959,6 +990,12 @@ class _SupplierStatementSheet extends StatelessWidget {
                                 final debit = amount.isPositive ? amount : Money.zero();
                                 final credit = amount.isNegative ? -amount : Money.zero();
                                 balance += amount;
+                                final reversible = {
+                                  'payment',
+                                  'receipt',
+                                  'manual_debit',
+                                  'manual_credit',
+                                }.contains(tx.type);
                                 return DataRow(
                                   cells: [
                                     DataCell(Text(ArabicFormat.transactionDateTime(tx.createdAt))),
@@ -966,6 +1003,24 @@ class _SupplierStatementSheet extends StatelessWidget {
                                     DataCell(Text(debit.isZero ? '—' : debit.toDisplay())),
                                     DataCell(Text(credit.isZero ? '—' : credit.toDisplay())),
                                     DataCell(Text(balance.toDisplay())),
+                                    DataCell(
+                                      InkWell(
+                                        onTap: () => _editTxNotes(context, tx),
+                                        child: Text(
+                                          (tx.notes ?? '').trim().isEmpty
+                                              ? 'تعديل'
+                                              : tx.notes!,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      reversible
+                                          ? TextButton(
+                                              onPressed: () => _reverseTx(context, tx),
+                                              child: const Text('عكس'),
+                                            )
+                                          : const Text('—'),
+                                    ),
                                   ],
                                 );
                               }(),
@@ -992,8 +1047,69 @@ class _SupplierStatementSheet extends StatelessWidget {
     'payment_cancel' => 'عكس سداد',
     'purchase_return' => 'مرتجع شراء',
     'receipt' => 'إيصال / خصم',
+    'manual_debit' => 'تصحيح مدين',
+    'manual_credit' => 'تصحيح دائن',
     _ => 'حركة حساب',
   };
+
+  static Future<void> _editTxNotes(
+    BuildContext context,
+    SupplierAccountTransaction tx,
+  ) async {
+    final notes = TextEditingController(text: tx.notes ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ملاحظة الحركة'),
+        content: TextField(controller: notes, maxLines: 2),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(S.back),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(S.save),
+          ),
+        ],
+      ),
+    );
+    if (saved != true || !context.mounted) return;
+    try {
+      await sl<AppBusyCubit>().guard(() async {
+        await sl<SupplierService>().updateTransactionNotes(
+          session: context.read<AuthCubit>().state.session!,
+          transactionId: tx.id,
+          notes: notes.text,
+        );
+      });
+      sl<AppAlertCubit>().success('تم حفظ الملاحظة.');
+    } catch (e) {
+      sl<AppAlertCubit>().error(e.toString());
+    }
+  }
+
+  static Future<void> _reverseTx(
+    BuildContext context,
+    SupplierAccountTransaction tx,
+  ) async {
+    await DestructiveActionGuard.runWithReason(
+      context: context,
+      title: 'عكس الحركة',
+      message:
+          'سيُضاف قيد عكسي جديد دون حذف الحركة الأصلية حتى يبقى التدقيق كاملاً.',
+      confirmLabel: 'عكس',
+      reasonLabel: 'سبب العكس',
+      successMessage: 'تم عكس الحركة وتحديث الرصيد.',
+      action: (reason) async {
+        await sl<SupplierService>().reverseTransaction(
+          session: context.read<AuthCubit>().state.session!,
+          transactionId: tx.id,
+          reason: reason,
+        );
+      },
+    );
+  }
 }
 
 class SupplierDetailPage extends StatefulWidget {

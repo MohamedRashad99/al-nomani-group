@@ -1,12 +1,14 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 
 class PurchaseLineDraft {
+  final String? itemId;
   final String productId;
   final Quantity quantity;
   final String unit;
   final Money unitPrice;
 
   const PurchaseLineDraft({
+    this.itemId,
     required this.productId,
     required this.quantity,
     required this.unit,

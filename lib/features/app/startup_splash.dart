@@ -8,7 +8,7 @@ import '../../core/theme/app_colors.dart';
 class StartupSplashView extends StatefulWidget {
   const StartupSplashView({super.key});
 
-  static const displayDuration = Duration(seconds: 2);
+  static const displayDuration = Duration(milliseconds: 800);
   static const backgroundColor = AppColors.darkGreen;
 
   @override

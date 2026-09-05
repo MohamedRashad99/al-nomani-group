@@ -27,7 +27,10 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   late Stream<DashboardSnapshot> _stream = sl<DashboardService>().watch();
-  late Future<SyncHealth> _health = sl<SyncEngine>().health();
+  late Future<SyncHealth> _health = Future<SyncHealth>.delayed(
+    const Duration(milliseconds: 500),
+    () => sl<SyncEngine>().health(),
+  );
 
   void _refresh() {
     setState(() {

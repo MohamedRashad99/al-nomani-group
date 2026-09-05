@@ -265,6 +265,34 @@ class SupplierService {
     }
   }
 
+  Future<SupplierDeleteInspection> inspectDelete(String id) async {
+    final purchases = await _store.listPurchases(supplierId: id);
+    final active = [
+      for (final purchase in purchases)
+        if (purchase.status != 'cancelled' && !purchase.isDeleted) purchase,
+    ];
+    final account = await _store.getAccountBySupplier(id);
+    final balance = Money.parse(account?.cachedBalance ?? '0');
+    final blockers = <String>[];
+    if (active.isNotEmpty) {
+      blockers.add(
+        'يوجد ${active.length} فاتورة غير ملغاة. سوِّ المتبقي أو ألغِ الفواتير أولاً.',
+      );
+    }
+    if (!balance.isZero) {
+      blockers.add(
+        'رصيد الحساب ${balance.toDisplay()} ${Money.currencySymbol}. سجّل دفعة أو قيد تصحيح حتى يصبح الرصيد صفراً.',
+      );
+    }
+    return SupplierDeleteInspection(
+      canDelete: blockers.isEmpty,
+      blockers: blockers,
+      activePurchases: active.length,
+      archivedPurchases: purchases.length - active.length,
+      balance: balance,
+    );
+  }
+
   Future<void> delete({
     required AppSession session,
     required String id,
@@ -272,15 +300,19 @@ class SupplierService {
     if (!session.can(AppPermission.suppliersDelete)) {
       throw const PermissionException();
     }
-    final purchases = await _store.listPurchases(supplierId: id);
-    final account = await _store.getAccountBySupplier(id);
-    if (purchases.isNotEmpty ||
-        (account != null && !Money.parse(account.cachedBalance).isZero)) {
-      throw const ValidationException(
-        'لا يمكن حذف المورد لوجود مشتريات أو رصيد مستحق.',
-      );
+    final inspection = await inspectDelete(id);
+    if (!inspection.canDelete) {
+      throw ValidationException(inspection.blockers.join('\n'));
     }
+    final deviceId = await _devices.deviceId();
     await _store.deleteSupplier(id);
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.delete',
+      entityType: 'supplier',
+      entityId: id,
+    );
     await _sync.maybeSyncAfterLocalWrite();
   }
 
@@ -349,6 +381,14 @@ class SupplierService {
       referenceType: 'supplier_payment',
       notes: notes,
     );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.payment',
+      entityType: 'supplier',
+      entityId: supplierId,
+      newValue: {'amount': amount.toStorage(), 'notes': notes},
+    );
     await _sync.maybeSyncAfterLocalWrite();
   }
 
@@ -375,6 +415,158 @@ class SupplierService {
       referenceType: 'supplier_receipt',
       notes: notes,
       allowNegative: true,
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.receipt',
+      entityType: 'supplier',
+      entityId: supplierId,
+      newValue: {'amount': amount.toStorage(), 'notes': notes},
+    );
+    await _sync.maybeSyncAfterLocalWrite();
+  }
+
+  Future<void> updateTransactionNotes({
+    required AppSession session,
+    required String transactionId,
+    required String notes,
+  }) async {
+    if (!session.can(AppPermission.suppliersUpdate) &&
+        !session.can(AppPermission.purchasesCreate)) {
+      throw const PermissionException();
+    }
+    final txs = await _store.listSupplierTx();
+    SupplierAccountTransaction? found;
+    for (final tx in txs) {
+      if (tx.id == transactionId) found = tx;
+    }
+    if (found == null) {
+      throw const ValidationException('الحركة غير موجودة.');
+    }
+    final deviceId = await _devices.deviceId();
+    await _store.putSupplierTx(found.copyWith(notes: notes.trim()));
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.tx.notes',
+      entityType: 'supplier_tx',
+      entityId: transactionId,
+      oldValue: {'notes': found.notes},
+      newValue: {'notes': notes.trim()},
+    );
+    await _sync.maybeSyncAfterLocalWrite();
+  }
+
+  Future<void> postCorrection({
+    required AppSession session,
+    required String supplierId,
+    required bool debit,
+    required Money amount,
+    required String reason,
+  }) async {
+    if (!session.can(AppPermission.suppliersUpdate)) {
+      throw const PermissionException();
+    }
+    if (!amount.isPositive) {
+      throw const ValidationException('مبلغ التصحيح غير صالح.');
+    }
+    if (reason.trim().isEmpty) {
+      throw const ValidationException('سبب التصحيح مطلوب للتدقيق.');
+    }
+    final deviceId = await _devices.deviceId();
+    await _accounts.post(
+      supplierId: supplierId,
+      type: debit ? 'manual_debit' : 'manual_credit',
+      amount: amount,
+      createdBy: session.userId,
+      deviceId: deviceId,
+      referenceType: 'statement_correction',
+      notes: reason.trim(),
+      allowNegative: !debit,
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.correction',
+      entityType: 'supplier',
+      entityId: supplierId,
+      newValue: {
+        'type': debit ? 'manual_debit' : 'manual_credit',
+        'amount': amount.toStorage(),
+        'reason': reason.trim(),
+      },
+    );
+    await _sync.maybeSyncAfterLocalWrite();
+  }
+
+  Future<void> reverseTransaction({
+    required AppSession session,
+    required String transactionId,
+    required String reason,
+  }) async {
+    if (!session.can(AppPermission.suppliersUpdate) &&
+        !session.can(AppPermission.purchasesCancel)) {
+      throw const PermissionException();
+    }
+    if (reason.trim().isEmpty) {
+      throw const ValidationException('سبب العكس مطلوب.');
+    }
+    final txs = await _store.listSupplierTx();
+    SupplierAccountTransaction? found;
+    for (final tx in txs) {
+      if (tx.id == transactionId) found = tx;
+    }
+    if (found == null) {
+      throw const ValidationException('الحركة غير موجودة.');
+    }
+    const reversible = {
+      'payment',
+      'receipt',
+      'manual_debit',
+      'manual_credit',
+    };
+    if (!reversible.contains(found.type)) {
+      throw const ValidationException(
+        'لا يُعكس قيد الفاتورة من الكشف. استخدم إلغاء الفاتورة أو المرتجع أو تعديل البنود.',
+      );
+    }
+    final already = txs.any(
+      (tx) =>
+          tx.referenceType == 'tx_reversal' && tx.referenceId == found!.id,
+    );
+    if (already) {
+      throw const ValidationException('تم عكس هذه الحركة مسبقاً.');
+    }
+    final reverseType = switch (found.type) {
+      'payment' => 'payment_cancel',
+      'receipt' => 'manual_debit',
+      'manual_debit' => 'manual_credit',
+      'manual_credit' => 'manual_debit',
+      _ => found.type,
+    };
+    final unsigned = Money.parse(found.amount);
+    final amount = unsigned.isNegative ? -unsigned : unsigned;
+    final deviceId = await _devices.deviceId();
+    await _accounts.post(
+      supplierId: found.supplierId,
+      type: reverseType,
+      amount: amount,
+      createdBy: session.userId,
+      deviceId: deviceId,
+      referenceType: 'tx_reversal',
+      referenceId: found.id,
+      notes: reason.trim(),
+      allowNegative: true,
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'supplier.tx.reverse',
+      entityType: 'supplier_tx',
+      entityId: transactionId,
+      oldValue: {'type': found.type, 'amount': found.amount},
+      newValue: {'reason': reason.trim()},
     );
     await _sync.maybeSyncAfterLocalWrite();
   }
@@ -454,6 +646,22 @@ class SupplierListEntry {
   };
 
   bool get isActive => isActiveSupplier(supplier);
+}
+
+class SupplierDeleteInspection {
+  const SupplierDeleteInspection({
+    required this.canDelete,
+    required this.blockers,
+    required this.activePurchases,
+    required this.archivedPurchases,
+    required this.balance,
+  });
+
+  final bool canDelete;
+  final List<String> blockers;
+  final int activePurchases;
+  final int archivedPurchases;
+  final Money balance;
 }
 
 class SupplierPortfolioSummary {

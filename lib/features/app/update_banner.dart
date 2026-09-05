@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -27,6 +28,7 @@ class _UpdateBannerState extends State<UpdateBanner> {
   }
 
   Future<void> _check() async {
+    if (!kIsWeb) return;
     try {
       final response = await sl<Dio>().get<Map<String, dynamic>>(
         'version.json',

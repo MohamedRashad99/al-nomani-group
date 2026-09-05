@@ -16,7 +16,6 @@ import 'features/auth/auth_cubit.dart';
 
 Future<void> bootstrap({ErpStore? store}) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await EgyptTime.initialize();
   final config = await AppConfig.load();
   await configureDependencies(config: config, store: store);
 
