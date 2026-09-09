@@ -6,9 +6,13 @@ import 'package:al_nomani_group/features/app/startup_splash.dart';
 import 'package:al_nomani_group/shared/widgets/customer_contact_actions.dart';
 import 'package:al_nomani_group/shared/widgets/product_thumb.dart';
 import 'package:al_nomani_group/domain/cairo_date_range.dart';
+import 'package:al_nomani_group/core/l10n/app_strings.dart';
+import 'package:al_nomani_group/domain/services/catalog_service.dart';
 import 'package:al_nomani_group/shared/widgets/amount_field.dart';
 import 'package:al_nomani_group/shared/widgets/date_range_bar.dart';
+import 'package:al_nomani_group/shared/widgets/money_text.dart';
 import 'package:al_nomani_group/shared/widgets/report_busy_barrier.dart';
+import 'package:al_nomani_group/shared/widgets/summary_metrics.dart';
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -147,5 +151,70 @@ void main() {
     await tester.tap(find.text('أمس'));
     await tester.pump();
     expect(range.period, ReportPeriod.yesterday);
+  });
+
+  testWidgets('product summary stays a wrap of cards on desktop', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final summary = ProductValueSummary(
+      totalProducts: 4,
+      purchaseValue: Money.parse('100'),
+      sellingValue: Money.parse('160'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProductCatalogSummaryBar(summary: summary)),
+      ),
+    );
+    expect(find.byType(StatCard), findsNWidgets(4));
+    expect(find.byType(FinancialSummaryCard), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('product summary uses one financial row on mobile', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final summary = ProductValueSummary(
+      totalProducts: 4,
+      purchaseValue: Money.parse('100'),
+      sellingValue: Money.parse('160'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProductCatalogSummaryBar(summary: summary)),
+      ),
+    );
+    expect(find.byType(FinancialSummaryCard), findsOneWidget);
+    expect(find.text(S.totalPurchaseValue), findsOneWidget);
+    expect(find.text(S.totalSellingValue), findsOneWidget);
+    expect(find.text(S.expectedProfitMargin), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('inventory counters stay on one mobile row', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SummaryMetricsRow(
+            metrics: [
+              SummaryMetric(label: 'المنتجات المتاحة بالمخزون', value: Text('3')),
+              SummaryMetric(label: 'إجمالي المنتجات', value: Text('5')),
+              SummaryMetric(label: 'نفاد المخزون', value: Text('2')),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(Row), findsWidgets);
+    expect(find.byType(StatCard), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

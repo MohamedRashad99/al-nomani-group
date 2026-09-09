@@ -22,6 +22,14 @@ class ProductValueSummary {
 
   Money get expectedProfit => sellingValue - purchaseValue;
 
+  /// Selling-price margin: profit ÷ selling value. Zero when there is no stock value.
+  double get profitMarginPercent {
+    if (sellingValue.isZero) return 0;
+    return (expectedProfit.minorUnits.toDouble() /
+            sellingValue.minorUnits.toDouble()) *
+        100;
+  }
+
   static ProductValueSummary fromProducts(List<Product> products) {
     var purchase = Money.zero();
     var selling = Money.zero();

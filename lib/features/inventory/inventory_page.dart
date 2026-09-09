@@ -14,7 +14,7 @@ import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/destructive_action_guard.dart';
-import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/summary_metrics.dart';
 import '../../shared/widgets/transaction_timestamp.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/product_thumb.dart';
@@ -42,14 +42,26 @@ class _InventoryPageState extends State<InventoryPage> {
           StreamBuilder<List<Product>>(
             stream: sl<CatalogService>().watchProducts(''),
             builder: (context, snap) {
-              final count = ProductValueSummary.availableCount(
-                snap.data ?? const <Product>[],
-              );
+              final products = snap.data ?? const <Product>[];
+              final available = ProductValueSummary.availableCount(products);
+              final total = products.where((row) => !row.isDeleted).length;
               return Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: StatCard(
-                  label: 'المنتجات المتاحة بالمخزون',
-                  child: Text('$count'),
+                child: SummaryMetricsRow(
+                  metrics: [
+                    SummaryMetric(
+                      label: S.availableInStock,
+                      value: Text('$available'),
+                    ),
+                    SummaryMetric(
+                      label: S.totalProducts,
+                      value: Text('$total'),
+                    ),
+                    SummaryMetric(
+                      label: S.outOfStock,
+                      value: Text('${total - available}'),
+                    ),
+                  ],
                 ),
               );
             },

@@ -43,6 +43,7 @@ void main() {
     expect(summary.purchaseValue, Money.parse('20'));
     expect(summary.sellingValue, Money.parse('30'));
     expect(summary.expectedProfit, Money.parse('10'));
+    expect(summary.profitMarginPercent, closeTo(100 / 3, 0.0001));
     expect(
       ProductValueSummary.availableCount([
         _product(id: 'a', stock: '2', purchase: '10', sell: '15'),

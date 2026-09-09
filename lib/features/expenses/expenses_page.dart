@@ -18,6 +18,7 @@ import '../../shared/widgets/date_range_bar.dart';
 import '../../shared/widgets/destructive_action_guard.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/searchable_select.dart';
+import '../../shared/widgets/summary_metrics.dart';
 
 class ExpensesPage extends StatefulWidget {
   const ExpensesPage({super.key});
@@ -73,20 +74,15 @@ class _ExpensesPageState extends State<ExpensesPage> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: StatCard(
-                              label: 'إجمالي المصروفات',
-                              child: MoneyText(summary.total),
-                            ),
+                      child: SummaryMetricsRow(
+                        metrics: [
+                          SummaryMetric(
+                            label: 'إجمالي المصروفات',
+                            value: MoneyText(summary.total),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: StatCard(
-                              label: 'عدد المصروفات',
-                              child: Text(ArabicFormat.number(summary.count)),
-                            ),
+                          SummaryMetric(
+                            label: 'عدد المصروفات',
+                            value: Text(ArabicFormat.number(summary.count)),
                           ),
                         ],
                       ),

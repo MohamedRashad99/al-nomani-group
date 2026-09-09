@@ -61,6 +61,10 @@ abstract final class S {
   static const todayCollections = 'تحصيلات اليوم';
   static const monthlyCollections = 'تحصيلات الشهر';
   static const totalProducts = 'إجمالي المنتجات';
+  static const totalPurchaseValue = 'إجمالي سعر الشراء';
+  static const totalSellingValue = 'إجمالي سعر البيع';
+  static const expectedProfitMargin = 'الربح / هامش الربح';
+  static const availableInStock = 'المنتجات المتاحة بالمخزون';
   static const lowStock = 'مخزون منخفض';
   static const outOfStock = 'نفاد المخزون';
   static const topProducts = 'الأكثر مبيعاً';

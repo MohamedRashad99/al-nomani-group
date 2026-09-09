@@ -17,6 +17,7 @@ import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/deletion_workflow_dialog.dart';
 import '../../shared/widgets/money_text.dart';
+import '../../shared/widgets/summary_metrics.dart';
 import '../../shared/widgets/product_images_editor.dart';
 import '../../shared/widgets/product_thumb.dart';
 import '../../shared/widgets/searchable_select.dart';
@@ -53,40 +54,7 @@ class _ProductsPageState extends State<ProductsPage> {
               );
               return Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    SizedBox(
-                      width: 220,
-                      child: StatCard(
-                        label: S.totalProducts,
-                        child: Text('${summary.totalProducts}'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 220,
-                      child: StatCard(
-                        label: 'إجمالي الشراء',
-                        child: MoneyText(summary.purchaseValue),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 220,
-                      child: StatCard(
-                        label: 'إجمالي البيع',
-                        child: MoneyText(summary.sellingValue),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 220,
-                      child: StatCard(
-                        label: 'الربح المتوقع',
-                        child: MoneyText(summary.expectedProfit),
-                      ),
-                    ),
-                  ],
-                ),
+                child: ProductCatalogSummaryBar(summary: summary),
               );
             },
           ),

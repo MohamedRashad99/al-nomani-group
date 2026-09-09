@@ -16,4 +16,9 @@ class Breakpoints {
 
   static bool isPhone(BuildContext context) =>
       isPhoneSize(MediaQuery.sizeOf(context));
+
+  /// Compact summary rows use width only so landscape phones stay single-row
+  /// while tablets and web keep the roomier card wrap.
+  static bool isNarrow(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 600;
 }

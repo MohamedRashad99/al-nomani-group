@@ -16,6 +16,7 @@ import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/report_busy_barrier.dart';
+import '../../shared/widgets/summary_metrics.dart';
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -61,27 +62,26 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
               const SizedBox(height: 16),
               if (canFinancial)
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    SizedBox(
-                      width: 280,
-                      child: StatCard(
-                        label: 'مبيعات الفترة',
-                        child: totals == null
-                            ? const LinearProgressIndicator(minHeight: 2)
-                            : MoneyText(totals.sales),
-                      ),
+                SummaryMetricsRow(
+                  cardWidth: 280,
+                  metrics: [
+                    SummaryMetric(
+                      label: 'مبيعات الفترة',
+                      value: totals == null
+                          ? const SizedBox(
+                              width: 72,
+                              child: LinearProgressIndicator(minHeight: 2),
+                            )
+                          : MoneyText(totals.sales),
                     ),
-                    SizedBox(
-                      width: 280,
-                      child: StatCard(
-                        label: 'تحصيلات الفترة',
-                        child: totals == null
-                            ? const LinearProgressIndicator(minHeight: 2)
-                            : MoneyText(totals.collections),
-                      ),
+                    SummaryMetric(
+                      label: 'تحصيلات الفترة',
+                      value: totals == null
+                          ? const SizedBox(
+                              width: 72,
+                              child: LinearProgressIndicator(minHeight: 2),
+                            )
+                          : MoneyText(totals.collections),
                     ),
                   ],
                 ),

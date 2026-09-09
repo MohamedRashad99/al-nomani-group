@@ -12,6 +12,8 @@ class MoneyText extends StatelessWidget {
       '${amount.toDisplay()} ${Money.currencySymbol}',
       style: style,
       textDirection: TextDirection.rtl,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -22,24 +24,41 @@ class StatCard extends StatelessWidget {
     required this.label,
     required this.child,
     this.color,
+    this.compact = false,
   });
   final String label;
   final Widget child;
   final Color? color;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
+      color: color,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(compact ? 8 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(label, style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 8),
-            DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.headlineSmall,
-              child: child,
+            Text(
+              label,
+              maxLines: compact ? 2 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: compact
+                  ? theme.textTheme.labelSmall
+                  : theme.textTheme.labelLarge,
+            ),
+            SizedBox(height: compact ? 4 : 8),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: DefaultTextStyle.merge(
+                style: compact
+                    ? theme.textTheme.titleMedium
+                    : theme.textTheme.headlineSmall,
+                child: child,
+              ),
             ),
           ],
         ),
