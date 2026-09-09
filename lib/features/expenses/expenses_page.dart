@@ -17,7 +17,6 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/date_range_bar.dart';
 import '../../shared/widgets/destructive_action_guard.dart';
 import '../../shared/widgets/money_text.dart';
-import '../../shared/widgets/searchable_select.dart';
 import '../../shared/widgets/summary_metrics.dart';
 
 class ExpensesPage extends StatefulWidget {
@@ -105,26 +104,51 @@ class _ExpensesPageState extends State<ExpensesPage> {
                               itemCount: items.length,
                               itemBuilder: (_, index) {
                                 final item = items[index];
+                                final canUpdate =
+                                    session.can(AppPermission.expensesUpdate);
+                                final canDelete =
+                                    session.can(AppPermission.expensesDelete);
+                                final note = item.note?.trim();
                                 return Card(
                                   margin: const EdgeInsets.symmetric(
                                     horizontal: 12,
                                     vertical: 6,
                                   ),
                                   child: ListTile(
+                                    isThreeLine: note != null && note.isNotEmpty,
                                     title: Text(
                                       ExpenseCategory.byCode(item.category).label,
                                     ),
                                     subtitle: Text(
-                                      '${ArabicFormat.transactionDate(item.occurredAt)} • ${ArabicFormat.transactionTime(item.occurredAt)}${item.note == null ? '' : '\n${item.note}'}',
+                                      [
+                                        '${ArabicFormat.transactionDate(item.occurredAt)} • ${ArabicFormat.transactionTime(item.occurredAt)}',
+                                        if (note != null && note.isNotEmpty) note,
+                                      ].join('\n'),
                                     ),
-                                    trailing: MoneyText(Money.parse(item.amount)),
-                                    onTap: session.can(AppPermission.expensesUpdate)
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        MoneyText(Money.parse(item.amount)),
+                                        if (canUpdate)
+                                          IconButton(
+                                            tooltip: S.edit,
+                                            onPressed: () => _edit(item),
+                                            icon: const Icon(Icons.edit_outlined),
+                                          ),
+                                        if (canDelete)
+                                          IconButton(
+                                            tooltip: 'حذف',
+                                            onPressed: () => _delete(item),
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              color: AppColors.danger,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    onTap: canUpdate
                                         ? () => _edit(item)
                                         : () => _view(item),
-                                    onLongPress:
-                                        session.can(AppPermission.expensesDelete)
-                                        ? () => _delete(item)
-                                        : null,
                                   ),
                                 );
                               },
@@ -141,6 +165,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   Future<void> _view(Expense expense) async {
+    final session = context.read<AuthCubit>().state.session;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -152,13 +177,21 @@ class _ExpensesPageState extends State<ExpensesPage> {
             MoneyText(Money.parse(expense.amount)),
             const SizedBox(height: 8),
             Text(ArabicFormat.transactionDateTime(expense.occurredAt)),
-            if (expense.note != null) ...[
+            if (expense.note != null && expense.note!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(expense.note!),
             ],
           ],
         ),
         actions: [
+          if (session?.can(AppPermission.expensesUpdate) == true)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _edit(expense);
+              },
+              child: const Text(S.edit),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text(S.close),
@@ -207,26 +240,44 @@ class _ExpensesPageState extends State<ExpensesPage> {
               top: 16,
             ),
             child: StatefulBuilder(
-              builder: (ctx, setS) => SingleChildScrollView(
+              builder: (ctx, setS) {
+                final session = context.read<AuthCubit>().state.session!;
+                return SingleChildScrollView(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    AmountField(controller: amount, label: 'المبلغ'),
-                    SearchableSelectField<String>(
-                      label: 'التصنيف',
-                      required: true,
-                      allowCustom: false,
-                      value: category,
-                      options: [
-                        for (final item in ExpenseCategory.all)
-                          SearchableOption(value: item.code, label: item.label),
-                      ],
-                      onChanged: (value) =>
-                          setS(() => category = value ?? category),
+                    Text(
+                      expense == null ? 'مصروف جديد' : S.edit,
+                      style: Theme.of(ctx).textTheme.titleLarge,
                     ),
+                    const SizedBox(height: 12),
+                    AmountField(controller: amount, label: 'المبلغ'),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: category,
+                      decoration: const InputDecoration(labelText: S.category),
+                      items: [
+                        for (final item in ExpenseCategory.all)
+                          DropdownMenuItem(
+                            value: item.code,
+                            child: Text(item.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setS(() => category = value);
+                      },
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: note,
-                      decoration: const InputDecoration(labelText: S.notes),
-                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: S.notes,
+                        hintText: 'اكتب وصف المصروف هنا',
+                        alignLabelWithHint: true,
+                      ),
+                      minLines: 2,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -282,10 +333,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                               try {
                                 await sl<AppBusyCubit>().guard(() async {
                                   await sl<ExpenseService>().upsert(
-                                    session: context
-                                        .read<AuthCubit>()
-                                        .state
-                                        .session!,
+                                    session: session,
                                     id: expense?.id,
                                     amount: Money.parse(amount.text),
                                     category: category,
@@ -313,10 +361,28 @@ class _ExpensesPageState extends State<ExpensesPage> {
                             )
                           : const Text(S.save),
                     ),
+                    if (expense != null &&
+                        session.can(AppPermission.expensesDelete)) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                await _delete(expense);
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.danger,
+                        ),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('حذف المصروف'),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                   ],
                 ),
-              ),
+              );
+              },
             ),
           );
         },

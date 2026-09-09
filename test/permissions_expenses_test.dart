@@ -185,4 +185,32 @@ void main() {
     expect(_session(const {}, role: AppRole.admin).isAdmin, isTrue);
     expect(_session(AppPermission.all.toSet(), role: AppRole.manager).isAdmin, isFalse);
   });
+
+  test('admin can update notes and delete expenses', () async {
+    await readyStore();
+    final adminWithoutCodes = _session(const {}, role: AppRole.admin);
+    final id = await sl<ExpenseService>().upsert(
+      session: adminWithoutCodes,
+      amount: Money.parse('25'),
+      category: ExpenseCategory.other.code,
+      note: 'قديم',
+      occurredAt: EgyptTime.nowUtc(),
+    );
+    await sl<ExpenseService>().upsert(
+      session: adminWithoutCodes,
+      id: id,
+      amount: Money.parse('30'),
+      category: ExpenseCategory.fuel.code,
+      note: 'ملاحظة جديدة',
+      occurredAt: EgyptTime.nowUtc(),
+    );
+    var expenses = await sl<ExpenseService>().watch().first;
+    expect(expenses, hasLength(1));
+    expect(expenses.single.note, 'ملاحظة جديدة');
+    expect(expenses.single.amount, '30.000');
+    expect(expenses.single.category, ExpenseCategory.fuel.code);
+    await sl<ExpenseService>().delete(session: adminWithoutCodes, id: id);
+    expenses = await sl<ExpenseService>().watch().first;
+    expect(expenses, isEmpty);
+  });
 }

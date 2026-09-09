@@ -21,7 +21,8 @@ class AppSession {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  bool can(String permission) => permissions.contains(permission);
+  bool can(String permission) =>
+      isAdmin || permissions.contains(permission);
 
   bool get isAdmin => roleName == AppRole.admin;
 

@@ -1,7 +1,7 @@
 name: al_nomani_group
 description: نظام تخطيط موارد المؤسسات لمجموعة النعماني — Offline-First ERP.
 publish_to: none
-version: 1.0.7+8
+version: 1.0.8+9
 
 environment:
   sdk: ^3.11.5

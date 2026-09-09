@@ -194,6 +194,10 @@ abstract final class RolePermissions {
       AppPermission.accountsView,
       AppPermission.accountsCreate,
       AppPermission.accountsUpdate,
+      AppPermission.expensesView,
+      AppPermission.expensesCreate,
+      AppPermission.expensesUpdate,
+      AppPermission.expensesDelete,
     ],
     AppRole.cashier: [
       AppPermission.productsView,
@@ -225,6 +229,9 @@ abstract final class RolePermissions {
   };
 
   static Set<String> resolve(String roleId, [List<String>? overrides]) {
+    if (roleId == AppRole.admin) {
+      return {...AppPermission.all};
+    }
     if (overrides != null && overrides.isNotEmpty) {
       return overrides.toSet();
     }
