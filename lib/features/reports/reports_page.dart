@@ -7,12 +7,13 @@ import 'package:printing/printing.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../domain/cairo_date_range.dart';
 import '../../domain/services/dashboard_service.dart';
 import '../../domain/services/report_export_service.dart';
+import '../../shared/widgets/date_range_bar.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
-import '../../shared/widgets/brand.dart';
 import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/report_busy_barrier.dart';
 
@@ -24,7 +25,7 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  late final Future<DashboardSnapshot> _dashboard = sl<DashboardService>().load();
+  late CairoDateRange _range = CairoDateRange.preset(ReportPeriod.thisMonth);
 
   ReportBranding _branding() {
     final session = context.read<AuthCubit>().state.session;
@@ -34,55 +35,56 @@ class _ReportsPageState extends State<ReportsPage> {
         systemName: S.appSubtitle,
         administratorName: S.owner,
         generatedAt: DateTime.now(),
+        range: _range,
       );
     }
-    return ReportBranding.fromSession(session);
+    return ReportBranding.fromSession(session, range: _range);
   }
 
   @override
   Widget build(BuildContext context) {
-    final canExport =
-        context.watch<AuthCubit>().state.session?.can(
-          AppPermission.reportsExport,
-        ) ==
-        true;
+    final session = context.watch<AuthCubit>().state.session;
+    final canExport = session?.can(AppPermission.reportsExport) == true;
+    final canFinancial = session?.can(AppPermission.reportsFinancial) == true;
     return AppScaffold(
       title: S.reports,
-      child: FutureBuilder<DashboardSnapshot>(
-        future: _dashboard,
+      child: FutureBuilder<({Money sales, Money collections})>(
+        future: sl<DashboardService>().totalsIn(_range),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const BrandedLoading();
-          final dashboard = snapshot.data!;
+          final totals = snapshot.data;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SizedBox(
-                    width: 280,
-                    child: StatCard(
-                      label: S.monthlySales,
-                      child: MoneyText(dashboard.monthlySales),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: StatCard(
-                      label: S.outstandingDebt,
-                      child: MoneyText(dashboard.outstandingDebt),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: StatCard(
-                      label: S.monthlyCollections,
-                      child: MoneyText(dashboard.monthlyCollections),
-                    ),
-                  ),
-                ],
+              DateRangeBar(
+                value: _range,
+                onChanged: (range) => setState(() => _range = range),
               ),
+              const SizedBox(height: 16),
+              if (canFinancial)
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 280,
+                      child: StatCard(
+                        label: 'مبيعات الفترة',
+                        child: totals == null
+                            ? const LinearProgressIndicator(minHeight: 2)
+                            : MoneyText(totals.sales),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: StatCard(
+                        label: 'تحصيلات الفترة',
+                        child: totals == null
+                            ? const LinearProgressIndicator(minHeight: 2)
+                            : MoneyText(totals.collections),
+                      ),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 20),
               Card(
                 child: Padding(
@@ -185,7 +187,7 @@ class _ReportFormatCardState extends State<_ReportFormatCard> {
         );
         return;
       }
-      final sections = await service.sections();
+      final sections = await service.sections(range: widget.branding.range);
       if (!mounted) return;
       await showDialog<void>(
         context: context,

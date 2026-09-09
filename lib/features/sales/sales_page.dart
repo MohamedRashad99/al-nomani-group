@@ -425,7 +425,7 @@ class _NewSalePageState extends State<NewSalePage> {
     setState(() {
       _payMode = mode;
       if (mode == _PayMode.cash) {
-        _paid.text = _total.toStorage();
+        _paid.text = _total.toDisplay();
       } else {
         _paid.clear();
       }
@@ -434,7 +434,7 @@ class _NewSalePageState extends State<NewSalePage> {
 
   void _syncPaidWithMode() {
     if (_payMode == _PayMode.cash) {
-      _paid.text = _total.toStorage();
+      _paid.text = _total.toDisplay();
     }
   }
 
@@ -731,7 +731,7 @@ class _NewSalePageState extends State<NewSalePage> {
       return;
     }
     if (_payMode == _PayMode.cash) {
-      _paid.text = _total.toStorage();
+      _paid.text = _total.toDisplay();
     }
     if (_paidAmount > _total) {
       _message('المبلغ المدفوع لا يمكن أن يتجاوز إجمالي البيع.');

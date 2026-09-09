@@ -172,7 +172,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
                                 ),
                               );
                               if (_payMode == _PayMode.cash) {
-                                _paid.text = _total.toStorage();
+                                _paid.text = _total.toDisplay();
                               }
                             });
                           },
@@ -192,13 +192,13 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
                             _products[_lines[index].productId]?.name ?? 'منتج',
                           ),
                           subtitle: Text(
-                            '${_lines[index].quantity.toStorage()} × ${_lines[index].unitPrice.toDisplay()}',
+                            '${_lines[index].quantity.toDisplay()} × ${_lines[index].unitPrice.toDisplay()}',
                           ),
                           trailing: IconButton(
                             onPressed: () => setState(() {
                               _lines.removeAt(index);
                               if (_payMode == _PayMode.cash) {
-                                _paid.text = _total.toStorage();
+                                _paid.text = _total.toDisplay();
                               }
                             }),
                             icon: const Icon(
@@ -225,7 +225,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
                             label: const Text('نقدي بالكامل'),
                             onSelected: (_) => setState(() {
                               _payMode = _PayMode.cash;
-                              _paid.text = _total.toStorage();
+                              _paid.text = _total.toDisplay();
                             }),
                           ),
                         ),
@@ -289,7 +289,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
       return;
     }
     if (_payMode == _PayMode.cash) {
-      _paid.text = _total.toStorage();
+      _paid.text = _total.toDisplay();
     }
     setState(() => _saving = true);
     try {

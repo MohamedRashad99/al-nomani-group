@@ -77,6 +77,11 @@ abstract class ErpStore {
   });
   Future<void> putPurchaseItem(PurchaseItem item);
 
+  Future<List<Expense>> listExpenses();
+  Stream<List<Expense>> watchExpenses();
+  Future<Expense?> getExpense(String id);
+  Future<void> putExpense(Expense expense);
+
   Future<String?> getSetting(String key);
   Future<void> putSetting(String key, String value);
   Future<List<AppSetting>> listSettings();

@@ -1,6 +1,7 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
 
 import '../../data/remote/erp_store.dart';
+import '../cairo_date_range.dart';
 import '../entities/erp_models.dart';
 import '../operational_status.dart';
 import 'inventory_measure.dart';
@@ -549,5 +550,23 @@ class DashboardService {
       fastMovingWeek: fastMovingWeek,
       reorderAlerts: reorderAlerts.take(6).toList(),
     );
+  }
+
+  Future<({Money sales, Money collections})> totalsIn(CairoDateRange range) async {
+    final sales = await _store.listSales();
+    final collections = await _store.listCollections();
+    var saleTotal = Money.zero();
+    var collectionTotal = Money.zero();
+    for (final sale in sales) {
+      if (!OperationalStatus.isActiveSale(sale)) continue;
+      if (!range.includes(sale.soldAt)) continue;
+      saleTotal += Money.parse(sale.subtotal);
+    }
+    for (final row in collections) {
+      if (!OperationalStatus.isActiveCollection(row)) continue;
+      if (!range.includes(row.collectedAt)) continue;
+      collectionTotal += Money.parse(row.amount);
+    }
+    return (sales: saleTotal, collections: collectionTotal);
   }
 }

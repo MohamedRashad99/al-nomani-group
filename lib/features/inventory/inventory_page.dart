@@ -14,6 +14,7 @@ import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/destructive_action_guard.dart';
+import '../../shared/widgets/money_text.dart';
 import '../../shared/widgets/transaction_timestamp.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/product_thumb.dart';
@@ -32,13 +33,27 @@ class _InventoryPageState extends State<InventoryPage> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<AuthCubit>().state.session;
-    final canMove =
-        session?.can(AppPermission.inventoryAdjust) == true ||
-        session?.can(AppPermission.inventoryCreate) == true;
+    final canAdd = session?.can(AppPermission.inventoryCreate) == true;
+    final canRemove = session?.can(AppPermission.inventoryRemove) == true;
     return AppScaffold(
       title: S.inventory,
       child: Column(
         children: [
+          StreamBuilder<List<Product>>(
+            stream: sl<CatalogService>().watchProducts(''),
+            builder: (context, snap) {
+              final count = ProductValueSummary.availableCount(
+                snap.data ?? const <Product>[],
+              );
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: StatCard(
+                  label: 'المنتجات المتاحة بالمخزون',
+                  child: Text('$count'),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -73,28 +88,38 @@ class _InventoryPageState extends State<InventoryPage> {
                         subtitle: Text(
                           '${S.currentStock}: ${InventoryMeasure.fromProduct(p).packagesLabel} • ${InventoryMeasure.fromProduct(p).actualLabel}',
                         ),
-                        trailing: !canMove
+                        trailing: (!canAdd && !canRemove)
                             ? null
                             : BusyGuarded(
                                 builder: (context, busy) => Wrap(
                                   spacing: 4,
                                   children: [
-                                    IconButton(
-                                      tooltip: S.stockIn,
-                                      onPressed: busy ? null : () => _move(p, 'stock_in'),
-                                      icon: busy
-                                          ? const SizedBox(
-                                              width: 18,
-                                              height: 18,
-                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                            )
-                                          : const Icon(Icons.add_circle_outline),
-                                    ),
-                                    IconButton(
-                                      tooltip: S.stockOut,
-                                      onPressed: busy ? null : () => _move(p, 'stock_out'),
-                                      icon: const Icon(Icons.remove_circle_outline),
-                                    ),
+                                    if (canAdd)
+                                      IconButton(
+                                        tooltip: S.stockIn,
+                                        onPressed: busy
+                                            ? null
+                                            : () => _move(p, 'stock_in'),
+                                        icon: busy
+                                            ? const SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Icon(Icons.add_circle_outline),
+                                      ),
+                                    if (canRemove)
+                                      IconButton(
+                                        tooltip: S.stockOut,
+                                        onPressed: busy
+                                            ? null
+                                            : () => _move(p, 'stock_out'),
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),

@@ -7,6 +7,62 @@ import '../entities/erp_models.dart';
 import '../session.dart';
 import 'audit_service.dart';
 import 'entity_link_inspector.dart';
+import 'inventory_measure.dart';
+
+class ProductValueSummary {
+  const ProductValueSummary({
+    required this.totalProducts,
+    required this.purchaseValue,
+    required this.sellingValue,
+  });
+
+  final int totalProducts;
+  final Money purchaseValue;
+  final Money sellingValue;
+
+  Money get expectedProfit => sellingValue - purchaseValue;
+
+  static ProductValueSummary fromProducts(List<Product> products) {
+    var purchase = Money.zero();
+    var selling = Money.zero();
+    for (final product in products) {
+      if (product.isDeleted) continue;
+      final packages = InventoryMeasure.fromProduct(product).packages;
+      Money unitPurchase;
+      Money unitSell;
+      try {
+        unitPurchase = Money.parse(product.purchasePrice);
+      } catch (_) {
+        unitPurchase = Money.zero();
+      }
+      try {
+        unitSell = Money.parse(product.sellingPrice);
+      } catch (_) {
+        unitSell = Money.zero();
+      }
+      purchase += Money.fromMinorUnits(
+        (unitPurchase.minorUnits * packages.milli) ~/ BigInt.from(1000),
+      );
+      selling += Money.fromMinorUnits(
+        (unitSell.minorUnits * packages.milli) ~/ BigInt.from(1000),
+      );
+    }
+    return ProductValueSummary(
+      totalProducts: products.where((row) => !row.isDeleted).length,
+      purchaseValue: purchase,
+      sellingValue: selling,
+    );
+  }
+
+  static int availableCount(List<Product> products) {
+    return [
+      for (final product in products)
+        if (!product.isDeleted &&
+            InventoryMeasure.fromProduct(product).packages.isPositive)
+          product,
+    ].length;
+  }
+}
 
 class CatalogService {
   CatalogService({

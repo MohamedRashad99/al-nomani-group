@@ -8,6 +8,7 @@ import 'features/backup/backup_page.dart';
 import 'features/collections/collections_page.dart';
 import 'features/customers/customers_page.dart';
 import 'features/dashboard/dashboard_page.dart';
+import 'features/expenses/expenses_page.dart';
 import 'features/inventory/inventory_page.dart';
 import 'features/import/import_page.dart';
 import 'features/more/more_page.dart';
@@ -111,6 +112,7 @@ GoRouter createRouter(AuthCubit auth) {
       GoRoute(path: '/collections', builder: (_, _) => const CollectionsPage()),
       GoRoute(path: '/outstanding', builder: (_, _) => const OutstandingPage()),
       GoRoute(path: '/reports', builder: (_, _) => const ReportsPage()),
+      GoRoute(path: '/expenses', builder: (_, _) => const ExpensesPage()),
       GoRoute(path: '/users', builder: (_, _) => const UsersPage()),
       GoRoute(path: '/backup', builder: (_, _) => const BackupPage()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
@@ -135,6 +137,7 @@ String? _requiredPermission(String location) {
     return AppPermission.outstandingView;
   }
   if (location.startsWith('/reports')) return AppPermission.reportsView;
+  if (location.startsWith('/expenses')) return AppPermission.expensesView;
   if (location.startsWith('/users')) return AppPermission.usersView;
   if (location.startsWith('/backup')) return AppPermission.backupView;
   if (location.startsWith('/settings')) return AppPermission.settingsView;

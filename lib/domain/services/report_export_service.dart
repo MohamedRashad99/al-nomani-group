@@ -11,6 +11,7 @@ import '../../core/config/app_config.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/utils/file_download.dart';
 import '../../data/sync/arabic_workbook_builder.dart';
+import '../cairo_date_range.dart';
 import '../session.dart';
 
 enum ReportFileType { csv, excel, pdf }
@@ -21,14 +22,19 @@ class ReportBranding {
     required this.systemName,
     required this.administratorName,
     required this.generatedAt,
+    this.range,
   });
 
-  factory ReportBranding.fromSession(AppSession session) {
+  factory ReportBranding.fromSession(
+    AppSession session, {
+    CairoDateRange? range,
+  }) {
     return ReportBranding(
       companyName: S.appName,
       systemName: S.appSubtitle,
       administratorName: session.displayName,
       generatedAt: EgyptTime.nowUtc(),
+      range: range,
     );
   }
 
@@ -36,6 +42,7 @@ class ReportBranding {
   final String systemName;
   final String administratorName;
   final DateTime generatedAt;
+  final CairoDateRange? range;
 
   String get stamp => EgyptTime.formatDateTime(generatedAt);
 
@@ -45,6 +52,11 @@ class ReportBranding {
       ['النظام', systemName],
       ['المسؤول', administratorName],
       ['تاريخ الإنشاء', stamp],
+      if (range != null) ...[
+        ['فترة التقرير', range!.label],
+        ['من', EgyptTime.formatDate(range!.startUtc)],
+        ['إلى', EgyptTime.formatDate(range!.endInclusiveUtc)],
+      ],
       ['إصدار البناء', AppConfig.egyptBuildLabel(generatedAt)],
     ];
   }
@@ -55,10 +67,11 @@ class ReportExportService {
 
   final ArabicWorkbookBuilder _workbook;
 
-  Future<Map<String, List<List<Object?>>>> sections() => _workbook.build();
+  Future<Map<String, List<List<Object?>>>> sections({CairoDateRange? range}) =>
+      _workbook.build(range: range);
 
   Future<Uint8List> buildCsvBytes({required ReportBranding branding}) async {
-    final sections = await _workbook.build();
+    final sections = await _workbook.build(range: branding.range);
     final sales = sections[SheetArabic.sales]!;
     final rows = <List<Object?>>[
       ...branding.coverRows(),
@@ -79,7 +92,7 @@ class ReportExportService {
         for (final value in row) TextCellValue(value.toString()),
       ]);
     }
-    final sections = await _workbook.build();
+    final sections = await _workbook.build(range: branding.range);
     for (final entry in sections.entries) {
       final sheet = workbook[entry.key];
       for (final row in entry.value) {
@@ -95,7 +108,7 @@ class ReportExportService {
   }
 
   Future<Uint8List> buildPdfBytes({required ReportBranding branding}) async {
-    final sections = await _workbook.build();
+    final sections = await _workbook.build(range: branding.range);
     final fontData = await rootBundle.load(
       'assets/fonts/NotoKufiArabic-Regular.ttf',
     );

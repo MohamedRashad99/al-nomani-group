@@ -6,6 +6,7 @@ abstract final class AppPermission {
 
   static const inventoryView = 'inventory.view';
   static const inventoryCreate = 'inventory.create';
+  static const inventoryRemove = 'inventory.remove';
   static const inventoryAdjust = 'inventory.adjust';
 
   static const customersView = 'customers.view';
@@ -15,12 +16,14 @@ abstract final class AppPermission {
 
   static const salesView = 'sales.view';
   static const salesCreate = 'sales.create';
+  static const salesUpdate = 'sales.update';
   static const salesCancel = 'sales.cancel';
 
   static const collectionsView = 'collections.view';
   static const collectionsCreate = 'collections.create';
 
   static const reportsView = 'reports.view';
+  static const reportsFinancial = 'reports.financial';
   static const reportsExport = 'reports.export';
 
   static const usersView = 'users.view';
@@ -46,7 +49,18 @@ abstract final class AppPermission {
 
   static const purchasesView = 'purchases.view';
   static const purchasesCreate = 'purchases.create';
+  static const purchasesUpdate = 'purchases.update';
   static const purchasesCancel = 'purchases.cancel';
+
+  static const accountsView = 'accounts.view';
+  static const accountsCreate = 'accounts.create';
+  static const accountsUpdate = 'accounts.update';
+  static const accountsReverse = 'accounts.reverse';
+
+  static const expensesView = 'expenses.view';
+  static const expensesCreate = 'expenses.create';
+  static const expensesUpdate = 'expenses.update';
+  static const expensesDelete = 'expenses.delete';
 
   static const all = <String>[
     productsView,
@@ -55,6 +69,7 @@ abstract final class AppPermission {
     productsDelete,
     inventoryView,
     inventoryCreate,
+    inventoryRemove,
     inventoryAdjust,
     customersView,
     customersCreate,
@@ -62,10 +77,12 @@ abstract final class AppPermission {
     customersDelete,
     salesView,
     salesCreate,
+    salesUpdate,
     salesCancel,
     collectionsView,
     collectionsCreate,
     reportsView,
+    reportsFinancial,
     reportsExport,
     usersView,
     usersCreate,
@@ -85,8 +102,51 @@ abstract final class AppPermission {
     suppliersDelete,
     purchasesView,
     purchasesCreate,
+    purchasesUpdate,
     purchasesCancel,
+    accountsView,
+    accountsCreate,
+    accountsUpdate,
+    accountsReverse,
+    expensesView,
+    expensesCreate,
+    expensesUpdate,
+    expensesDelete,
   ];
+
+  static const viewOf = <String, String>{
+    productsCreate: productsView,
+    productsUpdate: productsView,
+    productsDelete: productsView,
+    inventoryCreate: inventoryView,
+    inventoryRemove: inventoryView,
+    inventoryAdjust: inventoryView,
+    customersCreate: customersView,
+    customersUpdate: customersView,
+    customersDelete: customersView,
+    salesCreate: salesView,
+    salesUpdate: salesView,
+    salesCancel: salesView,
+    collectionsCreate: collectionsView,
+    reportsFinancial: reportsView,
+    reportsExport: reportsView,
+    usersCreate: usersView,
+    usersUpdate: usersView,
+    usersDisable: usersView,
+    outstandingCreate: outstandingView,
+    suppliersCreate: suppliersView,
+    suppliersUpdate: suppliersView,
+    suppliersDelete: suppliersView,
+    purchasesCreate: purchasesView,
+    purchasesUpdate: purchasesView,
+    purchasesCancel: purchasesView,
+    accountsCreate: accountsView,
+    accountsUpdate: accountsView,
+    accountsReverse: accountsView,
+    expensesCreate: expensesView,
+    expensesUpdate: expensesView,
+    expensesDelete: expensesView,
+  };
 }
 
 abstract final class AppRole {
@@ -105,6 +165,7 @@ abstract final class RolePermissions {
       AppPermission.productsUpdate,
       AppPermission.inventoryView,
       AppPermission.inventoryCreate,
+      AppPermission.inventoryRemove,
       AppPermission.inventoryAdjust,
       AppPermission.customersView,
       AppPermission.customersCreate,
@@ -112,10 +173,12 @@ abstract final class RolePermissions {
       AppPermission.customersDelete,
       AppPermission.salesView,
       AppPermission.salesCreate,
+      AppPermission.salesUpdate,
       AppPermission.salesCancel,
       AppPermission.collectionsView,
       AppPermission.collectionsCreate,
       AppPermission.reportsView,
+      AppPermission.reportsFinancial,
       AppPermission.reportsExport,
       AppPermission.backupView,
       AppPermission.settingsView,
@@ -126,7 +189,11 @@ abstract final class RolePermissions {
       AppPermission.suppliersUpdate,
       AppPermission.purchasesView,
       AppPermission.purchasesCreate,
+      AppPermission.purchasesUpdate,
       AppPermission.purchasesCancel,
+      AppPermission.accountsView,
+      AppPermission.accountsCreate,
+      AppPermission.accountsUpdate,
     ],
     AppRole.cashier: [
       AppPermission.productsView,
@@ -140,6 +207,8 @@ abstract final class RolePermissions {
       AppPermission.suppliersView,
       AppPermission.purchasesView,
       AppPermission.purchasesCreate,
+      AppPermission.accountsView,
+      AppPermission.accountsCreate,
     ],
     AppRole.viewer: [
       AppPermission.productsView,
@@ -151,6 +220,14 @@ abstract final class RolePermissions {
       AppPermission.outstandingView,
       AppPermission.suppliersView,
       AppPermission.purchasesView,
+      AppPermission.accountsView,
     ],
   };
+
+  static Set<String> resolve(String roleId, [List<String>? overrides]) {
+    if (overrides != null && overrides.isNotEmpty) {
+      return overrides.toSet();
+    }
+    return {...?matrix[roleId]};
+  }
 }

@@ -22,6 +22,7 @@ class MemoryErpStore implements ErpStore {
   final purchases = <String, Purchase>{};
   final purchaseItems = <String, PurchaseItem>{};
   final settings = <String, AppSetting>{};
+  final expenses = <String, Expense>{};
 
   void _touch() {
     if (!_changes.isClosed) _changes.add(null);
@@ -306,6 +307,22 @@ class MemoryErpStore implements ErpStore {
   @override
   Future<void> putPurchaseItem(PurchaseItem item) async {
     purchaseItems[item.id] = item;
+    _touch();
+  }
+
+  List<Expense> _expenses() =>
+      expenses.values.where((e) => !e.isDeleted).toList()
+        ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+
+  @override
+  Future<List<Expense>> listExpenses() async => _expenses();
+  @override
+  Stream<List<Expense>> watchExpenses() => _watch(_expenses);
+  @override
+  Future<Expense?> getExpense(String id) async => expenses[id];
+  @override
+  Future<void> putExpense(Expense expense) async {
+    expenses[expense.id] = expense;
     _touch();
   }
 

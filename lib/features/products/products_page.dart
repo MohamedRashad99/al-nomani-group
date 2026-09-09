@@ -45,6 +45,51 @@ class _ProductsPageState extends State<ProductsPage> {
           : null,
       child: Column(
         children: [
+          StreamBuilder<List<Product>>(
+            stream: sl<CatalogService>().watchProducts(''),
+            builder: (context, snap) {
+              final summary = ProductValueSummary.fromProducts(
+                snap.data ?? const <Product>[],
+              );
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      child: StatCard(
+                        label: S.totalProducts,
+                        child: Text('${summary.totalProducts}'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 220,
+                      child: StatCard(
+                        label: 'إجمالي الشراء',
+                        child: MoneyText(summary.purchaseValue),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 220,
+                      child: StatCard(
+                        label: 'إجمالي البيع',
+                        child: MoneyText(summary.sellingValue),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 220,
+                      child: StatCard(
+                        label: 'الربح المتوقع',
+                        child: MoneyText(summary.expectedProfit),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -141,10 +186,18 @@ class _ProductsPageState extends State<ProductsPage> {
     final sku = TextEditingController(text: product?.sku ?? '');
     final brand = TextEditingController(text: product?.brand ?? '');
     final description = TextEditingController(text: product?.description ?? '');
-    final purchase = TextEditingController(text: product?.purchasePrice ?? '');
-    final sell = TextEditingController(text: product?.sellingPrice ?? '');
-    final stock = TextEditingController(text: product?.currentStock ?? '');
-    final min = TextEditingController(text: product?.minimumStock ?? '');
+    final purchase = TextEditingController(
+      text: product == null ? '' : Money.parse(product.purchasePrice).toDisplay(),
+    );
+    final sell = TextEditingController(
+      text: product == null ? '' : Money.parse(product.sellingPrice).toDisplay(),
+    );
+    final stock = TextEditingController(
+      text: product == null ? '' : Quantity.parse(product.currentStock).toDisplay(),
+    );
+    final min = TextEditingController(
+      text: product == null ? '' : Quantity.parse(product.minimumStock).toDisplay(),
+    );
     final existingMeasure = product == null
         ? null
         : InventoryMeasure.fromProduct(product);

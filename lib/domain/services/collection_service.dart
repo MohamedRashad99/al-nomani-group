@@ -34,7 +34,8 @@ class CollectionService {
     String? notes,
     DateTime? collectedAt,
   }) async {
-    if (!session.can(AppPermission.collectionsCreate)) {
+    if (!session.can(AppPermission.collectionsCreate) &&
+        !session.can(AppPermission.accountsCreate)) {
       throw const PermissionException();
     }
     if (!amount.isPositive) {

@@ -133,7 +133,8 @@ class OutstandingService {
     String? notes,
   }) async {
     if (!session.can(AppPermission.outstandingCreate) &&
-        !session.can(AppPermission.collectionsCreate)) {
+        !session.can(AppPermission.collectionsCreate) &&
+        !session.can(AppPermission.accountsCreate)) {
       throw const PermissionException();
     }
     if (!amount.isPositive) {

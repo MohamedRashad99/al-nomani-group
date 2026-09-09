@@ -17,6 +17,7 @@ abstract final class S {
   static const sales = 'المبيعات';
   static const collections = 'التحصيلات';
   static const reports = 'التقارير';
+  static const expenses = 'المصروفات';
   static const users = 'المستخدمون';
   static const backup = 'النسخ الاحتياطي والمزامنة';
   static const settings = 'الإعدادات';

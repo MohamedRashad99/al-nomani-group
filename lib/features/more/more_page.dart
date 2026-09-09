@@ -36,6 +36,8 @@ class MorePage extends StatelessWidget {
           '/outstanding',
           Icons.account_balance_wallet_outlined,
         ),
+      if (permissions.contains(AppPermission.expensesView))
+        const _Module(S.expenses, '/expenses', Icons.receipt_long_outlined),
       if (permissions.contains(AppPermission.reportsView))
         const _Module(S.reports, '/reports', Icons.analytics_outlined),
       if (permissions.contains(AppPermission.usersView))

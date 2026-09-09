@@ -85,7 +85,16 @@ class Money implements Comparable<Money> {
     return '${negative ? '-' : ''}$whole.$frac';
   }
 
-  String toDisplay() => toStorage();
+  /// User-facing amount without unnecessary trailing zeros.
+  String toDisplay() {
+    final stored = toStorage();
+    if (stored.endsWith('.000')) {
+      return stored.substring(0, stored.length - 4);
+    }
+    return stored
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
 
   @override
   String toString() => toStorage();

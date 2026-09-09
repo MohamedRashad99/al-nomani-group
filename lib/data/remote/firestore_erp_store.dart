@@ -155,6 +155,7 @@ class FirestoreErpStore implements ErpStore {
       _col('suppliers').snapshots().map((_) {}),
       _col('purchases').snapshots().map((_) {}),
       _col('purchase_items').snapshots().map((_) {}),
+      _col('expenses').snapshots().map((_) {}),
     ]);
   }
 
@@ -482,6 +483,38 @@ class FirestoreErpStore implements ErpStore {
   @override
   Future<void> putPurchaseItem(PurchaseItem item) =>
       _put('purchase_items', item.id, item.toMap(), operation: 'create');
+
+  @override
+  Future<List<Expense>> listExpenses() async {
+    final rows = await _listCol('expenses', expenseFromMap, (e) => !e.isDeleted);
+    return rows..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  }
+
+  @override
+  Stream<List<Expense>> watchExpenses() {
+    return _watchCol('expenses', expenseFromMap, (e) => !e.isDeleted).map((rows) {
+      rows.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+      return rows;
+    });
+  }
+
+  @override
+  Future<Expense?> getExpense(String id) async {
+    final cached = _cachedById<Expense>('expenses', (row) => row.id == id);
+    if (cached != null) return cached;
+    await ensureReady();
+    final doc = await _col('expenses').doc(id).get();
+    if (!doc.exists) return null;
+    return expenseFromMap(doc.data()!, doc.id);
+  }
+
+  @override
+  Future<void> putExpense(Expense expense) => _put(
+    'expenses',
+    expense.id,
+    expense.toMap(),
+    operation: expense.isDeleted ? 'delete' : 'update',
+  );
 
   @override
   Future<String?> getSetting(String key) async {

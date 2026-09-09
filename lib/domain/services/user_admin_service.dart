@@ -40,6 +40,7 @@ class UserAdminService {
     required String displayName,
     String? password,
     required String roleId,
+    List<String>? permissions,
     bool isActive = true,
   }) async {
     final creating = id == null;
@@ -67,6 +68,12 @@ class UserAdminService {
     if (taken != null && taken.id != userId) {
       throw const ValidationException('اسم المستخدم مستخدم مسبقاً.');
     }
+    await _guardLastAdmin(
+      existing: existing,
+      nextRoleId: roleId,
+      nextActive: isActive,
+      nextDeleted: false,
+    );
     final hash = password == null || password.isEmpty
         ? existing?.passwordHash
         : BCrypt.hashpw(password, BCrypt.gensalt());
@@ -79,6 +86,7 @@ class UserAdminService {
       displayName: displayName.trim(),
       passwordHash: hash,
       roleId: roleId,
+      permissions: permissions,
       isActive: isActive,
       version: (existing?.version ?? 0) + 1,
       deviceId: deviceId,
@@ -110,18 +118,72 @@ class UserAdminService {
   }
 
   Future<void> disable(AppSession session, String userId) async {
+    await delete(session, userId);
+  }
+
+  Future<void> delete(AppSession session, String userId) async {
     if (!session.can(AppPermission.usersDisable)) {
       throw const PermissionException();
     }
     final user = await _store.getUser(userId);
-    if (user == null) return;
-    await upsert(
-      session: session,
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      roleId: user.roleId,
-      isActive: false,
+    if (user == null || user.isDeleted) return;
+    await _guardLastAdmin(
+      existing: user,
+      nextRoleId: user.roleId,
+      nextActive: false,
+      nextDeleted: true,
     );
+    final now = EgyptTime.nowUtc();
+    final deviceId = await _devices.deviceId();
+    await _store.putUser(
+      AppUser(
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        passwordHash: user.passwordHash,
+        roleId: user.roleId,
+        permissions: user.permissions,
+        isActive: false,
+        version: user.version + 1,
+        deviceId: deviceId,
+        createdAt: user.createdAt,
+        updatedAt: now,
+        isDeleted: true,
+      ),
+    );
+    await _audit.write(
+      userId: session.userId,
+      deviceId: deviceId,
+      action: 'user.delete',
+      entityType: 'user',
+      entityId: userId,
+    );
+  }
+
+  Future<void> _guardLastAdmin({
+    required AppUser? existing,
+    required String nextRoleId,
+    required bool nextActive,
+    required bool nextDeleted,
+  }) async {
+    if (existing == null) return;
+    final wasActiveAdmin =
+        existing.roleId == AppRole.admin && existing.isActive && !existing.isDeleted;
+    if (!wasActiveAdmin) return;
+    final stillActiveAdmin =
+        nextRoleId == AppRole.admin && nextActive && !nextDeleted;
+    if (stillActiveAdmin) return;
+    final others = await _store.listUsers();
+    final remaining = [
+      for (final user in others)
+        if (user.id != existing.id &&
+            user.roleId == AppRole.admin &&
+            user.isActive &&
+            !user.isDeleted)
+          user,
+    ];
+    if (remaining.isEmpty) {
+      throw const ValidationException('لا يمكن حذف أو تعطيل آخر مدير نشط.');
+    }
   }
 }

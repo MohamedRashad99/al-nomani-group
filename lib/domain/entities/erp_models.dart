@@ -575,6 +575,7 @@ class AppUser {
     required this.displayName,
     required this.passwordHash,
     required this.roleId,
+    this.permissions,
     this.isActive = true,
     this.version = 1,
     this.deviceId,
@@ -588,6 +589,7 @@ class AppUser {
   final String displayName;
   final String passwordHash;
   final String roleId;
+  final List<String>? permissions;
   final bool isActive;
   final int version;
   final String? deviceId;
@@ -599,6 +601,7 @@ class AppUser {
     String? displayName,
     String? passwordHash,
     String? roleId,
+    List<String>? permissions,
     bool? isActive,
     int? version,
     String? deviceId,
@@ -611,6 +614,7 @@ class AppUser {
       displayName: displayName ?? this.displayName,
       passwordHash: passwordHash ?? this.passwordHash,
       roleId: roleId ?? this.roleId,
+      permissions: permissions ?? this.permissions,
       isActive: isActive ?? this.isActive,
       version: version ?? this.version,
       deviceId: deviceId ?? this.deviceId,
@@ -626,6 +630,7 @@ class AppUser {
     'display_name': displayName,
     'password_hash': passwordHash,
     'role_id': roleId,
+    if (permissions != null) 'permissions': permissions,
     'is_active': isActive,
     'version': version,
     'device_id': deviceId,
@@ -945,4 +950,78 @@ class AppSetting {
   final String key;
   final String value;
   final DateTime updatedAt;
+}
+
+class ExpenseCategory {
+  const ExpenseCategory({required this.code, required this.label});
+
+  final String code;
+  final String label;
+
+  static const salary = ExpenseCategory(code: 'salary', label: 'راتب موظف');
+  static const fuel = ExpenseCategory(code: 'fuel', label: 'بنزين');
+  static const rent = ExpenseCategory(code: 'rent', label: 'إيجار');
+  static const electricity = ExpenseCategory(code: 'electricity', label: 'كهرباء');
+  static const maintenance = ExpenseCategory(code: 'maintenance', label: 'صيانة');
+  static const operations = ExpenseCategory(code: 'operations', label: 'مصروفات تشغيل');
+  static const other = ExpenseCategory(code: 'other', label: 'أخرى');
+
+  static const all = <ExpenseCategory>[
+    salary,
+    fuel,
+    rent,
+    electricity,
+    maintenance,
+    operations,
+    other,
+  ];
+
+  static ExpenseCategory byCode(String code) {
+    for (final item in all) {
+      if (item.code == code) return item;
+    }
+    return other;
+  }
+}
+
+class Expense {
+  const Expense({
+    required this.id,
+    required this.amount,
+    required this.category,
+    this.note,
+    required this.occurredAt,
+    required this.createdBy,
+    this.version = 1,
+    this.deviceId,
+    required this.createdAt,
+    required this.updatedAt,
+    this.isDeleted = false,
+  });
+
+  final String id;
+  final String amount;
+  final String category;
+  final String? note;
+  final DateTime occurredAt;
+  final String createdBy;
+  final int version;
+  final String? deviceId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final bool isDeleted;
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'amount': amount,
+    'category': category,
+    'note': note,
+    'occurred_at': occurredAt.toIso8601String(),
+    'created_by': createdBy,
+    'version': version,
+    'device_id': deviceId,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+    'is_deleted': isDeleted,
+  };
 }

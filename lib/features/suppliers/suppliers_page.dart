@@ -720,7 +720,7 @@ abstract final class SupplierDashboardActions {
                                 ),
                               );
                               if (payMode == _PayMode.cash) {
-                                paid.text = total().toStorage();
+                                paid.text = total().toDisplay();
                               }
                             });
                           },
@@ -737,14 +737,14 @@ abstract final class SupplierDashboardActions {
                                 return ListTile(
                                   title: Text(products[line.productId]?.name ?? 'منتج'),
                                   subtitle: Text(
-                                    '${line.quantity.toStorage()} × ${line.unitPrice.toDisplay()}',
+                                    '${line.quantity.toDisplay()} × ${line.unitPrice.toDisplay()}',
                                   ),
                                   trailing: IconButton(
                                     icon: const Icon(Icons.close),
                                     onPressed: () => setS(() {
                                       lines.removeAt(index);
                                       if (payMode == _PayMode.cash) {
-                                        paid.text = total().toStorage();
+                                        paid.text = total().toDisplay();
                                       }
                                     }),
                                   ),
@@ -761,7 +761,7 @@ abstract final class SupplierDashboardActions {
                       onSelectionChanged: (value) => setS(() {
                         payMode = value.first;
                         if (payMode == _PayMode.cash) {
-                          paid.text = total().toStorage();
+                          paid.text = total().toDisplay();
                         }
                       }),
                     ),
@@ -781,7 +781,7 @@ abstract final class SupplierDashboardActions {
                           : () async {
                               try {
                                 if (payMode == _PayMode.cash) {
-                                  paid.text = total().toStorage();
+                                  paid.text = total().toDisplay();
                                 }
                                 await sl<AppBusyCubit>().guard(() async {
                                   await sl<PurchaseService>().create(

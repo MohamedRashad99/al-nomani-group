@@ -21,6 +21,18 @@ void main() {
       balance -= Money.parse('300');
       expect(balance.toStorage(), '450.000');
     });
+
+    test('toDisplay hides trailing zeros without changing storage', () {
+      expect(Money.parse('125').toDisplay(), '125');
+      expect(Money.parse('250').toDisplay(), '250');
+      expect(Money.parse('75').toDisplay(), '75');
+      expect(Money.parse('125.25').toDisplay(), '125.25');
+      expect(Money.parse('125.50').toDisplay(), '125.5');
+      expect(Money.parse('125.75').toDisplay(), '125.75');
+      expect(Money.zero().toDisplay(), '0');
+      expect(Money.parse('1250000').toDisplay(), '1250000');
+      expect(Money.parse('125').toStorage(), '125.000');
+    });
   });
 
   group('Quantity', () {

@@ -98,7 +98,7 @@ class AuthService {
       username: user.username,
       displayName: user.displayName,
       roleName: user.roleId,
-      permissions: {...?RolePermissions.matrix[user.roleId]},
+      permissions: RolePermissions.resolve(user.roleId, user.permissions),
       expiresAt: DateTime.now().add(const Duration(days: offlineSessionDays)),
       isOfflineVerified: !authenticatedOnline,
     );
@@ -138,7 +138,7 @@ class AuthService {
       roleName: user?.roleId ?? session.roleName,
       permissions: user == null
           ? session.permissions
-          : {...?RolePermissions.matrix[user.roleId]},
+          : RolePermissions.resolve(user.roleId, user.permissions),
       expiresAt: session.expiresAt,
       isOfflineVerified: session.isOfflineVerified,
     );

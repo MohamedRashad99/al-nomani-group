@@ -27,6 +27,18 @@ bool mapBool(Map<String, dynamic> data, List<String> keys, {bool fallback = true
   return fallback;
 }
 
+List<String>? mapStringList(Map<String, dynamic> data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is! List) continue;
+    return [
+      for (final item in value)
+        if ('$item'.trim().isNotEmpty) '$item'.trim(),
+    ];
+  }
+  return null;
+}
+
 int mapVersion(Map<String, dynamic> data) {
   final value = data['version'];
   if (value is num) return value.toInt();
@@ -247,6 +259,7 @@ AppUser userFromMap(Map<String, dynamic> data, String id) {
     displayName: mapText(data, const ['display_name', 'displayName', 'username']),
     passwordHash: mapText(data, const ['password_hash', 'passwordHash']),
     roleId: mapText(data, const ['role_id', 'roleId', 'role'], 'cashier'),
+    permissions: mapStringList(data, const ['permissions']),
     isActive: mapBool(data, const ['is_active', 'isActive']),
     version: mapVersion(data),
     deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
@@ -322,6 +335,24 @@ SupplierAccountTransaction supplierTxFromMap(Map<String, dynamic> data, String i
     createdBy: mapText(data, const ['created_by', 'createdBy']),
     deviceId: mapText(data, const ['device_id', 'deviceId']),
     createdAt: mapDate(data, const ['created_at', 'createdAt']),
+  );
+}
+
+Expense expenseFromMap(Map<String, dynamic> data, String id) {
+  final now = EgyptTime.nowUtc();
+  return Expense(
+    id: id,
+    amount: mapText(data, const ['amount'], '0'),
+    category: mapText(data, const ['category'], ExpenseCategory.other.code),
+    note: mapTextOrNull(data, const ['note', 'notes', 'description']),
+    occurredAt: mapDate(data, const ['occurred_at', 'occurredAt', 'paid_at']),
+    createdBy: mapText(data, const ['created_by', 'createdBy']),
+    version: mapVersion(data),
+    deviceId: mapTextOrNull(data, const ['device_id', 'deviceId']),
+    createdAt: mapDate(data, const ['created_at', 'createdAt']),
+    updatedAt: mapDateOrNull(data, const ['updated_at', 'updatedAt']) ?? now,
+    isDeleted: mapBool(data, const ['is_deleted', 'isDeleted'], fallback: false) ||
+        data['operation'] == 'delete',
   );
 }
 

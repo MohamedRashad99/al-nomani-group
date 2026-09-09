@@ -31,14 +31,21 @@ class InventoryService {
     String? referenceId,
     bool allowNegative = false,
   }) async {
-    if (!session.can(AppPermission.inventoryAdjust) &&
-        !session.can(AppPermission.inventoryCreate) &&
-        type != 'sale' &&
-        type != 'sale_cancel' &&
-        type != 'purchase' &&
-        type != 'purchase_cancel' &&
-        type != 'purchase_return') {
-      throw const PermissionException();
+    final isSystemMove =
+        type == 'sale' ||
+        type == 'sale_cancel' ||
+        type == 'purchase' ||
+        type == 'purchase_cancel' ||
+        type == 'purchase_return';
+    if (!isSystemMove) {
+      final allowed = switch (type) {
+        'stock_in' => session.can(AppPermission.inventoryCreate),
+        'stock_out' => session.can(AppPermission.inventoryRemove),
+        _ => session.can(AppPermission.inventoryAdjust),
+      };
+      if (!allowed) {
+        throw const PermissionException();
+      }
     }
     if (quantity.isZero) {
       throw const ValidationException('الكمية غير صالحة.');

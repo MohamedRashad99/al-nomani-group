@@ -65,7 +65,7 @@ void main() {
       final grams = converter.subUnitOptions.first;
       final result = converter.breakdown(grams, Quantity.parse('250'));
       expect(result.packageQuantity.toDisplay(), '0.5');
-      expect(result.totalPrice.toDisplay(), '125.000');
+      expect(result.totalPrice.toDisplay(), '125');
     });
   });
 

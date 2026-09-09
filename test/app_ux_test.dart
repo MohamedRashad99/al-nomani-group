@@ -5,7 +5,11 @@ import 'package:al_nomani_group/features/app/app_alert_host.dart';
 import 'package:al_nomani_group/features/app/startup_splash.dart';
 import 'package:al_nomani_group/shared/widgets/customer_contact_actions.dart';
 import 'package:al_nomani_group/shared/widgets/product_thumb.dart';
+import 'package:al_nomani_group/domain/cairo_date_range.dart';
+import 'package:al_nomani_group/shared/widgets/amount_field.dart';
+import 'package:al_nomani_group/shared/widgets/date_range_bar.dart';
 import 'package:al_nomani_group/shared/widgets/report_busy_barrier.dart';
+import 'package:al_nomani_shared/al_nomani_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,5 +114,38 @@ void main() {
     );
     expect(EgyptPhone.e164Digits(''), isNull);
     expect(EgyptPhone.telUri(null), isNull);
+  });
+
+  testWidgets('amount field rejects letters', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmountField(controller: controller, label: 'المبلغ'),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '12a5.5');
+    expect(controller.text, '125.5');
+  });
+
+  testWidgets('date range bar shows selected period', (tester) async {
+    EgyptTime.ensureInitialized();
+    var range = CairoDateRange.preset(ReportPeriod.today);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DateRangeBar(
+            value: range,
+            onChanged: (next) => range = next,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('اليوم'), findsWidgets);
+    await tester.tap(find.text('أمس'));
+    await tester.pump();
+    expect(range.period, ReportPeriod.yesterday);
   });
 }

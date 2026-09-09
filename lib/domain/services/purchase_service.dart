@@ -454,6 +454,7 @@ class PurchaseService {
     String? notes,
   }) async {
     if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.purchasesUpdate) &&
         !session.can(AppPermission.suppliersUpdate)) {
       throw const PermissionException();
     }
@@ -506,6 +507,7 @@ class PurchaseService {
     String? notes,
   }) async {
     if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.purchasesUpdate) &&
         !session.can(AppPermission.suppliersUpdate)) {
       throw const PermissionException();
     }
@@ -587,6 +589,7 @@ class PurchaseService {
     String? notes,
   }) async {
     if (!session.can(AppPermission.purchasesCreate) &&
+        !session.can(AppPermission.purchasesUpdate) &&
         !session.can(AppPermission.suppliersUpdate)) {
       throw const PermissionException();
     }

@@ -73,6 +73,7 @@ service cloud.firestore {
         'supplier_account_transactions',
         'purchases',
         'purchase_items',
+        'expenses',
         'other',
         'sheet_tabs'
       ];

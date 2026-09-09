@@ -289,6 +289,13 @@ class AppScaffold extends StatelessWidget {
         Icons.payments_outlined,
         Icons.payments_rounded,
       ),
+    if (permissions.contains(AppPermission.expensesView))
+      const _NavItem(
+        '/expenses',
+        S.expenses,
+        Icons.receipt_long_outlined,
+        Icons.receipt_long_rounded,
+      ),
     if (permissions.contains(AppPermission.reportsView))
       const _NavItem(
         '/reports',

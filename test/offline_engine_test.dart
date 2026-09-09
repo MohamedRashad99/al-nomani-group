@@ -453,7 +453,7 @@ void main() {
       ),
     );
 
-    expect(result.subtotal.toDisplay(), '125.000');
+    expect(result.subtotal.toDisplay(), '125');
     final after = (await store.getProduct('p-sugar'))!;
     expect(Quantity.parse(after.currentStock).toDisplay(), '17.5');
     final items = await store.listSaleItems(saleId: result.saleId);
