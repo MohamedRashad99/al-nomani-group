@@ -46,18 +46,19 @@ class _ProductsPageState extends State<ProductsPage> {
           : null,
       child: Column(
         children: [
-          StreamBuilder<List<Product>>(
-            stream: sl<CatalogService>().watchProducts(''),
-            builder: (context, snap) {
-              final summary = ProductValueSummary.fromProducts(
-                snap.data ?? const <Product>[],
-              );
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: ProductCatalogSummaryBar(summary: summary),
-              );
-            },
-          ),
+          if (session.isAdmin)
+            StreamBuilder<List<Product>>(
+              stream: sl<CatalogService>().watchProducts(''),
+              builder: (context, snap) {
+                final summary = ProductValueSummary.fromProducts(
+                  snap.data ?? const <Product>[],
+                );
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: ProductCatalogSummaryBar(summary: summary),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(

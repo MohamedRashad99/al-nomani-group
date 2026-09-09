@@ -35,6 +35,8 @@ import '../../domain/services/supplier_service.dart';
 import '../../domain/services/user_admin_service.dart';
 import '../../domain/services/product_ai_service.dart';
 import '../../domain/services/product_image_service.dart';
+import '../../core/updates/mobile_update.dart';
+import '../../features/app/android_update_cubit.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
@@ -182,6 +184,8 @@ Future<void> configureDependencies({
   sl.registerLazySingleton(SyncQueueRepository.new);
   sl.registerLazySingleton(AppBusyCubit.new);
   sl.registerLazySingleton(AppAlertCubit.new);
+  sl.registerLazySingleton(AndroidUpdateService.new);
+  sl.registerLazySingleton(() => AndroidUpdateCubit(sl()));
   sl.registerLazySingleton(ProductImageService.new);
   sl.registerLazySingleton(ProductAiService.new);
   sl.registerLazySingleton(

@@ -70,18 +70,19 @@ class _SuppliersPageState extends State<SuppliersPage> {
       title: S.suppliers,
       child: Column(
         children: [
-          FutureBuilder<SupplierPortfolioSummary>(
-            future: sl<SupplierService>().portfolioSummary(),
-            builder: (context, summarySnap) {
-              final summary = summarySnap.data;
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: summary == null
-                    ? const LinearProgressIndicator(minHeight: 2)
-                    : _PortfolioKpis(summary: summary),
-              );
-            },
-          ),
+          if (session.isAdmin)
+            FutureBuilder<SupplierPortfolioSummary>(
+              future: sl<SupplierService>().portfolioSummary(),
+              builder: (context, summarySnap) {
+                final summary = summarySnap.data;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: summary == null
+                      ? const LinearProgressIndicator(minHeight: 2)
+                      : _PortfolioKpis(summary: summary),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(

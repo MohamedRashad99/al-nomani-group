@@ -161,6 +161,18 @@ abstract final class S {
   static const updateAvailable = 'يتوفر إصدار جديد';
   static const updateLater = 'لاحقاً';
   static const updateNow = 'تحديث بعد إنهاء العملية';
+  static const apkUpdateTitle = 'تحديث جديد متاح';
+  static const apkUpdateMessage = 'يوجد إصدار جديد من التطبيق.';
+  static const apkUpdateNow = 'تحديث الآن';
+  static const apkUpdateLater = 'لاحقًا';
+  static const apkUpdateRetry = 'إعادة المحاولة';
+  static const apkUpdateInstall = 'تثبيت التحديث';
+  static const apkUpdateDownloading = 'جاري تنزيل التحديث…';
+  static const apkUpdateConnecting = 'جارٍ الاتصال…';
+  static const apkCurrentVersion = 'الإصدار الحالي';
+  static const apkNewVersion = 'الإصدار الجديد';
+  static const apkCheckUpdates = 'التحقق من التحديثات';
+  static const apkUpToDate = 'أنت تستخدم أحدث إصدار.';
 
   static const requiredField = 'هذا الحقل مطلوب.';
   static const invalidAmount = 'المبلغ غير صالح.';

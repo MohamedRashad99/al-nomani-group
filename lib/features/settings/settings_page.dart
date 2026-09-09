@@ -1,11 +1,14 @@
 import 'package:al_nomani_shared/al_nomani_shared.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../features/app/android_update_cubit.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -147,6 +150,27 @@ class _SettingsPageState extends State<SettingsPage> {
                       title: const Text('إصدار التطبيق'),
                       trailing: Text(config.visibleBuildLabel),
                     ),
+                    if (!kIsWeb)
+                      FutureBuilder<PackageInfo>(
+                        future: PackageInfo.fromPlatform(),
+                        builder: (context, snapshot) {
+                          final info = snapshot.data;
+                          return ListTile(
+                            title: const Text('إصدار أندرويد المثبّت'),
+                            trailing: Text(
+                              info == null
+                                  ? '…'
+                                  : '${info.version} (${info.buildNumber})',
+                            ),
+                          );
+                        },
+                      ),
+                    if (!kIsWeb && sl.isRegistered<AndroidUpdateCubit>())
+                      ListTile(
+                        title: const Text(S.apkCheckUpdates),
+                        leading: const Icon(Icons.system_update_alt),
+                        onTap: _checkAndroidUpdate,
+                      ),
                     ListTile(
                       title: const Text('إصدار قاعدة البيانات'),
                       trailing: Text('${config.databaseVersion}'),
@@ -184,6 +208,15 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) {
       setState(() => _future = _load());
       sl<AppAlertCubit>().success('تم حفظ الإعدادات.');
+    }
+  }
+
+  Future<void> _checkAndroidUpdate() async {
+    final cubit = sl<AndroidUpdateCubit>();
+    await cubit.check(forceFetch: true);
+    if (!mounted) return;
+    if (cubit.state.phase == AndroidUpdatePhase.current) {
+      sl<AppAlertCubit>().success(S.apkUpToDate);
     }
   }
 

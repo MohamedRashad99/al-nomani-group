@@ -72,22 +72,24 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 final summary = sl<ExpenseService>().summarize(items);
                 return Column(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: SummaryMetricsRow(
-                        metrics: [
-                          SummaryMetric(
-                            label: 'إجمالي المصروفات',
-                            value: MoneyText(summary.total),
-                          ),
-                          SummaryMetric(
-                            label: 'عدد المصروفات',
-                            value: Text(ArabicFormat.number(summary.count)),
-                          ),
-                        ],
+                    if (session.isAdmin) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: SummaryMetricsRow(
+                          metrics: [
+                            SummaryMetric(
+                              label: 'إجمالي المصروفات',
+                              value: MoneyText(summary.total),
+                            ),
+                            SummaryMetric(
+                              label: 'عدد المصروفات',
+                              value: Text(ArabicFormat.number(summary.count)),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
+                      const SizedBox(height: 8),
+                    ],
                     Expanded(
                       child: items.isEmpty
                           ? const Center(child: Text(S.empty))

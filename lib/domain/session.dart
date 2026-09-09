@@ -1,3 +1,5 @@
+import 'package:al_nomani_shared/al_nomani_shared.dart';
+
 class AppSession {
   final String userId;
   final String username;
@@ -20,6 +22,8 @@ class AppSession {
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
   bool can(String permission) => permissions.contains(permission);
+
+  bool get isAdmin => roleName == AppRole.admin;
 
   AppSession copyWith({Set<String>? permissions}) {
     return AppSession(

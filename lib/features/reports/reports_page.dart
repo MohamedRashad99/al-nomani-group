@@ -46,7 +46,7 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget build(BuildContext context) {
     final session = context.watch<AuthCubit>().state.session;
     final canExport = session?.can(AppPermission.reportsExport) == true;
-    final canFinancial = session?.can(AppPermission.reportsFinancial) == true;
+    final canFinancial = session?.isAdmin == true;
     return AppScaffold(
       title: S.reports,
       child: FutureBuilder<({Money sales, Money collections})>(

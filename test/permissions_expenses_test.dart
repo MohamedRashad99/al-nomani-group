@@ -164,5 +164,7 @@ void main() {
       RolePermissions.resolve(AppRole.admin).contains(AppPermission.expensesView),
       isTrue,
     );
+    expect(_session(const {}, role: AppRole.admin).isAdmin, isTrue);
+    expect(_session(AppPermission.all.toSet(), role: AppRole.manager).isAdmin, isFalse);
   });
 }

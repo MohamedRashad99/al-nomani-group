@@ -35,37 +35,39 @@ class _InventoryPageState extends State<InventoryPage> {
     final session = context.watch<AuthCubit>().state.session;
     final canAdd = session?.can(AppPermission.inventoryCreate) == true;
     final canRemove = session?.can(AppPermission.inventoryRemove) == true;
+    final showSummary = session?.isAdmin == true;
     return AppScaffold(
       title: S.inventory,
       child: Column(
         children: [
-          StreamBuilder<List<Product>>(
-            stream: sl<CatalogService>().watchProducts(''),
-            builder: (context, snap) {
-              final products = snap.data ?? const <Product>[];
-              final available = ProductValueSummary.availableCount(products);
-              final total = products.where((row) => !row.isDeleted).length;
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                child: SummaryMetricsRow(
-                  metrics: [
-                    SummaryMetric(
-                      label: S.availableInStock,
-                      value: Text('$available'),
-                    ),
-                    SummaryMetric(
-                      label: S.totalProducts,
-                      value: Text('$total'),
-                    ),
-                    SummaryMetric(
-                      label: S.outOfStock,
-                      value: Text('${total - available}'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+          if (showSummary)
+            StreamBuilder<List<Product>>(
+              stream: sl<CatalogService>().watchProducts(''),
+              builder: (context, snap) {
+                final products = snap.data ?? const <Product>[];
+                final available = ProductValueSummary.availableCount(products);
+                final total = products.where((row) => !row.isDeleted).length;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: SummaryMetricsRow(
+                    metrics: [
+                      SummaryMetric(
+                        label: S.availableInStock,
+                        value: Text('$available'),
+                      ),
+                      SummaryMetric(
+                        label: S.totalProducts,
+                        value: Text('$total'),
+                      ),
+                      SummaryMetric(
+                        label: S.outOfStock,
+                        value: Text('${total - available}'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
