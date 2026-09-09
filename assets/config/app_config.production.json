@@ -7,8 +7,8 @@
   "google_live_spreadsheet_id": "1TvyxxkYH4iLyYfwHnVMMTuyPCekUNvFerfV-HgSp22I",
   "google_sheets_webapp_url": "",
   "google_sheets_write_token": "nomani-sheet-2026",
-  "app_version": "1.0.6",
-  "build_label": "v1:090926:04:50:00",
+  "app_version": "1.0.7",
+  "build_label": "v1:090926:14:30:00",
   "database_version": 2,
   "sync_protocol_version": 1
 }

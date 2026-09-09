@@ -2,6 +2,7 @@ import 'package:al_nomani_group/core/config/app_config.dart';
 import 'package:al_nomani_group/core/di/injector.dart';
 import 'package:al_nomani_group/core/errors/app_exception.dart';
 import 'package:al_nomani_group/data/remote/memory_erp_store.dart';
+import 'package:al_nomani_group/domain/cairo_date_range.dart';
 import 'package:al_nomani_group/domain/entities/erp_models.dart';
 import 'package:al_nomani_group/domain/services/catalog_service.dart';
 import 'package:al_nomani_group/domain/services/expense_service.dart';
@@ -135,6 +136,23 @@ void main() {
     final summary = sl<ExpenseService>().summarize(expenses);
     expect(summary.count, 1);
     expect(summary.total, Money.parse('350.50'));
+  });
+
+  test('saved expense stays visible in this-month filter', () async {
+    await readyStore();
+    await sl<ExpenseService>().upsert(
+      session: admin(),
+      amount: Money.parse('80'),
+      category: ExpenseCategory.rent.code,
+      occurredAt: EgyptTime.nowUtc(),
+    );
+    final expenses = await sl<ExpenseService>().watch().first;
+    final visible = sl<ExpenseService>().filter(
+      expenses,
+      range: CairoDateRange.preset(ReportPeriod.thisMonth),
+    );
+    expect(visible, hasLength(1));
+    expect(visible.single.amount, '80.000');
   });
 
   test('expense create is admin-gated', () async {

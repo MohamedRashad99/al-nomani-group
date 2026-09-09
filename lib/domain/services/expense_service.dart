@@ -36,14 +36,16 @@ class ExpenseService {
   final AuditService _audit;
 
   Stream<List<Expense>> watch({CairoDateRange? range, String query = ''}) {
-    return _store.watchExpenses().map((items) => _filter(items, range, query));
+    return _store.watchExpenses().map(
+      (items) => filter(items, range: range, query: query),
+    );
   }
 
-  List<Expense> _filter(
-    List<Expense> items,
+  List<Expense> filter(
+    List<Expense> items, {
     CairoDateRange? range,
-    String query,
-  ) {
+    String query = '',
+  }) {
     final q = query.trim();
     return [
       for (final item in items)

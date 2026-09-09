@@ -30,6 +30,7 @@ class ExpensesPage extends StatefulWidget {
 class _ExpensesPageState extends State<ExpensesPage> {
   String _query = '';
   late CairoDateRange _range = CairoDateRange.preset(ReportPeriod.thisMonth);
+  late final Stream<List<Expense>> _expenses = sl<ExpenseService>().watch();
 
   @override
   Widget build(BuildContext context) {
@@ -63,12 +64,19 @@ class _ExpensesPageState extends State<ExpensesPage> {
           ),
           Expanded(
             child: StreamBuilder<List<Expense>>(
-              stream: sl<ExpenseService>().watch(range: _range, query: _query),
+              stream: _expenses,
               builder: (context, snap) {
-                final items = snap.data ?? const <Expense>[];
+                if (snap.hasError) {
+                  return Center(child: Text(snap.error.toString()));
+                }
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                final items = sl<ExpenseService>().filter(
+                  snap.data!,
+                  range: _range,
+                  query: _query,
+                );
                 final summary = sl<ExpenseService>().summarize(items);
                 return Column(
                   children: [
@@ -184,120 +192,138 @@ class _ExpensesPageState extends State<ExpensesPage> {
     final note = TextEditingController(text: expense?.note ?? '');
     var category = expense?.category ?? ExpenseCategory.salary.code;
     var occurredAt = expense?.occurredAt ?? EgyptTime.nowUtc();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        var saving = false;
-        String? error;
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-            left: 16,
-            right: 16,
-            top: 16,
-          ),
-          child: StatefulBuilder(
-            builder: (ctx, setS) => SingleChildScrollView(
-              child: Column(
-                children: [
-                  AmountField(controller: amount, label: 'المبلغ'),
-                  SearchableSelectField<String>(
-                    label: 'التصنيف',
-                    required: true,
-                    allowCustom: false,
-                    value: category,
-                    options: [
-                      for (final item in ExpenseCategory.all)
-                        SearchableOption(value: item.code, label: item.label),
-                    ],
-                    onChanged: (value) =>
-                        setS(() => category = value ?? category),
-                  ),
-                  TextField(
-                    controller: note,
-                    decoration: const InputDecoration(labelText: S.notes),
-                    maxLines: 2,
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('التاريخ والوقت'),
-                    subtitle: Text(ArabicFormat.transactionDateTime(occurredAt)),
-                    trailing: const Icon(Icons.event),
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: ctx,
-                        initialDate: EgyptTime.toCairo(occurredAt),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 1)),
-                      );
-                      if (date == null || !ctx.mounted) return;
-                      final time = await showTimePicker(
-                        context: ctx,
-                        initialTime: TimeOfDay.fromDateTime(
-                          EgyptTime.toCairo(occurredAt),
-                        ),
-                      );
-                      final cairo = EgyptTime.toCairo(occurredAt);
-                      final next = DateTime.utc(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time?.hour ?? cairo.hour,
-                        time?.minute ?? cairo.minute,
-                      );
-                      setS(() => occurredAt = EgyptTime.startOfDayCairo(next).add(
-                        Duration(
-                          hours: time?.hour ?? cairo.hour,
-                          minutes: time?.minute ?? cairo.minute,
-                        ),
-                      ));
-                    },
-                  ),
-                  if (error != null)
-                    Text(error!, style: const TextStyle(color: AppColors.danger)),
-                  FilledButton(
-                    onPressed: saving
-                        ? null
-                        : () async {
-                            setS(() {
-                              saving = true;
-                              error = null;
-                            });
-                            try {
-                              await sl<AppBusyCubit>().guard(() async {
-                                await sl<ExpenseService>().upsert(
-                                  session: context
-                                      .read<AuthCubit>()
-                                      .state
-                                      .session!,
-                                  id: expense?.id,
-                                  amount: Money.parse(amount.text),
-                                  category: category,
-                                  note: note.text,
-                                  occurredAt: occurredAt,
-                                );
-                                await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) {
+          var saving = false;
+          String? error;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setS) => SingleChildScrollView(
+                child: Column(
+                  children: [
+                    AmountField(controller: amount, label: 'المبلغ'),
+                    SearchableSelectField<String>(
+                      label: 'التصنيف',
+                      required: true,
+                      allowCustom: false,
+                      value: category,
+                      options: [
+                        for (final item in ExpenseCategory.all)
+                          SearchableOption(value: item.code, label: item.label),
+                      ],
+                      onChanged: (value) =>
+                          setS(() => category = value ?? category),
+                    ),
+                    TextField(
+                      controller: note,
+                      decoration: const InputDecoration(labelText: S.notes),
+                      maxLines: 2,
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('التاريخ والوقت'),
+                      subtitle: Text(
+                        ArabicFormat.transactionDateTime(occurredAt),
+                      ),
+                      trailing: const Icon(Icons.event),
+                      onTap: () async {
+                        final cairo = EgyptTime.toCairo(occurredAt);
+                        final date = await showDatePicker(
+                          context: ctx,
+                          initialDate: DateTime(
+                            cairo.year,
+                            cairo.month,
+                            cairo.day,
+                          ),
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now().add(const Duration(days: 1)),
+                        );
+                        if (date == null || !ctx.mounted) return;
+                        final time = await showTimePicker(
+                          context: ctx,
+                          initialTime: TimeOfDay(
+                            hour: cairo.hour,
+                            minute: cairo.minute,
+                          ),
+                        );
+                        setS(() {
+                          occurredAt = EgyptTime.fromCairo(
+                            year: date.year,
+                            month: date.month,
+                            day: date.day,
+                            hour: time?.hour ?? cairo.hour,
+                            minute: time?.minute ?? cairo.minute,
+                          );
+                        });
+                      },
+                    ),
+                    if (error != null)
+                      Text(
+                        error!,
+                        style: const TextStyle(color: AppColors.danger),
+                      ),
+                    FilledButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              setS(() {
+                                saving = true;
+                                error = null;
                               });
-                              if (ctx.mounted) Navigator.pop(ctx);
-                            } catch (e) {
-                              if (ctx.mounted) {
-                                setS(() {
-                                  saving = false;
-                                  error = e.toString();
+                              try {
+                                await sl<AppBusyCubit>().guard(() async {
+                                  await sl<ExpenseService>().upsert(
+                                    session: context
+                                        .read<AuthCubit>()
+                                        .state
+                                        .session!,
+                                    id: expense?.id,
+                                    amount: Money.parse(amount.text),
+                                    category: category,
+                                    note: note.text,
+                                    occurredAt: occurredAt,
+                                  );
+                                  await sl<SyncEngine>()
+                                      .maybeSyncAfterLocalWrite();
                                 });
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              } catch (e) {
+                                if (ctx.mounted) {
+                                  setS(() {
+                                    saving = false;
+                                    error = e.toString();
+                                  });
+                                }
                               }
-                            }
-                          },
-                    child: const Text(S.save),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                            },
+                      child: saving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(S.save),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      amount.dispose();
+      note.dispose();
+    }
   }
 }

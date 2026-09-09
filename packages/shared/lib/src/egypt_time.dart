@@ -66,5 +66,17 @@ abstract final class EgyptTime {
 
   static DateTime startOfTodayCairo() => startOfDayCairo(nowUtc());
 
+  /// Cairo wall-clock components persisted as UTC.
+  static DateTime fromCairo({
+    required int year,
+    required int month,
+    required int day,
+    int hour = 0,
+    int minute = 0,
+  }) {
+    ensureInitialized();
+    return tz.TZDateTime(_cairo, year, month, day, hour, minute).toUtc();
+  }
+
   static String _two(int value) => value.toString().padLeft(2, '0');
 }

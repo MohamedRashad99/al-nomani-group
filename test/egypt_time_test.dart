@@ -20,6 +20,18 @@ void main() {
       expect(EgyptTime.formatDate(utc), '02/09/2026');
     });
 
+    test('fromCairo stores Cairo wall clock as UTC', () {
+      final utc = EgyptTime.fromCairo(
+        year: 2026,
+        month: 9,
+        day: 9,
+        hour: 14,
+        minute: 30,
+      );
+      expect(utc, DateTime.utc(2026, 9, 9, 11, 30));
+      expect(EgyptTime.formatDateTime(utc), '09/09/2026 - 02:30 PM');
+    });
+
     test('nowUtc returns UTC instant', () {
       final now = EgyptTime.nowUtc();
       expect(now.isUtc, isTrue);

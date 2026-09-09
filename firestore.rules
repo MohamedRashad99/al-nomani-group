@@ -80,11 +80,15 @@ service cloud.firestore {
     }
 
     function isValidCompany(data) {
-      return data.keys().hasOnly(['name', 'updatedAt'])
+      return data.keys().hasAll(['name', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'updatedAt', 'dataRev', 'lastSection'])
         && data.name is string
         && data.name.size() > 0
         && data.name.size() < 120
-        && data.updatedAt is timestamp;
+        && data.updatedAt is timestamp
+        && (!('dataRev' in data) || isNumber(data.dataRev))
+        && (!('lastSection' in data)
+            || (data.lastSection is string && data.lastSection.size() < 64));
     }
 
     function isValidSectionDoc(data) {

@@ -28,6 +28,7 @@ class FirestoreErpStore implements ErpStore {
   final _generations = <String, int>{};
   String? _lastDataRev;
   Timer? _refreshNotify;
+  final _preferServer = <String>{};
 
   Future<void> ensureReady() {
     return _ready ??= _ensureReadyOnce();
@@ -69,6 +70,24 @@ class FirestoreErpStore implements ErpStore {
     _lists.remove(name);
     _inflight.remove(name);
     _bumpGeneration(name);
+    _preferServer.add(name);
+  }
+
+  void _upsertCached<T>(
+    String name,
+    T row,
+    bool Function(T value) sameId,
+    bool Function(T value) keep,
+    int Function(T a, T b)? compare,
+  ) {
+    final rows = <T>[
+      for (final item in (_lists[name]?.cast<T>() ?? <T>[]))
+        if (!sameId(item)) item,
+    ];
+    if (keep(row)) rows.add(row);
+    if (compare != null) rows.sort(compare);
+    _remember(name, rows);
+    _preferServer.remove(name);
   }
 
   void _scheduleRemoteRefreshNotify() {
@@ -133,18 +152,21 @@ class FirestoreErpStore implements ErpStore {
       return (await pending).cast<T>();
     }
     final future = () async {
-      try {
-        final fromCache = await _readCol(name, parse, keep, Source.cache);
-        if (fromCache.isNotEmpty) {
-          unawaited(() async {
-            try {
-              await _readCol(name, parse, keep, Source.server);
-              _scheduleRemoteRefreshNotify();
-            } catch (_) {}
-          }());
-          return fromCache;
-        }
-      } catch (_) {}
+      final forceServer = _preferServer.remove(name);
+      if (!forceServer) {
+        try {
+          final fromCache = await _readCol(name, parse, keep, Source.cache);
+          if (fromCache.isNotEmpty) {
+            unawaited(() async {
+              try {
+                await _readCol(name, parse, keep, Source.server);
+                _scheduleRemoteRefreshNotify();
+              } catch (_) {}
+            }());
+            return fromCache;
+          }
+        } catch (_) {}
+      }
       return _readCol(name, parse, keep, Source.server);
     }();
     _inflight[name] = future;
@@ -591,12 +613,24 @@ class FirestoreErpStore implements ErpStore {
   }
 
   @override
-  Future<void> putExpense(Expense expense) => _put(
-    'expenses',
-    expense.id,
-    expense.toMap(),
-    operation: expense.isDeleted ? 'delete' : 'update',
-  );
+  Future<void> putExpense(Expense expense) async {
+    final previous = _lists['expenses']?.cast<Expense>().toList();
+    await _put(
+      'expenses',
+      expense.id,
+      expense.toMap(),
+      operation: expense.isDeleted ? 'delete' : 'update',
+    );
+    if (previous == null) return;
+    _remember('expenses', previous);
+    _upsertCached<Expense>(
+      'expenses',
+      expense,
+      (row) => row.id == expense.id,
+      (row) => !row.isDeleted,
+      (a, b) => b.occurredAt.compareTo(a.occurredAt),
+    );
+  }
 
   @override
   Future<String?> getSetting(String key) async {
