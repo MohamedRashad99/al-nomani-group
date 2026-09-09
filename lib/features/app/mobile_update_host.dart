@@ -24,8 +24,9 @@ class _MobileUpdateHostState extends State<MobileUpdateHost>
     super.initState();
     if (kIsWeb || !sl.isRegistered<AndroidUpdateCubit>()) return;
     WidgetsBinding.instance.addObserver(this);
+    sl<AndroidUpdateCubit>().startLiveUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      sl<AndroidUpdateCubit>().check();
+      sl<AndroidUpdateCubit>().check(forceFetch: true);
     });
   }
 
@@ -41,7 +42,7 @@ class _MobileUpdateHostState extends State<MobileUpdateHost>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (kIsWeb || state != AppLifecycleState.resumed) return;
     if (!sl.isRegistered<AndroidUpdateCubit>()) return;
-    sl<AndroidUpdateCubit>().check();
+    sl<AndroidUpdateCubit>().check(forceFetch: true);
   }
 
   Future<void> _present(AndroidUpdateState state) async {

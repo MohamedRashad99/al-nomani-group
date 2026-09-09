@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/updates/mobile_update.dart';
@@ -61,6 +63,12 @@ class AndroidUpdateCubit extends Cubit<AndroidUpdateState> {
 
   final AndroidUpdateService _service;
   int? _dismissedBuild;
+
+  void startLiveUpdates() {
+    _service.listenForLiveUpdates(() {
+      unawaited(check(forceFetch: true));
+    });
+  }
 
   Future<void> check({bool forceFetch = false}) async {
     try {

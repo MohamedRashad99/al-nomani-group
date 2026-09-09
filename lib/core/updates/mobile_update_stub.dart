@@ -33,6 +33,8 @@ class AndroidDownloadProgress {
 enum AndroidInstallOutcome { started, needsPermission }
 
 class AndroidUpdateService {
+  void listenForLiveUpdates(void Function() onChanged) {}
+
   Future<AndroidUpdateOffer?> check({bool forceFetch = false}) async => null;
 
   Stream<AndroidDownloadProgress> download(AndroidUpdateOffer offer) {

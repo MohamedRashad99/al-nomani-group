@@ -17,5 +17,11 @@ service firebase.storage {
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
+
+    // Sideloaded Android updates. Upload is CLI/admin only.
+    match /updates/{fileName} {
+      allow read: if fileName.matches('.*\\.apk');
+      allow write: if false;
+    }
   }
 }

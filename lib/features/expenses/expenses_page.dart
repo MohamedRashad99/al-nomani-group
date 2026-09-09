@@ -219,177 +219,194 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   Future<void> _edit(Expense? expense) async {
-    final amount = TextEditingController(
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ExpenseEditorSheet(
+        expense: expense,
+        onDelete: expense == null
+            ? null
+            : () async {
+                Navigator.pop(ctx);
+                await _delete(expense);
+              },
+      ),
+    );
+  }
+}
+
+class _ExpenseEditorSheet extends StatefulWidget {
+  const _ExpenseEditorSheet({required this.expense, this.onDelete});
+
+  final Expense? expense;
+  final Future<void> Function()? onDelete;
+
+  @override
+  State<_ExpenseEditorSheet> createState() => _ExpenseEditorSheetState();
+}
+
+class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
+  late final TextEditingController _amount;
+  late final TextEditingController _note;
+  late String _category;
+  late DateTime _occurredAt;
+  var _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final expense = widget.expense;
+    _amount = TextEditingController(
       text: expense == null ? '' : Money.parse(expense.amount).toDisplay(),
     );
-    final note = TextEditingController(text: expense?.note ?? '');
-    var category = expense?.category ?? ExpenseCategory.salary.code;
-    var occurredAt = expense?.occurredAt ?? EgyptTime.nowUtc();
+    _note = TextEditingController(text: expense?.note ?? '');
+    _category = expense?.category ?? ExpenseCategory.salary.code;
+    _occurredAt = expense?.occurredAt ?? EgyptTime.nowUtc();
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (ctx) {
-          var saving = false;
-          String? error;
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-              left: 16,
-              right: 16,
-              top: 16,
+      final session = context.read<AuthCubit>().state.session!;
+      await sl<AppBusyCubit>().guard(() async {
+        await sl<ExpenseService>().upsert(
+          session: session,
+          id: widget.expense?.id,
+          amount: Money.parse(_amount.text),
+          category: _category,
+          note: _note.text,
+          occurredAt: _occurredAt,
+        );
+        await sl<SyncEngine>().maybeSyncAfterLocalWrite();
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _pickOccurredAt() async {
+    final cairo = EgyptTime.toCairo(_occurredAt);
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime(cairo.year, cairo.month, cairo.day),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: cairo.hour, minute: cairo.minute),
+    );
+    if (!mounted) return;
+    setState(() {
+      _occurredAt = EgyptTime.fromCairo(
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        hour: time?.hour ?? cairo.hour,
+        minute: time?.minute ?? cairo.minute,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<AuthCubit>().state.session!;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.expense == null ? 'مصروف جديد' : S.edit,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            child: StatefulBuilder(
-              builder: (ctx, setS) {
-                final session = context.read<AuthCubit>().state.session!;
-                return SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      expense == null ? 'مصروف جديد' : S.edit,
-                      style: Theme.of(ctx).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    AmountField(controller: amount, label: 'المبلغ'),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: category,
-                      decoration: const InputDecoration(labelText: S.category),
-                      items: [
-                        for (final item in ExpenseCategory.all)
-                          DropdownMenuItem(
-                            value: item.code,
-                            child: Text(item.label),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) setS(() => category = value);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: note,
-                      decoration: const InputDecoration(
-                        labelText: S.notes,
-                        hintText: 'اكتب وصف المصروف هنا',
-                        alignLabelWithHint: true,
-                      ),
-                      minLines: 2,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.newline,
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('التاريخ والوقت'),
-                      subtitle: Text(
-                        ArabicFormat.transactionDateTime(occurredAt),
-                      ),
-                      trailing: const Icon(Icons.event),
-                      onTap: () async {
-                        final cairo = EgyptTime.toCairo(occurredAt);
-                        final date = await showDatePicker(
-                          context: ctx,
-                          initialDate: DateTime(
-                            cairo.year,
-                            cairo.month,
-                            cairo.day,
-                          ),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now().add(const Duration(days: 1)),
-                        );
-                        if (date == null || !ctx.mounted) return;
-                        final time = await showTimePicker(
-                          context: ctx,
-                          initialTime: TimeOfDay(
-                            hour: cairo.hour,
-                            minute: cairo.minute,
-                          ),
-                        );
-                        setS(() {
-                          occurredAt = EgyptTime.fromCairo(
-                            year: date.year,
-                            month: date.month,
-                            day: date.day,
-                            hour: time?.hour ?? cairo.hour,
-                            minute: time?.minute ?? cairo.minute,
-                          );
-                        });
-                      },
-                    ),
-                    if (error != null)
-                      Text(
-                        error!,
-                        style: const TextStyle(color: AppColors.danger),
-                      ),
-                    FilledButton(
-                      onPressed: saving
-                          ? null
-                          : () async {
-                              setS(() {
-                                saving = true;
-                                error = null;
-                              });
-                              try {
-                                await sl<AppBusyCubit>().guard(() async {
-                                  await sl<ExpenseService>().upsert(
-                                    session: session,
-                                    id: expense?.id,
-                                    amount: Money.parse(amount.text),
-                                    category: category,
-                                    note: note.text,
-                                    occurredAt: occurredAt,
-                                  );
-                                  await sl<SyncEngine>()
-                                      .maybeSyncAfterLocalWrite();
-                                });
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              } catch (e) {
-                                if (ctx.mounted) {
-                                  setS(() {
-                                    saving = false;
-                                    error = e.toString();
-                                  });
-                                }
-                              }
-                            },
-                      child: saving
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(S.save),
-                    ),
-                    if (expense != null &&
-                        session.can(AppPermission.expensesDelete)) ...[
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () async {
-                                Navigator.pop(ctx);
-                                await _delete(expense);
-                              },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.danger,
-                        ),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('حذف المصروف'),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              );
+            const SizedBox(height: 12),
+            AmountField(controller: _amount, label: 'المبلغ'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: S.category),
+              items: [
+                for (final item in ExpenseCategory.all)
+                  DropdownMenuItem(value: item.code, child: Text(item.label)),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _category = value);
               },
             ),
-          );
-        },
-      );
-    } finally {
-      amount.dispose();
-      note.dispose();
-    }
+            const SizedBox(height: 8),
+            TextField(
+              controller: _note,
+              decoration: const InputDecoration(
+                labelText: S.notes,
+                hintText: 'اكتب وصف المصروف هنا',
+                alignLabelWithHint: true,
+              ),
+              minLines: 2,
+              maxLines: 4,
+              textInputAction: TextInputAction.newline,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('التاريخ والوقت'),
+              subtitle: Text(ArabicFormat.transactionDateTime(_occurredAt)),
+              trailing: const Icon(Icons.event),
+              onTap: _saving ? null : _pickOccurredAt,
+            ),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text(S.save),
+            ),
+            if (widget.expense != null &&
+                widget.onDelete != null &&
+                session.can(AppPermission.expensesDelete)) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : widget.onDelete,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                ),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('حذف المصروف'),
+              ),
+            ],
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
   }
 }

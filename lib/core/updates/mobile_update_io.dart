@@ -70,8 +70,7 @@ class AndroidUpdateService {
        _clock = clock ?? DateTime.now;
 
   static const _channel = MethodChannel('al_nomani_group/apk_install');
-  static const _autoCooldown = Duration(minutes: 30);
-  static const _autoFetchInterval = Duration(hours: 1);
+  static const _autoCooldown = Duration(seconds: 20);
 
   final Dio _downloader;
   final DateTime Function() _clock;
@@ -79,28 +78,42 @@ class AndroidUpdateService {
   CancelToken? _cancel;
   var _downloading = false;
   String? _readyPath;
+  StreamSubscription<RemoteConfigUpdate>? _liveSub;
+
+  void listenForLiveUpdates(void Function() onChanged) {
+    if (!Platform.isAndroid || _liveSub != null) return;
+    unawaited(_startLiveUpdates(onChanged));
+  }
+
+  Future<void> _startLiveUpdates(void Function() onChanged) async {
+    if (!await FirebaseBootstrap.ensure()) return;
+    _liveSub ??= FirebaseRemoteConfig.instance.onConfigUpdated.listen((_) async {
+      try {
+        await FirebaseRemoteConfig.instance.activate();
+      } catch (_) {}
+      onChanged();
+    });
+  }
 
   Future<AndroidUpdateOffer?> check({bool forceFetch = false}) async {
     if (!Platform.isAndroid) return null;
-    if (!forceFetch &&
+    final skipNetwork =
+        !forceFetch &&
         _lastAutoCheckAt != null &&
-        _clock().difference(_lastAutoCheckAt!) < _autoCooldown) {
-      return _readOffer(fetch: false);
-    }
-    if (!forceFetch) _lastAutoCheckAt = _clock();
-    return _readOffer(fetch: true, forceFetch: forceFetch);
+        _clock().difference(_lastAutoCheckAt!) < _autoCooldown;
+    if (!skipNetwork) _lastAutoCheckAt = _clock();
+    return _readOffer(fetch: !skipNetwork);
   }
 
   Future<AndroidUpdateOffer?> _readOffer({
     required bool fetch,
-    bool forceFetch = false,
   }) async {
     if (!await FirebaseBootstrap.ensure()) return null;
     final remote = FirebaseRemoteConfig.instance;
     await remote.setConfigSettings(
       RemoteConfigSettings(
         fetchTimeout: const Duration(seconds: 8),
-        minimumFetchInterval: forceFetch ? Duration.zero : _autoFetchInterval,
+        minimumFetchInterval: Duration.zero,
       ),
     );
     await remote.setDefaults(const {
