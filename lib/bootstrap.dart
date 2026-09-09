@@ -49,5 +49,6 @@ Future<void> _attachFirebase() async {
   final store = sl<ErpStore>();
   if (store is FirestoreErpStore) {
     await store.ensureReady();
+    unawaited(store.prefetchHotCollections());
   }
 }

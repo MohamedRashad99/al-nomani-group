@@ -27,10 +27,8 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   late Stream<DashboardSnapshot> _stream = sl<DashboardService>().watch();
-  late Future<SyncHealth> _health = Future<SyncHealth>.delayed(
-    const Duration(milliseconds: 500),
-    () => sl<SyncEngine>().health(),
-  );
+  late Future<SyncHealth> _health = sl<SyncEngine>().health();
+  DashboardSnapshot? _lastSnapshot;
 
   void _refresh() {
     setState(() {
@@ -53,15 +51,17 @@ class _DashboardPageState extends State<DashboardPage> {
       child: StreamBuilder<DashboardSnapshot>(
         stream: _stream,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          final data = snapshot.data ?? _lastSnapshot;
+          if (data == null) {
             return const BrandedLoading(message: 'نجهّز ملخص أعمالك');
           }
+          _lastSnapshot = data;
           return FutureBuilder<SyncHealth>(
             future: _health,
             builder: (context, healthSnap) {
               return _DashboardBody(
                 data: _DashboardData(
-                  snapshot.data!,
+                  data,
                   healthSnap.data ?? SyncHealth.checking,
                 ),
               );

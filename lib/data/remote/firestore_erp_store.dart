@@ -25,6 +25,9 @@ class FirestoreErpStore implements ErpStore {
   Future<void>? _ready;
   final _lists = <String, List<Object>>{};
   final _inflight = <String, Future<List<Object>>>{};
+  final _generations = <String, int>{};
+  String? _lastDataRev;
+  Timer? _refreshNotify;
 
   Future<void> ensureReady() {
     return _ready ??= _ensureReadyOnce();
@@ -56,21 +59,63 @@ class FirestoreErpStore implements ErpStore {
     _lists[name] = rows.cast<Object>();
   }
 
+  int _bumpGeneration(String name) {
+    final next = (_generations[name] ?? 0) + 1;
+    _generations[name] = next;
+    return next;
+  }
+
   void _invalidate(String name) {
     _lists.remove(name);
     _inflight.remove(name);
+    _bumpGeneration(name);
+  }
+
+  void _scheduleRemoteRefreshNotify() {
+    _refreshNotify?.cancel();
+    _refreshNotify = Timer(const Duration(milliseconds: 350), () {
+      if (!_localChanges.isClosed) _localChanges.add(null);
+    });
+  }
+
+  Future<void> _touchCompanyRev(String section) async {
+    try {
+      await _company.set({
+        'dataRev': FieldValue.increment(1),
+        'lastSection': section,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  Future<List<Object>> _readCol<T>(
+    String name,
+    T Function(Map<String, dynamic> data, String id) parse,
+    bool Function(T value) keep,
+    Source source,
+  ) async {
+    final gen = _generations[name] ?? 0;
+    final snap = await _col(name).get(GetOptions(source: source));
+    if ((_generations[name] ?? 0) != gen) {
+      final cached = _lists[name];
+      if (cached != null) return cached;
+    }
+    final rows = _parseSnap(snap, parse, keep);
+    if ((_generations[name] ?? 0) == gen) {
+      _remember(name, rows);
+    }
+    return rows.cast<Object>();
   }
 
   Stream<List<T>> _watchCol<T>(
     String name,
     T Function(Map<String, dynamic> data, String id) parse,
     bool Function(T value) keep,
-  ) {
-    return _col(name).snapshots().map((snap) {
-      final rows = _parseSnap(snap, parse, keep);
-      _remember(name, rows);
-      return rows;
-    });
+  ) async* {
+    yield await _listCol(name, parse, keep);
+    await for (final _ in watchChanges()) {
+      yield await _listCol(name, parse, keep);
+    }
   }
 
   Future<List<T>> _listCol<T>(
@@ -87,17 +132,45 @@ class FirestoreErpStore implements ErpStore {
     if (pending != null) {
       return (await pending).cast<T>();
     }
-    final future = _col(name).get().then((snap) {
-      final rows = _parseSnap(snap, parse, keep);
-      _remember(name, rows);
-      return rows.cast<Object>();
-    });
+    final future = () async {
+      try {
+        final fromCache = await _readCol(name, parse, keep, Source.cache);
+        if (fromCache.isNotEmpty) {
+          unawaited(() async {
+            try {
+              await _readCol(name, parse, keep, Source.server);
+              _scheduleRemoteRefreshNotify();
+            } catch (_) {}
+          }());
+          return fromCache;
+        }
+      } catch (_) {}
+      return _readCol(name, parse, keep, Source.server);
+    }();
     _inflight[name] = future;
     try {
       return (await future).cast<T>();
     } finally {
       _inflight.remove(name);
     }
+  }
+
+  Future<void> prefetchHotCollections() async {
+    await ensureReady();
+    await Future.wait([
+      listProducts(),
+      listCustomers(),
+      listSales(),
+      listCollections(),
+      listAccounts(),
+    ]);
+    unawaited(
+      Future.wait([
+        listSaleItems(),
+        listMovements(),
+        listExpenses(),
+      ]),
+    );
   }
 
   T? _cachedById<T>(String name, bool Function(T value) match) {
@@ -132,6 +205,7 @@ class FirestoreErpStore implements ErpStore {
     await _col(section).doc(id).set(data, SetOptions(merge: true));
     _invalidate(section);
     _localChanges.add(null);
+    unawaited(_touchCompanyRev(section));
   }
 
   Future<void> _delete(String section, String id) async {
@@ -139,23 +213,31 @@ class FirestoreErpStore implements ErpStore {
     await _col(section).doc(id).delete();
     _invalidate(section);
     _localChanges.add(null);
+    unawaited(_touchCompanyRev(section));
   }
 
   @override
   Stream<void> watchChanges() {
     return _watchChanges ??= mergeAndDebounce([
       _localChanges.stream,
-      _col('products').snapshots().map((_) {}),
-      _col('customers').snapshots().map((_) {}),
-      _col('sales').snapshots().map((_) {}),
-      _col('sale_items').snapshots().map((_) {}),
-      _col('collections').snapshots().map((_) {}),
-      _col('accounts').snapshots().map((_) {}),
-      _col('inventory').snapshots().map((_) {}),
-      _col('suppliers').snapshots().map((_) {}),
-      _col('purchases').snapshots().map((_) {}),
-      _col('purchase_items').snapshots().map((_) {}),
-      _col('expenses').snapshots().map((_) {}),
+      _company.snapshots().where((snap) {
+        final data = snap.data();
+        final rev = '${data?['dataRev'] ?? ''}';
+        if (_lastDataRev == null) {
+          _lastDataRev = rev;
+          return false;
+        }
+        if (rev == _lastDataRev) return false;
+        _lastDataRev = rev;
+        final section = data?['lastSection'] as String?;
+        if (section != null && section.isNotEmpty) {
+          _invalidate(section);
+        } else {
+          _lists.clear();
+          _inflight.clear();
+        }
+        return true;
+      }).map((_) {}),
     ]);
   }
 

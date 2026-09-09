@@ -62,7 +62,7 @@ void main() {
     expect(scaffold.backgroundColor, AppColors.darkGreen);
     expect(
       StartupSplashView.displayDuration,
-      const Duration(milliseconds: 800),
+      const Duration(milliseconds: 300),
     );
     expect(find.byKey(const Key('splash-seeds')), findsOneWidget);
     expect(find.text('مجموعة النعماني'), findsOneWidget);

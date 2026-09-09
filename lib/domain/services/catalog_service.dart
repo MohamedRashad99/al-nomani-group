@@ -89,14 +89,14 @@ class CatalogService {
   final EntityLinkInspector _inspector;
 
   Future<List<Product>> searchProducts(String query) async {
-    return _filterProducts(await _store.listProducts(), query);
+    return filterProducts(await _store.listProducts(), query);
   }
 
   Stream<List<Product>> watchProducts(String query) {
-    return _store.watchProducts().map((items) => _filterProducts(items, query));
+    return _store.watchProducts().map((items) => filterProducts(items, query));
   }
 
-  List<Product> _filterProducts(List<Product> items, String query) {
+  List<Product> filterProducts(List<Product> items, String query) {
     final q = query.trim();
     if (q.isEmpty) return items;
     return [

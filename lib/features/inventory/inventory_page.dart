@@ -29,6 +29,8 @@ class InventoryPage extends StatefulWidget {
 
 class _InventoryPageState extends State<InventoryPage> {
   String _query = '';
+  late final Stream<List<Product>> _products = sl<CatalogService>()
+      .watchProducts('');
 
   @override
   Widget build(BuildContext context) {
@@ -38,16 +40,17 @@ class _InventoryPageState extends State<InventoryPage> {
     final showSummary = session?.isAdmin == true;
     return AppScaffold(
       title: S.inventory,
-      child: Column(
-        children: [
-          if (showSummary)
-            StreamBuilder<List<Product>>(
-              stream: sl<CatalogService>().watchProducts(''),
-              builder: (context, snap) {
-                final products = snap.data ?? const <Product>[];
-                final available = ProductValueSummary.availableCount(products);
-                final total = products.where((row) => !row.isDeleted).length;
-                return Padding(
+      child: StreamBuilder<List<Product>>(
+        stream: _products,
+        builder: (context, snap) {
+          final all = snap.data ?? const <Product>[];
+          final items = sl<CatalogService>().filterProducts(all, _query);
+          final available = ProductValueSummary.availableCount(all);
+          final total = all.where((row) => !row.isDeleted).length;
+          return Column(
+            children: [
+              if (showSummary)
+                Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: SummaryMetricsRow(
                     metrics: [
@@ -65,29 +68,23 @@ class _InventoryPageState extends State<InventoryPage> {
                       ),
                     ],
                   ),
-                );
-              },
-            ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: S.search,
+                ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: S.search,
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
               ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<Product>>(
-              stream: sl<CatalogService>().watchProducts(_query),
-              builder: (context, snap) {
-                final items = snap.data ?? const <Product>[];
-                if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (items.isEmpty) return const Center(child: Text(S.empty));
-                return ListView.builder(
+              Expanded(
+                child: !snap.hasData
+                    ? const Center(child: CircularProgressIndicator())
+                    : items.isEmpty
+                    ? const Center(child: Text(S.empty))
+                    : ListView.builder(
                   itemCount: items.length,
                   itemBuilder: (_, i) {
                     final p = items[i];
@@ -141,11 +138,11 @@ class _InventoryPageState extends State<InventoryPage> {
                       ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

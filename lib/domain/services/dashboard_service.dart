@@ -133,24 +133,23 @@ class DashboardService {
   DashboardService(this._store);
   final ErpStore _store;
   String? _lastFingerprint;
+  DashboardSnapshot? _latest;
 
   Stream<DashboardSnapshot> watch() async* {
+    if (_latest != null) yield _latest!;
     final tier1 = await loadTier1();
-    _lastFingerprint = _fingerprint(tier1);
+    _latest = tier1;
     yield tier1;
-    await Future<void>.delayed(const Duration(milliseconds: 100));
     final full = await load();
-    final key = _fingerprint(full);
-    if (key != _lastFingerprint) {
-      _lastFingerprint = key;
-      yield full;
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    _latest = full;
+    _lastFingerprint = _fingerprint(full);
+    yield full;
     await for (final _ in _store.watchChanges()) {
       final next = await load();
       final nextKey = _fingerprint(next);
       if (nextKey == _lastFingerprint) continue;
       _lastFingerprint = nextKey;
+      _latest = next;
       yield next;
     }
   }
@@ -186,9 +185,11 @@ class DashboardService {
     final allSalesFuture = _store.listSales();
     final collectionsFuture = _store.listCollections();
     final productsFuture = _store.listProducts();
+    final accountsFuture = _store.listAccounts();
     final allSales = await allSalesFuture;
     final collectionsRaw = await collectionsFuture;
     final products = await productsFuture;
+    final accounts = await accountsFuture;
 
     final sales = [
       for (final sale in allSales)
@@ -222,12 +223,20 @@ class DashboardService {
       }
     }
 
+    final debtAccounts = accounts
+        .where((a) => Money.parse(a.cachedBalance).isPositive)
+        .toList();
+    final debt = debtAccounts.fold(
+      Money.zero(),
+      (m, a) => m + Money.parse(a.cachedBalance),
+    );
+
     return DashboardSnapshot(
       todaySales: sumSales(startToday),
       weeklySales: Money.zero(),
       monthlySales: sumSales(startMonth),
-      outstandingDebt: Money.zero(),
-      customersWithDebt: 0,
+      outstandingDebt: debt,
+      customersWithDebt: debtAccounts.length,
       todayCollections: sumCol(startToday),
       monthlyCollections: sumCol(startMonth),
       totalProducts: products.length,

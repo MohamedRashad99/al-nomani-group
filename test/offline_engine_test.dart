@@ -243,6 +243,35 @@ void main() {
     expect(dashboard.slowMoving, isNotEmpty);
   });
 
+  test('dashboard watch shows KPIs then insights without artificial delay', () async {
+    await readyStore();
+    await sl<SaleService>().create(
+      admin(),
+      SaleDraft(
+        customerId: 'c-ahmed',
+        paidAmount: Money.parse('5.500'),
+        lines: [
+          SaleLineDraft(
+            productId: 'p-imidacloprid',
+            quantity: Quantity.parse('1'),
+            unit: 'لتر',
+            unitPrice: Money.parse('5.500'),
+          ),
+        ],
+      ),
+    );
+
+    final snapshots = <DashboardSnapshot>[];
+    await sl<DashboardService>().watch().take(2).forEach(snapshots.add).timeout(
+      const Duration(seconds: 2),
+    );
+    expect(snapshots, hasLength(2));
+    expect(snapshots.first.todaySales.toStorage(), '5.500');
+    expect(snapshots.first.customersWithDebt, greaterThanOrEqualTo(0));
+    expect(snapshots.last.isComplete, isTrue);
+    expect(snapshots.last.salesTrend, hasLength(7));
+  });
+
   test('sale cancellation restores stock and customer debt', () async {
     final store = await readyStore();
     final session = admin();

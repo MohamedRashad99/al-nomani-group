@@ -12,6 +12,7 @@ import '../../domain/services/inventory_analytics.dart';
 import '../../domain/services/inventory_measure.dart';
 import '../../features/app/app_alert_cubit.dart';
 import '../../features/app/app_busy_cubit.dart';
+import '../../domain/session.dart';
 import '../../features/auth/auth_cubit.dart';
 import '../../shared/widgets/amount_field.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -32,6 +33,8 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   String _query = '';
+  late final Stream<List<Product>> _products = sl<CatalogService>()
+      .watchProducts('');
 
   @override
   Widget build(BuildContext context) {
@@ -44,107 +47,103 @@ class _ProductsPageState extends State<ProductsPage> {
               child: const Icon(Icons.add),
             )
           : null,
-      child: Column(
-        children: [
-          if (session.isAdmin)
-            StreamBuilder<List<Product>>(
-              stream: sl<CatalogService>().watchProducts(''),
-              builder: (context, snap) {
-                final summary = ProductValueSummary.fromProducts(
-                  snap.data ?? const <Product>[],
-                );
-                return Padding(
+      child: StreamBuilder<List<Product>>(
+        stream: _products,
+        builder: (context, snap) {
+          final catalog = sl<CatalogService>();
+          final all = snap.data ?? const <Product>[];
+          final items = catalog.filterProducts(all, _query);
+          return Column(
+            children: [
+              if (session.isAdmin)
+                Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                  child: ProductCatalogSummaryBar(summary: summary),
-                );
-              },
-            ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: S.search,
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<Product>>(
-              stream: sl<CatalogService>().watchProducts(_query),
-              builder: (context, snap) {
-                final items = snap.data ?? const <Product>[];
-                if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (items.isEmpty) return const Center(child: Text(S.empty));
-                if (Breakpoints.isPhone(context)) {
-                  return ListView.builder(
-                    itemCount: items.length,
-                    itemBuilder: (_, i) {
-                      final p = items[i];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          leading: ProductThumb(product: p),
-                          title: Text(p.name),
-                          subtitle: Text(
-                            [
-                              p.sku,
-                              InventoryMeasure.fromProduct(p).packagesLabel,
-                              InventoryMeasure.fromProduct(p).actualLabel,
-                            ].join(' • '),
-                          ),
-                          trailing: MoneyText(Money.parse(p.sellingPrice)),
-                          onTap: session.can(AppPermission.productsUpdate)
-                              ? () => _edit(p)
-                              : null,
-                        ),
-                      );
-                    },
-                  );
-                }
-                return SingleChildScrollView(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('')),
-                        DataColumn(label: Text(S.productName)),
-                        DataColumn(label: Text(S.sku)),
-                        DataColumn(label: Text(S.currentStock)),
-                        DataColumn(label: Text(S.sellingPrice)),
-                      ],
-                      rows: [
-                        for (final p in items)
-                          DataRow(
-                            onSelectChanged:
-                                session.can(AppPermission.productsUpdate)
-                                ? (_) => _edit(p)
-                                : null,
-                            cells: [
-                              DataCell(ProductThumb(product: p, size: 36)),
-                              DataCell(Text(p.name)),
-                              DataCell(Text(p.sku)),
-                              DataCell(
-                                Text(
-                                  InventoryMeasure.fromProduct(p).actualLabel,
-                                ),
-                              ),
-                              DataCell(MoneyText(Money.parse(p.sellingPrice))),
-                            ],
-                          ),
-                      ],
-                    ),
+                  child: ProductCatalogSummaryBar(
+                    summary: ProductValueSummary.fromProducts(all),
                   ),
-                );
-              },
+                ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: S.search,
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              Expanded(
+                child: !snap.hasData
+                    ? const Center(child: CircularProgressIndicator())
+                    : items.isEmpty
+                    ? const Center(child: Text(S.empty))
+                    : _productList(context, session, items),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _productList(
+    BuildContext context,
+    AppSession session,
+    List<Product> items,
+  ) {
+    if (Breakpoints.isPhone(context)) {
+      return ListView.builder(
+        itemCount: items.length,
+        itemBuilder: (_, i) {
+          final p = items[i];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: ListTile(
+              leading: ProductThumb(product: p),
+              title: Text(p.name),
+              subtitle: Text(
+                [
+                  p.sku,
+                  InventoryMeasure.fromProduct(p).packagesLabel,
+                  InventoryMeasure.fromProduct(p).actualLabel,
+                ].join(' • '),
+              ),
+              trailing: MoneyText(Money.parse(p.sellingPrice)),
+              onTap: session.can(AppPermission.productsUpdate)
+                  ? () => _edit(p)
+                  : null,
             ),
-          ),
-        ],
+          );
+        },
+      );
+    }
+    return SingleChildScrollView(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('')),
+            DataColumn(label: Text(S.productName)),
+            DataColumn(label: Text(S.sku)),
+            DataColumn(label: Text(S.currentStock)),
+            DataColumn(label: Text(S.sellingPrice)),
+          ],
+          rows: [
+            for (final p in items)
+              DataRow(
+                onSelectChanged: session.can(AppPermission.productsUpdate)
+                    ? (_) => _edit(p)
+                    : null,
+                cells: [
+                  DataCell(ProductThumb(product: p, size: 36)),
+                  DataCell(Text(p.name)),
+                  DataCell(Text(p.sku)),
+                  DataCell(Text(InventoryMeasure.fromProduct(p).actualLabel)),
+                  DataCell(MoneyText(Money.parse(p.sellingPrice))),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
